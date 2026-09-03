@@ -133,7 +133,7 @@ func TestSub2APIToRetainedDeviceView(t *testing.T) {
 		if err := proto.Unmarshal(message.Payload, &view); err != nil {
 			t.Fatal(err)
 		}
-		if view.Freshness != orbitv1.Freshness_FRESHNESS_FRESH || view.Primary.Text != "$12.35" || view.Secondary.Text != "1.2M TOK" || view.Footer.Text != "4.5K TPM" {
+		if view.Freshness != orbitv1.Freshness_FRESHNESS_FRESH || view.Primary.Text != "$12.35" || view.Secondary.Text != "1.2M" || view.Footer.Text != "4.5K" {
 			t.Fatalf("unexpected DeviceView: %+v", &view)
 		}
 		if strings.Contains(view.String(), "agent-test") || loginCalls.Load() != 1 {

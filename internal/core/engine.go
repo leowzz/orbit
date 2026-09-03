@@ -329,11 +329,11 @@ func (e *Engine) projectNodeLocked(now time.Time, nodeID string) ([]*orbitv1.Dev
 			Emphasis: orbitv1.Emphasis_EMPHASIS_STRONG,
 		},
 		Secondary: &orbitv1.DisplaySlot{
-			Text:     formatMetric(usage.value.GetTokenCount()) + " TOK",
+			Text:     formatMetric(usage.value.GetTokenCount()),
 			Emphasis: orbitv1.Emphasis_EMPHASIS_NORMAL,
 		},
 		Footer: &orbitv1.DisplaySlot{
-			Text:     formatMetric(usage.value.GetTpm()) + " TPM",
+			Text:     formatMetric(usage.value.GetTpm()),
 			Emphasis: orbitv1.Emphasis_EMPHASIS_DIM,
 		},
 	}
