@@ -3,7 +3,6 @@ package core
 import (
 	"bytes"
 	"context"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +10,8 @@ import (
 	orbitv1 "orbit/gen/go/orbit/v1"
 	"orbit/internal/mqtt"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -31,7 +32,11 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 	engine := newTestEngine(t)
 	transport := &fakeTransport{}
 	var logs bytes.Buffer
-	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logger := zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		zapcore.AddSync(&logs),
+		zapcore.DebugLevel,
+	))
 	runner, err := NewRunner(engine, transport, logger)
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +65,7 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 	if view.NodeId != "node-a" || view.Primary.Text != "$12.35" {
 		t.Fatalf("unexpected view: %+v", &view)
 	}
-	for _, want := range []string{"agent state accepted", "node state accepted", "usage observation accepted", "views=1", "device view published", "primary=$12.35"} {
+	for _, want := range []string{"agent state accepted", "node state accepted", "usage observation accepted", `"views":1`, "device view published", `"primary":"$12.35"`} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("debug log missing %q: %s", want, logs.String())
 		}
@@ -70,7 +75,7 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 func TestRunnerRejectsTopicPayloadIdentityMismatch(t *testing.T) {
 	t.Parallel()
 	engine := newTestEngine(t)
-	runner, err := NewRunner(engine, &fakeTransport{}, slog.Default())
+	runner, err := NewRunner(engine, &fakeTransport{}, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

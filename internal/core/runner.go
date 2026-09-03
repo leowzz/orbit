@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
 	"orbit/internal/mqtt"
 
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -27,16 +27,16 @@ type Transport interface {
 type Runner struct {
 	engine    *Engine
 	transport Transport
-	logger    *slog.Logger
+	logger    *zap.Logger
 	now       func() time.Time
 }
 
-func NewRunner(engine *Engine, transport Transport, logger *slog.Logger) (*Runner, error) {
+func NewRunner(engine *Engine, transport Transport, logger *zap.Logger) (*Runner, error) {
 	if engine == nil || transport == nil {
 		return nil, errors.New("core engine and transport are required")
 	}
 	if logger == nil {
-		logger = slog.Default()
+		logger = zap.NewNop()
 	}
 	return &Runner{engine: engine, transport: transport, logger: logger, now: time.Now}, nil
 }
@@ -65,11 +65,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		case now := <-ticker.C:
 			views, err := r.engine.Refresh(now.UTC())
 			if err != nil {
-				r.logger.Warn("refresh device views failed", "error", err)
+				r.logger.Warn("refresh device views failed", zap.Error(err))
 				continue
 			}
 			if err := r.publishViews(ctx, views); err != nil {
-				r.logger.Warn("publish stale device views failed", "error", err)
+				r.logger.Warn("publish stale device views failed", zap.Error(err))
 			}
 		}
 	}
@@ -91,10 +91,10 @@ func (r *Runner) handleAgentState(_ context.Context, message mqtt.Message) error
 		return err
 	}
 	r.logger.Debug("agent state accepted",
-		"agent_id", state.AgentId,
-		"revision", state.Metadata.Revision,
-		"sources", len(state.Sources),
-		"retained", message.Retain,
+		zap.String("agent_id", state.AgentId),
+		zap.Uint64("revision", state.Metadata.Revision),
+		zap.Int("sources", len(state.Sources)),
+		zap.Bool("retained", message.Retain),
 	)
 	return nil
 }
@@ -116,10 +116,10 @@ func (r *Runner) handleNodeState(ctx context.Context, message mqtt.Message) erro
 		return err
 	}
 	r.logger.Debug("node state accepted",
-		"node_id", state.NodeId,
-		"revision", state.Metadata.Revision,
-		"views", len(views),
-		"retained", message.Retain,
+		zap.String("node_id", state.NodeId),
+		zap.Uint64("revision", state.Metadata.Revision),
+		zap.Int("views", len(views)),
+		zap.Bool("retained", message.Retain),
 	)
 	return r.publishViews(ctx, views)
 }
@@ -141,10 +141,10 @@ func (r *Runner) handleObservation(ctx context.Context, message mqtt.Message) er
 		return err
 	}
 	r.logger.Debug("usage observation accepted",
-		"agent_id", agentID,
-		"revision", observation.Metadata.Revision,
-		"views", len(views),
-		"retained", message.Retain,
+		zap.String("agent_id", agentID),
+		zap.Uint64("revision", observation.Metadata.Revision),
+		zap.Int("views", len(views)),
+		zap.Bool("retained", message.Retain),
 	)
 	return r.publishViews(ctx, views)
 }
@@ -166,13 +166,13 @@ func (r *Runner) publishViews(ctx context.Context, views []*orbitv1.DeviceView) 
 			return err
 		}
 		r.logger.Debug("device view published",
-			"node_id", view.NodeId,
-			"revision", view.GetMetadata().GetRevision(),
-			"freshness", view.Freshness.String(),
-			"primary", view.GetPrimary().GetText(),
-			"secondary", view.GetSecondary().GetText(),
-			"footer", view.GetFooter().GetText(),
-			"bytes", len(payload),
+			zap.String("node_id", view.NodeId),
+			zap.Uint64("revision", view.GetMetadata().GetRevision()),
+			zap.String("freshness", view.Freshness.String()),
+			zap.String("primary", view.GetPrimary().GetText()),
+			zap.String("secondary", view.GetSecondary().GetText()),
+			zap.String("footer", view.GetFooter().GetText()),
+			zap.Int("bytes", len(payload)),
 		)
 	}
 	return nil

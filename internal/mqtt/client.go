@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
 	"strings"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/eclipse/paho.golang/autopaho"
 	"github.com/eclipse/paho.golang/paho"
+	"go.uber.org/zap"
 )
 
 const contentTypeProtobuf = "application/protobuf"
@@ -50,15 +50,15 @@ type subscription struct {
 // Client owns an MQTT 5 connection and restores registered subscriptions after reconnects.
 type Client struct {
 	manager *autopaho.ConnectionManager
-	logger  *slog.Logger
+	logger  *zap.Logger
 
 	mu            sync.RWMutex
 	subscriptions []subscription
 }
 
-func Connect(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, error) {
+func Connect(ctx context.Context, cfg Config, logger *zap.Logger) (*Client, error) {
 	if logger == nil {
-		logger = slog.Default()
+		logger = zap.NewNop()
 	}
 	serverURL, tlsConfig, err := connectionConfig(cfg)
 	if err != nil {
@@ -66,7 +66,11 @@ func Connect(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, err
 	}
 
 	client := &Client{logger: logger}
-	logger.Debug("mqtt connecting", "client_id", cfg.ClientID, "broker", serverURL.Host, "tls", cfg.TLS.Enabled)
+	logger.Debug("mqtt connecting",
+		zap.String("client_id", cfg.ClientID),
+		zap.String("broker", serverURL.Host),
+		zap.Bool("tls", cfg.TLS.Enabled),
+	)
 	manager, err := autopaho.NewConnection(ctx, autopaho.ClientConfig{
 		ServerUrls:                    []*url.URL{serverURL},
 		TlsCfg:                        tlsConfig,
@@ -79,14 +83,14 @@ func Connect(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, err
 		ConnectPassword:               []byte(cfg.Password),
 		OnConnectionUp: func(manager *autopaho.ConnectionManager, connack *paho.Connack) {
 			logger.Debug("mqtt connection established",
-				"client_id", cfg.ClientID,
-				"broker", serverURL.Host,
-				"session_present", connack.SessionPresent,
+				zap.String("client_id", cfg.ClientID),
+				zap.String("broker", serverURL.Host),
+				zap.Bool("session_present", connack.SessionPresent),
 			)
 			client.resubscribe(manager)
 		},
 		OnConnectError: func(err error) {
-			logger.Warn("mqtt connection failed", "error", err)
+			logger.Warn("mqtt connection failed", zap.Error(err))
 		},
 		ClientConfig: paho.ClientConfig{
 			ClientID: cfg.ClientID,
@@ -124,10 +128,10 @@ func (c *Client) Publish(ctx context.Context, message Message) error {
 		return fmt.Errorf("publish %q rejected with reason 0x%x", message.Topic, response.ReasonCode)
 	}
 	c.logger.Debug("mqtt message published",
-		"topic", message.Topic,
-		"qos", 1,
-		"retained", message.Retain,
-		"bytes", len(message.Payload),
+		zap.String("topic", message.Topic),
+		zap.Int("qos", 1),
+		zap.Bool("retained", message.Retain),
+		zap.Int("bytes", len(message.Payload)),
 	)
 	return nil
 }
@@ -170,7 +174,7 @@ func (c *Client) subscribe(ctx context.Context, filter string) error {
 			return fmt.Errorf("subscribe %q rejected with reason 0x%x", filter, reason)
 		}
 	}
-	c.logger.Debug("mqtt subscription active", "topic", filter, "qos", 1)
+	c.logger.Debug("mqtt subscription active", zap.String("topic", filter), zap.Int("qos", 1))
 	return nil
 }
 
@@ -188,18 +192,18 @@ func (c *Client) resubscribe(manager *autopaho.ConnectionManager) {
 			defer cancel()
 			response, err := manager.Subscribe(ctx, &paho.Subscribe{Subscriptions: []paho.SubscribeOptions{{Topic: filter, QoS: 1}}})
 			if err != nil {
-				c.logger.Warn("mqtt resubscribe failed", "topic", filter, "error", err)
+				c.logger.Warn("mqtt resubscribe failed", zap.String("topic", filter), zap.Error(err))
 				return
 			}
 			accepted := true
 			for _, reason := range response.Reasons {
 				if reason >= 0x80 {
 					accepted = false
-					c.logger.Warn("mqtt resubscribe rejected", "topic", filter, "reason", reason)
+					c.logger.Warn("mqtt resubscribe rejected", zap.String("topic", filter), zap.Int("reason", int(reason)))
 				}
 			}
 			if accepted {
-				c.logger.Debug("mqtt subscription restored", "topic", filter, "qos", 1)
+				c.logger.Debug("mqtt subscription restored", zap.String("topic", filter), zap.Int("qos", 1))
 			}
 		}()
 	}
@@ -207,10 +211,10 @@ func (c *Client) resubscribe(manager *autopaho.ConnectionManager) {
 
 func (c *Client) route(message paho.PublishReceived) (bool, error) {
 	c.logger.Debug("mqtt message received",
-		"topic", message.Packet.Topic,
-		"qos", message.Packet.QoS,
-		"retained", message.Packet.Retain,
-		"bytes", len(message.Packet.Payload),
+		zap.String("topic", message.Packet.Topic),
+		zap.Int("qos", int(message.Packet.QoS)),
+		zap.Bool("retained", message.Packet.Retain),
+		zap.Int("bytes", len(message.Packet.Payload)),
 	)
 	c.mu.RLock()
 	subscriptions := append([]subscription(nil), c.subscriptions...)
@@ -228,7 +232,7 @@ func (c *Client) route(message paho.PublishReceived) (bool, error) {
 			Payload: payload,
 			Retain:  message.Packet.Retain,
 		}); err != nil {
-			c.logger.Warn("mqtt message rejected", "topic", message.Packet.Topic, "error", err)
+			c.logger.Warn("mqtt message rejected", zap.String("topic", message.Packet.Topic), zap.Error(err))
 		}
 	}
 	return handled, nil

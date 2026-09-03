@@ -3,7 +3,6 @@ package integration
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/sub2api"
 
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -68,7 +68,7 @@ func TestSub2APIToRetainedDeviceView(t *testing.T) {
 		t.Fatal(err)
 	}
 	broker := newMemoryBroker()
-	coreRunner, err := core.NewRunner(engine, broker, slog.Default())
+	coreRunner, err := core.NewRunner(engine, broker, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +85,7 @@ func TestSub2APIToRetainedDeviceView(t *testing.T) {
 		Location:       location,
 		PollInterval:   time.Minute,
 		ObservationTTL: 2 * time.Minute,
-	}, source, broker, slog.Default())
+	}, source, broker, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

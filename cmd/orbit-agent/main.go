@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,8 +13,11 @@ import (
 
 	"orbit/internal/agent"
 	"orbit/internal/config"
+	"orbit/internal/logging"
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/sub2api"
+
+	"go.uber.org/zap"
 )
 
 const version = "0.1.0"
@@ -23,17 +25,25 @@ const version = "0.1.0"
 func main() {
 	configPath := flag.String("config", "configs/agent.local.yaml", "path to the Agent YAML configuration")
 	flag.Parse()
-	if err := run(*configPath); err != nil {
-		slog.Error("orbit agent stopped", "error", err)
+	cfg, runErr := config.LoadAgent(*configPath)
+	level := "info"
+	if runErr == nil {
+		level = cfg.Logging.Level
+	}
+	logger := zap.Must(logging.New(level))
+	if runErr == nil {
+		runErr = run(cfg, logger)
+	}
+	if runErr != nil {
+		logger.Error("orbit agent stopped", zap.Error(runErr))
+	}
+	_ = logger.Sync()
+	if runErr != nil {
 		os.Exit(1)
 	}
 }
 
-func run(configPath string) error {
-	cfg, err := config.LoadAgent(configPath)
-	if err != nil {
-		return err
-	}
+func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 	if !cfg.Sources.Sub2API.Enabled {
 		return errors.New("sources.sub2api.enabled must be true for the V1 Agent")
 	}
@@ -45,7 +55,6 @@ func run(configPath string) error {
 	if err != nil {
 		return fmt.Errorf("load Sub2API timezone: %w", err)
 	}
-	logger := newLogger(cfg.Logging.Level)
 	source, err := sub2api.New(sub2api.Config{
 		LoginEndpoint:   cfg.Sources.Sub2API.LoginEndpoint,
 		RefreshEndpoint: cfg.Sources.Sub2API.RefreshEndpoint,
@@ -75,7 +84,7 @@ func run(configPath string) error {
 	if err != nil {
 		return err
 	}
-	defer disconnect(client)
+	defer disconnect(client, logger)
 
 	runner, err := agent.New(agent.Config{
 		AgentID:        agentID,
@@ -90,29 +99,14 @@ func run(configPath string) error {
 	if err != nil {
 		return err
 	}
-	logger.Info("orbit agent started", "agent_id", agentID)
+	logger.Info("orbit agent started", zap.String("agent_id", agentID))
 	return runner.Run(ctx)
 }
 
-func newLogger(level string) *slog.Logger {
-	var slogLevel slog.Level
-	switch level {
-	case "debug":
-		slogLevel = slog.LevelDebug
-	case "warn":
-		slogLevel = slog.LevelWarn
-	case "error":
-		slogLevel = slog.LevelError
-	default:
-		slogLevel = slog.LevelInfo
-	}
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slogLevel}))
-}
-
-func disconnect(client *mqtt.Client) {
+func disconnect(client *mqtt.Client, logger *zap.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := client.Disconnect(ctx); err != nil {
-		slog.Warn("disconnect mqtt", "error", err)
+		logger.Warn("disconnect mqtt", zap.Error(err))
 	}
 }

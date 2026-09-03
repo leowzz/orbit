@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/sub2api"
 
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -38,7 +38,7 @@ type Runner struct {
 	config    Config
 	source    UsageSource
 	publisher Publisher
-	logger    *slog.Logger
+	logger    *zap.Logger
 	now       func() time.Time
 
 	observationRevision uint64
@@ -46,7 +46,7 @@ type Runner struct {
 	lastSuccess         time.Time
 }
 
-func New(config Config, source UsageSource, publisher Publisher, logger *slog.Logger) (*Runner, error) {
+func New(config Config, source UsageSource, publisher Publisher, logger *zap.Logger) (*Runner, error) {
 	if config.AgentID == "" || config.AgentEpoch == "" || config.AgentVersion == "" || config.HostLabel == "" {
 		return nil, errors.New("agent identity, epoch, version, and host label are required")
 	}
@@ -60,7 +60,7 @@ func New(config Config, source UsageSource, publisher Publisher, logger *slog.Lo
 		return nil, errors.New("agent source and publisher are required")
 	}
 	if logger == nil {
-		logger = slog.Default()
+		logger = zap.NewNop()
 	}
 	return &Runner{config: config, source: source, publisher: publisher, logger: logger, now: time.Now}, nil
 }
@@ -93,9 +93,9 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 		return errors.Join(err, publishErr)
 	}
 	r.logger.Debug("sub2api usage fetched",
-		"cost_micros", usage.TodayActualCostMicros,
-		"token_count", usage.TodayTokens,
-		"tpm", usage.TPM,
+		zap.Int64("cost_micros", usage.TodayActualCostMicros),
+		zap.Uint64("token_count", usage.TodayTokens),
+		zap.Uint64("tpm", usage.TPM),
 	)
 
 	now := r.now().UTC()
@@ -136,10 +136,10 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 		return fmt.Errorf("publish usage observation: %w", err)
 	}
 	r.logger.Debug("usage observation published",
-		"topic", topic,
-		"revision", r.observationRevision,
-		"bytes", len(payload),
-		"expires_at", expiresAt,
+		zap.String("topic", topic),
+		zap.Uint64("revision", r.observationRevision),
+		zap.Int("bytes", len(payload)),
+		zap.Time("expires_at", expiresAt),
 	)
 	r.lastSuccess = now
 	if err := r.publishState(ctx, orbitv1.SourceHealth_SOURCE_HEALTH_HEALTHY, ""); err != nil {
@@ -150,7 +150,7 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 
 func (r *Runner) pollAndLog(ctx context.Context) {
 	if err := r.PollOnce(ctx); err != nil && ctx.Err() == nil {
-		r.logger.Warn("sub2api poll failed", "error", err)
+		r.logger.Warn("sub2api poll failed", zap.Error(err))
 	}
 }
 
@@ -192,11 +192,11 @@ func (r *Runner) publishState(ctx context.Context, health orbitv1.SourceHealth, 
 		return fmt.Errorf("publish agent state: %w", err)
 	}
 	r.logger.Debug("agent state published",
-		"topic", topic,
-		"revision", r.stateRevision,
-		"health", health.String(),
-		"error_code", errorCode,
-		"bytes", len(payload),
+		zap.String("topic", topic),
+		zap.Uint64("revision", r.stateRevision),
+		zap.String("health", health.String()),
+		zap.String("error_code", errorCode),
+		zap.Int("bytes", len(payload)),
 	)
 	return nil
 }

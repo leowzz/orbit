@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +12,8 @@ import (
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/sub2api"
 
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -40,7 +41,11 @@ func TestPollOncePublishesUsageAndHealthyState(t *testing.T) {
 	publisher := &recordingPublisher{}
 	runner := newTestRunner(t, source, publisher)
 	var logs bytes.Buffer
-	runner.logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	runner.logger = zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+		zapcore.AddSync(&logs),
+		zapcore.DebugLevel,
+	))
 	now := time.Date(2026, 9, 3, 16, 30, 0, 0, time.UTC)
 	runner.now = func() time.Time { return now }
 
@@ -69,7 +74,7 @@ func TestPollOncePublishesUsageAndHealthyState(t *testing.T) {
 	if !publisher.messages[1].Retain || state.Sources[0].Health != orbitv1.SourceHealth_SOURCE_HEALTH_HEALTHY {
 		t.Fatalf("unexpected agent state: %+v", state.Sources[0])
 	}
-	for _, want := range []string{"sub2api usage fetched", "cost_micros=1500000", "usage observation published", "agent state published"} {
+	for _, want := range []string{"sub2api usage fetched", `"cost_micros":1500000`, "usage observation published", "agent state published"} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("debug log missing %q: %s", want, logs.String())
 		}
@@ -104,7 +109,7 @@ func TestPollFailurePublishesDegradedStateWithoutReplacingObservation(t *testing
 
 func TestNewRejectsIncompleteConfig(t *testing.T) {
 	t.Parallel()
-	_, err := New(Config{}, &stubSource{}, &recordingPublisher{}, slog.Default())
+	_, err := New(Config{}, &stubSource{}, &recordingPublisher{}, zap.NewNop())
 	if err == nil || errors.Is(err, context.Canceled) {
 		t.Fatalf("New returned unexpected error: %v", err)
 	}
@@ -125,7 +130,7 @@ func TestNewRejectsUnsupportedCurrency(t *testing.T) {
 		Location:       location,
 		PollInterval:   time.Minute,
 		ObservationTTL: 2 * time.Minute,
-	}, &stubSource{}, &recordingPublisher{}, slog.Default())
+	}, &stubSource{}, &recordingPublisher{}, zap.NewNop())
 	if err == nil {
 		t.Fatal("New accepted a currency that V1 cannot render correctly")
 	}
@@ -146,7 +151,7 @@ func newTestRunner(t *testing.T, source UsageSource, publisher Publisher) *Runne
 		Location:       location,
 		PollInterval:   time.Minute,
 		ObservationTTL: 2 * time.Minute,
-	}, source, publisher, slog.Default())
+	}, source, publisher, zap.NewNop())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
