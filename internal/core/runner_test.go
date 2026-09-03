@@ -85,6 +85,41 @@ func TestRunnerRejectsTopicPayloadIdentityMismatch(t *testing.T) {
 	}
 }
 
+func TestRunnerAcceptsCodexObservationTopic(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
+	engine, err := New(Config{
+		CoreID: "core-a", CoreEpoch: "epoch-a",
+		Routes: []Route{{NodeID: "web-a", Profile: webProfile, Inputs: []RouteInput{{
+			AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_CODEX,
+		}}}},
+		CodexPolicy: CodexPolicy{MaxTTL: time.Minute, MaxFutureSkew: time.Second}, RetainFor: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := &fakeTransport{}
+	runner, _ := NewRunner(engine, transport, zap.NewNop())
+	runner.now = func() time.Time { return now }
+	agent := testAgentState(now)
+	agent.Sources = []*orbitv1.SourceStatus{{ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_CODEX, Enabled: true}}
+	agentPayload, _ := proto.Marshal(agent)
+	if err := runner.handleAgentState(context.Background(), mqtt.Message{Topic: "orbit/v1/agents/agent-a/state", Payload: agentPayload}); err != nil {
+		t.Fatal(err)
+	}
+	nodePayload, _ := proto.Marshal(testWebNodeState(now))
+	if err := runner.handleNodeState(context.Background(), mqtt.Message{Topic: "orbit/v1/nodes/web-a/state", Payload: nodePayload}); err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := proto.Marshal(testCodexObservation(now))
+	if err := runner.handleCodexObservation(context.Background(), mqtt.Message{Topic: "orbit/v1/agents/agent-a/observations/codex", Payload: payload}); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.messages) != 1 {
+		t.Fatalf("got %d views", len(transport.messages))
+	}
+}
+
 func TestUnmarshalInboundRejectsOversizedPayload(t *testing.T) {
 	t.Parallel()
 	if err := unmarshalInbound(make([]byte, maxInboundPayload+1), &orbitv1.Observation{}); err == nil {

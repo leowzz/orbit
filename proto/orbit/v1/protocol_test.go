@@ -26,9 +26,13 @@ func TestUsageObservationPreservesRequiredZeroValues(t *testing.T) {
 		ObservedAt:       timestamppb.New(now),
 	}
 
-	encoded, err := proto.Marshal(original)
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(original)
 	if err != nil {
 		t.Fatal(err)
+	}
+	const usageGolden = "0a0608b0a6e5d406120608c0c2e5d40618002203555344280030003a0608c0c2e5d406"
+	if got := hex.EncodeToString(encoded); got != usageGolden {
+		t.Fatalf("UsageObservation bytes changed: %s", got)
 	}
 	var decoded orbitv1.UsageObservation
 	if err := proto.Unmarshal(encoded, &decoded); err != nil {
@@ -37,6 +41,44 @@ func TestUsageObservationPreservesRequiredZeroValues(t *testing.T) {
 
 	if decoded.ActualCostMicros == nil || decoded.TokenCount == nil || decoded.Tpm == nil {
 		t.Fatalf("zero-valued required fields lost presence: %#v", &decoded)
+	}
+}
+
+func TestCodexObservationRoundTrips(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	original := &orbitv1.Observation{
+		Metadata:   &orbitv1.Metadata{MessageId: "msg-codex", ProducerId: "agent-local", Revision: 2},
+		AgentEpoch: "epoch-1",
+		Payload: &orbitv1.Observation_Codex{Codex: &orbitv1.CodexObservation{
+			Sessions: []*orbitv1.CodexSession{{
+				SessionId:    "session-1",
+				DisplayName:  "Fix config",
+				ProjectName:  "orbit",
+				Model:        "gpt-5.6-luna",
+				Status:       orbitv1.CodexSessionStatus_CODEX_SESSION_STATUS_RUNNING,
+				UpdatedAt:    timestamppb.New(now),
+				ProcessAlive: true,
+			}},
+			TotalCount:   1,
+			RunningCount: 1,
+			ObservedAt:   timestamppb.New(now),
+		}},
+	}
+
+	encoded, err := (proto.MarshalOptions{Deterministic: true}).Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded orbitv1.Observation
+	if err := proto.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(original, &decoded) {
+		t.Fatalf("Codex observation changed after round trip: got %s", decoded.String())
+	}
+	if decoded.GetCodex() == nil || decoded.GetCodex().GetSessions()[0].GetStatus() != orbitv1.CodexSessionStatus_CODEX_SESSION_STATUS_RUNNING {
+		t.Fatalf("decoded Codex payload missing: %s", decoded.String())
 	}
 }
 

@@ -1,20 +1,20 @@
 # Orbit
 
-Orbit connects trusted host state to small display nodes. The current V1
-working path reads Sub2API usage in a host Agent, transports Protobuf
-observations over MQTT, projects them in Core, and publishes a retained
-three-slot view for an OLED node:
+Orbit connects trusted host state to display nodes. The current V1 path reads
+Sub2API usage and local Codex task state in a host Agent, transports Protobuf
+observations over MQTT, and lets Core publish retained views for OLED and web
+nodes:
 
 ~~~text
-Sub2API -> orbit-agent -> MQTT -> orbit-core -> retained DeviceView -> OLED node
+Sub2API / Codex -> orbit-agent -> MQTT -> orbit-core -> DeviceView -> OLED / Web
 ~~~
 
 ![Orbit system architecture data flow from Sub2API to OLED](docs/assets/orbit-system-architecture.png)
 
-Sub2API credentials stay on the Agent. The node receives only formatted cost,
-token, TPM, and freshness text. The repository currently implements the
-Sub2API-to-OLED status path; command capabilities and other sources are not
-part of the runnable V1 path yet.
+Sub2API credentials and Codex databases stay on the Agent. OLED receives only
+formatted cost, token, TPM, and freshness text. The web node receives the rich
+usage and sanitized Codex fields selected by its Core projection. Command
+capabilities are not part of the runnable V1 path yet.
 
 ## Requirements
 
@@ -22,7 +22,8 @@ part of the runnable V1 path yet.
 - uv and Python 3.13 or newer for the firmware project.
 - A C++17 toolchain supported by PlatformIO.
 - For live operation: an MQTT broker reachable by all participants, credentials
-  and ACLs for the Agent, Core, and node, and a reachable Sub2API account.
+  and ACLs for the Agent, Core, and node; a reachable Sub2API account when that
+  source is enabled; and a local Codex home when Codex is enabled.
 - For hardware operation: a YD-ESP32-S3, an SSD1306 128x32 I2C OLED, and a
   USB data connection.
 
@@ -61,12 +62,13 @@ access.
 
 ## Configure
 
-There are three independent YAML contracts. Copy the examples to the ignored
+There are four independent YAML contracts. Copy the examples to the ignored
 local paths before starting anything:
 
 ~~~shell
 cp configs/agent.example.yaml configs/agent.local.yaml
 cp configs/core.example.yaml configs/core.local.yaml
+cp configs/web.example.yaml configs/web.local.yaml
 cp nodes/display/models/oled-128x32/variants/yd-esp32-s3/config.example.yaml \
   nodes/display/models/oled-128x32/variants/yd-esp32-s3/config.local.yaml
 ~~~
@@ -87,26 +89,38 @@ configs/secrets/core-client.pem
 configs/secrets/core-client.key
 configs/secrets/core-mqtt-username
 configs/secrets/core-mqtt-password
+configs/secrets/web-client.pem
+configs/secrets/web-client.key
+configs/secrets/web-mqtt-username
+configs/secrets/web-mqtt-password
 configs/secrets/sub2api-email
 configs/secrets/sub2api-password
 ~~~
 
 Update the local YAML values for the selected broker and account:
 
-- agent.local.yaml: agent.id and agent.host_label, MQTT URL/TLS files,
-  and the Sub2API HTTPS endpoints and credential file paths.
+- agent.local.yaml: agent.id and agent.host_label, MQTT URL/TLS files, and the
+  settings for each enabled source. Sub2API uses HTTPS endpoints and secret
+  files; Codex uses codex_home (or the local CODEX_HOME/default) and its
+  polling, filtering, and privacy settings.
 - core.local.yaml: core.id, MQTT URL/TLS files, and projection_routes.
+- web.local.yaml: node.id, its MQTT credentials, and the local HTTP listen address.
 
-The Core route key must equal the node configuration's node.id; its
-inputs[0].agent_id must equal the Agent's resolved ID (agent.id when it is
-explicitly set). These three values must describe the same deployment. The
-example route therefore connects desk-oled-01 to agent-local.
+Each Core route key must equal the corresponding node configuration's node.id;
+every input agent_id must equal the Agent's resolved ID (agent.id when it is
+explicitly set). The example routes connect desk-oled-01 and desk-web-01 to
+agent-local.
 
 Host configuration is strict and is validated before a process connects. IDs
 must match [a-z0-9][a-z0-9_-]{0,63}. Agent host_label, Core routes, the usage
-policy, MQTT credentials, and all enabled Sub2API values are required.
-Durations use Go syntax such as 30s, 10s, and 2m; V1 requires USD and an
-observation TTL at least as long as the poll interval.
+policy, MQTT credentials, and all enabled source values are required. Durations
+use Go syntax such as 30s, 10s, and 2m; Sub2API requires USD and each source's
+observation TTL must be at least its poll interval.
+
+The Codex source reads local projection databases in read-only mode. Display
+names and project names are omitted unless their privacy flags are explicitly
+enabled. `include_display_name` is a deliberate opt-in because the value may
+come from a Codex title or first-user-message fallback.
 
 TLS is enabled by default. With TLS enabled, use an mqtts:// URL and provide
 the CA file; client certificate and key must be supplied together if the broker
@@ -144,7 +158,11 @@ Run these from the repository root. A passing check exits with status 0; any
 non-zero status is a failure even if some earlier packages passed.
 
 ~~~shell
-make test-go       # Go unit tests and the in-memory Sub2API -> DeviceView test
+make test-go       # Go unit tests and in-memory source/integration tests
+go test ./internal/agent ./internal/integration
+go test -race ./internal/agent ./internal/integration
+go test ./internal/sources/codex
+env ORBIT_CODEX_LIVE_TEST=1 go test ./internal/sources/codex -run '^TestLiveSmoke$' -count=1
 make test-node     # YAML tests and PlatformIO native firmware tests
 make proto-lint    # Buf schema lint; installs the pinned Buf if needed
 make generate      # regenerate Go bindings under gen/go/
@@ -153,9 +171,14 @@ make build-node    # generate nanopb and compile the YD-ESP32-S3 firmware
 make verify        # fmt-check, lint, all tests, protocol checks, and builds
 ~~~
 
-make test-go uses an in-memory MQTT broker and an httptest Sub2API server. It
-proves the software chain and formatting invariants, but does not use the
-local YAML, a real broker, real Sub2API credentials, or hardware.
+make test-go uses an in-memory MQTT broker, an httptest Sub2API server, and
+Codex fixtures. It proves source selection, initial AgentState ordering,
+independent revisions/health, and privacy bounds, but does not use the local
+YAML, a real broker, real Sub2API credentials, local Codex files, or hardware.
+
+The `TestLiveSmoke` command is a read-only local Codex adapter check. It passes
+only when the current user's Codex projections contain at least one session;
+it does not publish MQTT or expose session contents in the test output.
 
 make verify is accepted only when the command exits with status 0 after every
 stage (format check, Go vet/tests, Buf lint, node tests, and both builds). A
@@ -193,6 +216,17 @@ make dev AGENT_CONFIG=configs/agent.local.yaml \
   CORE_CONFIG=configs/core.local.yaml
 ~~~
 
+Start the web node in a third terminal:
+
+~~~shell
+make dev-web WEB_CONFIG=configs/web.local.yaml
+~~~
+
+The startup log prints its local URL (127.0.0.1:8080 in the example). The page
+keeps one SSE connection open and updates whenever a new retained DeviceView is
+accepted. Its MQTT credential needs publish access to its own NodeState topic
+and subscribe access to its own DeviceView topic only.
+
 Each service exits non-zero on a configuration, TLS, authentication, ACL, or
 initial MQTT connection error. A successful startup emits an "orbit core
 started" or "orbit agent started" log message after the MQTT connection is
@@ -201,15 +235,14 @@ includes "usage observation published" from Agent, "usage observation
 accepted" and "device view published" from Core, and "node state accepted"
 after the node connects.
 
-After startup, the Agent polls Sub2API immediately and then at the configured
-interval (30 seconds in the example). A successful live chain has these
-retained messages in the broker, in addition to the non-retained usage
-observation:
+After startup, each enabled source is polled immediately and then at its own
+configured interval. A successful live chain has these messages in the broker:
 
 | Topic | Publisher | Consumer | Retained |
 | --- | --- | --- | --- |
 | orbit/v1/agents/{agent_id}/state | Agent | Core | yes |
 | orbit/v1/agents/{agent_id}/observations/usage | Agent | Core | no |
+| orbit/v1/agents/{agent_id}/observations/codex | Agent | Core -> Web projection; OLED ignores | no |
 | orbit/v1/nodes/{node_id}/state | Node | Core | yes |
 | orbit/v1/nodes/{node_id}/view | Core | Node | yes |
 
@@ -218,6 +251,36 @@ allow each identity only the publish/subscribe rows it owns. See
 [docs/mqtt-topics.md](docs/mqtt-topics.md) and
 [docs/security.md](docs/security.md) for the contract and deployment
 security requirements.
+
+### Codex-only live acceptance
+
+1. Copy `configs/agent.example.yaml` to a local file, enable
+   `sources.codex`, set `sources.codex.codex_home` when the projections are not
+   under the default `~/.codex`, and disable `sources.sub2api`.
+2. Start the Agent with a reachable broker:
+
+~~~shell
+make dev-agent AGENT_CONFIG=configs/agent.codex.local.yaml
+~~~
+
+3. Subscribe with a credential authorized for the Agent topic subtree and
+   confirm the first message is retained AgentState with Codex health
+   `UNSPECIFIED`, followed by a non-retained Codex observation and a retained
+   healthy AgentState. Decode the Protobuf and verify metadata revision `1`,
+   the configured `agent_epoch`, and an `expires_at` after `produced_at`.
+4. With the default privacy settings, `display_name` and `project_name` must be
+   empty, so no title or first-user-message fallback appears. There is no
+   separate raw prompt/title field. If `include_display_name` is enabled, its
+   value may carry the Codex title or first-user-message fallback and must be
+   treated as sensitive opt-in data. Source JSON, full paths, rollout paths,
+   and PIDs never appear in the payload or logs. Logs contain source type,
+   aggregate counts, revision, bytes, and stable error codes only.
+
+The in-memory integration test is the deterministic Agent-side version of this
+sequence; the broker command additionally proves deployment TLS, credentials,
+ACLs, and MQTT delivery. Core consumes the observation and projects sanitized
+Codex data to the Web node. OLED intentionally does not consume or render
+Codex data in this milestone.
 
 ## Build, flash, and inspect the OLED node
 
@@ -303,6 +366,7 @@ internal/               config, source, transport, Agent, and Core logic
 proto/orbit/v1/         versioned wire schemas
 gen/go/                 generated Go Protobuf bindings
 nodes/display/          shared display firmware and model/variant delivery units
+nodes/web/              browser display node, HTTP/SSE server, and static UI
 configs/                non-sensitive host configuration examples
 docs/                   architecture, security, MQTT, and ADR documentation
 ~~~

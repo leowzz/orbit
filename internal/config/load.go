@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -57,6 +58,21 @@ func LoadCore(path string) (*CoreConfig, error) {
 	return &cfg, nil
 }
 
+func LoadWebNode(path string) (*WebNodeConfig, error) {
+	cfg := WebNodeConfig{
+		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
+		Web:     WebConfig{Listen: "127.0.0.1:8080"},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := decodeStrict(path, &cfg); err != nil {
+		return nil, err
+	}
+	if err := cfg.validate(filepath.Dir(path)); err != nil {
+		return nil, fmt.Errorf("validate web node config: %w", err)
+	}
+	return &cfg, nil
+}
+
 func decodeStrict(path string, dst any) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -89,12 +105,20 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 	if strings.TrimSpace(cfg.Agent.HostLabel) == "" {
 		return errors.New("agent.host_label is required")
 	}
+	if !cfg.Sources.Sub2API.Enabled && !cfg.Sources.Codex.Enabled {
+		return errors.New("at least one of sources.sub2api or sources.codex must be enabled")
+	}
 	if err := cfg.MQTT.validate(baseDir); err != nil {
 		return fmt.Errorf("mqtt: %w", err)
 	}
 	if cfg.Sources.Sub2API.Enabled {
 		if err := cfg.Sources.Sub2API.validate(baseDir); err != nil {
 			return fmt.Errorf("sources.sub2api: %w", err)
+		}
+	}
+	if cfg.Sources.Codex.Enabled {
+		if err := cfg.Sources.Codex.validate(baseDir); err != nil {
+			return fmt.Errorf("sources.codex: %w", err)
 		}
 	}
 	return validateLogLevel(cfg.Logging.Level)
@@ -115,8 +139,8 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
-		if strings.TrimSpace(route.Profile) == "" {
-			return fmt.Errorf("projection route %q: profile is required", nodeID)
+		if route.Profile != "usage-oled-128x32" && route.Profile != "overview-web" {
+			return fmt.Errorf("projection route %q: unsupported profile %q", nodeID, route.Profile)
 		}
 		if len(route.Inputs) == 0 {
 			return fmt.Errorf("projection route %q: inputs must not be empty", nodeID)
@@ -126,7 +150,7 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 			if err := validateID("agent_id", input.AgentID); err != nil {
 				return fmt.Errorf("projection route %q input %d: %w", nodeID, i, err)
 			}
-			if input.ObservationType != "usage" {
+			if input.ObservationType != "usage" && input.ObservationType != "codex" {
 				return fmt.Errorf("projection route %q input %d: unsupported observation_type %q", nodeID, i, input.ObservationType)
 			}
 			if _, ok := seen[input.ObservationType]; ok {
@@ -134,22 +158,47 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 			}
 			seen[input.ObservationType] = struct{}{}
 		}
+		if route.Profile == "usage-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "usage") {
+			return fmt.Errorf("projection route %q: usage-oled-128x32 requires exactly one usage input", nodeID)
+		}
 	}
 
-	usage, ok := cfg.ObservationPolicies["usage"]
-	if !ok {
-		return errors.New("observation_policies.usage is required")
+	requiredPolicies := make(map[string]struct{})
+	for _, route := range cfg.ProjectionRoutes {
+		for _, input := range route.Inputs {
+			requiredPolicies[input.ObservationType] = struct{}{}
+		}
 	}
-	if usage.MaxTTL.Duration <= 0 {
-		return errors.New("observation_policies.usage.max_ttl must be positive")
-	}
-	if usage.MaxFutureSkew.Duration < 0 {
-		return errors.New("observation_policies.usage.max_future_skew must not be negative")
+	for name := range requiredPolicies {
+		policy, ok := cfg.ObservationPolicies[name]
+		if !ok {
+			return fmt.Errorf("observation_policies.%s is required", name)
+		}
+		if policy.MaxTTL.Duration <= 0 {
+			return fmt.Errorf("observation_policies.%s.max_ttl must be positive", name)
+		}
+		if policy.MaxFutureSkew.Duration < 0 {
+			return fmt.Errorf("observation_policies.%s.max_future_skew must not be negative", name)
+		}
 	}
 	for name := range cfg.ObservationPolicies {
-		if name != "usage" {
+		if name != "usage" && name != "codex" {
 			return fmt.Errorf("observation_policies contains unsupported type %q", name)
 		}
+	}
+	return validateLogLevel(cfg.Logging.Level)
+}
+
+func (cfg *WebNodeConfig) validate(baseDir string) error {
+	if err := validateID("node.id", cfg.Node.ID); err != nil {
+		return err
+	}
+	if err := cfg.MQTT.validate(baseDir); err != nil {
+		return fmt.Errorf("mqtt: %w", err)
+	}
+	host, port, err := net.SplitHostPort(cfg.Web.Listen)
+	if err != nil || strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
+		return fmt.Errorf("web.listen must be a host:port address: %q", cfg.Web.Listen)
 	}
 	return validateLogLevel(cfg.Logging.Level)
 }
@@ -262,6 +311,30 @@ func (cfg *Sub2APIConfig) validate(baseDir string) error {
 	return nil
 }
 
+func (cfg *CodexConfig) validate(baseDir string) error {
+	if cfg.PollInterval.Duration <= 0 {
+		return errors.New("poll_interval must be positive")
+	}
+	if cfg.ObservationTTL.Duration <= 0 {
+		return errors.New("observation_ttl must be positive")
+	}
+	if cfg.ObservationTTL.Duration < cfg.PollInterval.Duration {
+		return errors.New("observation_ttl must be at least poll_interval")
+	}
+	if cfg.SessionLimit < 1 || cfg.SessionLimit > 20 {
+		return errors.New("session_limit must be between 1 and 20")
+	}
+	if cfg.CodexHome != "" {
+		if err := resolveReadableDir(baseDir, &cfg.CodexHome); err != nil {
+			return fmt.Errorf("codex_home: %w", err)
+		}
+	}
+	if err := validateNonEmptyStrings("ignore.cwd", cfg.Ignore.CWD); err != nil {
+		return err
+	}
+	return validateNonEmptyStrings("ignore.source", cfg.Ignore.Source)
+}
+
 func parseHTTPSURL(name, raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -309,6 +382,53 @@ func resolveReadableFile(baseDir string, path *string) error {
 	}
 	file.Close()
 	*path = abs
+	return nil
+}
+
+func resolveReadableDir(baseDir string, path *string) error {
+	if *path == "" {
+		return errors.New("path is required")
+	}
+	if *path == "~" || strings.HasPrefix(*path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		if *path == "~" {
+			*path = home
+		} else {
+			*path = filepath.Join(home, strings.TrimPrefix(*path, "~/"))
+		}
+	}
+	if !filepath.IsAbs(*path) {
+		*path = filepath.Join(baseDir, *path)
+	}
+	abs, err := filepath.Abs(*path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return errors.New("must reference a directory")
+	}
+	directory, err := os.Open(abs)
+	if err != nil {
+		return err
+	}
+	directory.Close()
+	*path = abs
+	return nil
+}
+
+func validateNonEmptyStrings(field string, values []string) error {
+	for index, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s[%d] must not be empty", field, index)
+		}
+	}
 	return nil
 }
 

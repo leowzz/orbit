@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Orbit 实时状态</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <button class="brand" id="fullscreen-toggle" type="button" aria-pressed="false" title="进入全屏">
+        <span class="brand-mark" aria-hidden="true"><span></span></span>
+        <span>Orbit</span>
+      </button>
+      <div class="connection" id="connection" data-state="connecting">
+        <span class="connection-dot" aria-hidden="true"></span>
+        <span id="connection-label">连接中</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="overview" aria-labelledby="overview-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">实时状态</p>
+            <h1 id="overview-title">今日概览</h1>
+          </div>
+          <div class="view-meta">
+            <span class="freshness" id="view-freshness" data-state="unknown">等待数据</span>
+            <time id="updated-at">--</time>
+          </div>
+        </div>
+
+        <div class="metrics" id="usage-metrics" aria-live="polite">
+          <div class="metric">
+            <span class="metric-label">实际成本</span>
+            <strong id="cost">--</strong>
+            <small id="currency">USD</small>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Token</span>
+            <strong id="tokens">--</strong>
+            <small>今日累计</small>
+          </div>
+          <div class="metric">
+            <span class="metric-label">TPM</span>
+            <strong id="tpm">--</strong>
+            <small>当前吞吐</small>
+          </div>
+          <div class="metric metric-accent">
+            <span class="metric-label">运行任务</span>
+            <strong id="running-count">--</strong>
+            <small id="total-count">共 -- 个</small>
+          </div>
+        </div>
+      </section>
+
+      <section class="sessions" aria-labelledby="sessions-title">
+        <div class="section-heading compact">
+          <div>
+            <p class="eyebrow">Codex</p>
+            <h2 id="sessions-title">最近任务</h2>
+          </div>
+          <span class="freshness" id="codex-freshness" data-state="unknown">等待数据</span>
+        </div>
+        <div class="session-list" id="session-list" aria-live="polite">
+          <div class="empty-state">
+            <span class="empty-orbit" aria-hidden="true"></span>
+            <p>等待 Core 投影视图</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span id="node-id">Node --</span>
+      <span id="revision">Revision --</span>
+    </footer>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

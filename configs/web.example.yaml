@@ -1,0 +1,19 @@
+node:
+  id: desk-web-01
+
+mqtt:
+  url: mqtts://broker.example.com:8883
+  tls:
+    enabled: true
+    ca_file: secrets/mqtt-ca.pem
+    cert_file: secrets/web-client.pem
+    key_file: secrets/web-client.key
+  credentials:
+    username_file: secrets/web-mqtt-username
+    password_file: secrets/web-mqtt-password
+
+web:
+  listen: 127.0.0.1:8080
+
+logging:
+  level: info

@@ -178,6 +178,274 @@ func (x *DisplaySlot) GetEmphasis() Emphasis {
 	return Emphasis_EMPHASIS_UNSPECIFIED
 }
 
+type UsageView struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Freshness        Freshness              `protobuf:"varint,1,opt,name=freshness,proto3,enum=orbit.v1.Freshness" json:"freshness,omitempty"`
+	FreshUntil       *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
+	ActualCostMicros *int64                 `protobuf:"varint,3,opt,name=actual_cost_micros,json=actualCostMicros,proto3,oneof" json:"actual_cost_micros,omitempty"`
+	CurrencyCode     string                 `protobuf:"bytes,4,opt,name=currency_code,json=currencyCode,proto3" json:"currency_code,omitempty"`
+	TokenCount       *uint64                `protobuf:"varint,5,opt,name=token_count,json=tokenCount,proto3,oneof" json:"token_count,omitempty"`
+	Tpm              *uint64                `protobuf:"varint,6,opt,name=tpm,proto3,oneof" json:"tpm,omitempty"`
+	ObservedAt       *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UsageView) Reset() {
+	*x = UsageView{}
+	mi := &file_orbit_v1_view_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageView) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageView) ProtoMessage() {}
+
+func (x *UsageView) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_view_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageView.ProtoReflect.Descriptor instead.
+func (*UsageView) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_view_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *UsageView) GetFreshness() Freshness {
+	if x != nil {
+		return x.Freshness
+	}
+	return Freshness_FRESHNESS_UNSPECIFIED
+}
+
+func (x *UsageView) GetFreshUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FreshUntil
+	}
+	return nil
+}
+
+func (x *UsageView) GetActualCostMicros() int64 {
+	if x != nil && x.ActualCostMicros != nil {
+		return *x.ActualCostMicros
+	}
+	return 0
+}
+
+func (x *UsageView) GetCurrencyCode() string {
+	if x != nil {
+		return x.CurrencyCode
+	}
+	return ""
+}
+
+func (x *UsageView) GetTokenCount() uint64 {
+	if x != nil && x.TokenCount != nil {
+		return *x.TokenCount
+	}
+	return 0
+}
+
+func (x *UsageView) GetTpm() uint64 {
+	if x != nil && x.Tpm != nil {
+		return *x.Tpm
+	}
+	return 0
+}
+
+func (x *UsageView) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
+type CodexSessionView struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	ProjectName   string                 `protobuf:"bytes,3,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
+	Model         string                 `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
+	Status        CodexSessionStatus     `protobuf:"varint,5,opt,name=status,proto3,enum=orbit.v1.CodexSessionStatus" json:"status,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ProcessAlive  bool                   `protobuf:"varint,7,opt,name=process_alive,json=processAlive,proto3" json:"process_alive,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CodexSessionView) Reset() {
+	*x = CodexSessionView{}
+	mi := &file_orbit_v1_view_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodexSessionView) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodexSessionView) ProtoMessage() {}
+
+func (x *CodexSessionView) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_view_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodexSessionView.ProtoReflect.Descriptor instead.
+func (*CodexSessionView) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_view_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CodexSessionView) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CodexSessionView) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *CodexSessionView) GetProjectName() string {
+	if x != nil {
+		return x.ProjectName
+	}
+	return ""
+}
+
+func (x *CodexSessionView) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *CodexSessionView) GetStatus() CodexSessionStatus {
+	if x != nil {
+		return x.Status
+	}
+	return CodexSessionStatus_CODEX_SESSION_STATUS_UNSPECIFIED
+}
+
+func (x *CodexSessionView) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *CodexSessionView) GetProcessAlive() bool {
+	if x != nil {
+		return x.ProcessAlive
+	}
+	return false
+}
+
+type CodexView struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Freshness     Freshness              `protobuf:"varint,1,opt,name=freshness,proto3,enum=orbit.v1.Freshness" json:"freshness,omitempty"`
+	FreshUntil    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
+	Sessions      []*CodexSessionView    `protobuf:"bytes,3,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	TotalCount    uint32                 `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	RunningCount  uint32                 `protobuf:"varint,5,opt,name=running_count,json=runningCount,proto3" json:"running_count,omitempty"`
+	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CodexView) Reset() {
+	*x = CodexView{}
+	mi := &file_orbit_v1_view_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodexView) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodexView) ProtoMessage() {}
+
+func (x *CodexView) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_view_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodexView.ProtoReflect.Descriptor instead.
+func (*CodexView) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_view_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CodexView) GetFreshness() Freshness {
+	if x != nil {
+		return x.Freshness
+	}
+	return Freshness_FRESHNESS_UNSPECIFIED
+}
+
+func (x *CodexView) GetFreshUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FreshUntil
+	}
+	return nil
+}
+
+func (x *CodexView) GetSessions() []*CodexSessionView {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+func (x *CodexView) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *CodexView) GetRunningCount() uint32 {
+	if x != nil {
+		return x.RunningCount
+	}
+	return 0
+}
+
+func (x *CodexView) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
 type DeviceView struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metadata      *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -189,13 +457,15 @@ type DeviceView struct {
 	Primary       *DisplaySlot           `protobuf:"bytes,7,opt,name=primary,proto3" json:"primary,omitempty"`
 	Secondary     *DisplaySlot           `protobuf:"bytes,8,opt,name=secondary,proto3" json:"secondary,omitempty"`
 	Footer        *DisplaySlot           `protobuf:"bytes,9,opt,name=footer,proto3" json:"footer,omitempty"`
+	Usage         *UsageView             `protobuf:"bytes,10,opt,name=usage,proto3" json:"usage,omitempty"`
+	Codex         *CodexView             `protobuf:"bytes,11,opt,name=codex,proto3" json:"codex,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeviceView) Reset() {
 	*x = DeviceView{}
-	mi := &file_orbit_v1_view_proto_msgTypes[1]
+	mi := &file_orbit_v1_view_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -207,7 +477,7 @@ func (x *DeviceView) String() string {
 func (*DeviceView) ProtoMessage() {}
 
 func (x *DeviceView) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_view_proto_msgTypes[1]
+	mi := &file_orbit_v1_view_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -220,7 +490,7 @@ func (x *DeviceView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceView.ProtoReflect.Descriptor instead.
 func (*DeviceView) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_view_proto_rawDescGZIP(), []int{1}
+	return file_orbit_v1_view_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DeviceView) GetMetadata() *Metadata {
@@ -286,14 +556,62 @@ func (x *DeviceView) GetFooter() *DisplaySlot {
 	return nil
 }
 
+func (x *DeviceView) GetUsage() *UsageView {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
+func (x *DeviceView) GetCodex() *CodexView {
+	if x != nil {
+		return x.Codex
+	}
+	return nil
+}
+
 var File_orbit_v1_view_proto protoreflect.FileDescriptor
 
 const file_orbit_v1_view_proto_rawDesc = "" +
 	"\n" +
-	"\x13orbit/v1/view.proto\x12\borbit.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15orbit/v1/common.proto\"Q\n" +
+	"\x13orbit/v1/view.proto\x12\borbit.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15orbit/v1/common.proto\x1a\x1aorbit/v1/observation.proto\"Q\n" +
 	"\vDisplaySlot\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12.\n" +
-	"\bemphasis\x18\x02 \x01(\x0e2\x12.orbit.v1.EmphasisR\bemphasis\"\xb8\x03\n" +
+	"\bemphasis\x18\x02 \x01(\x0e2\x12.orbit.v1.EmphasisR\bemphasis\"\xfc\x02\n" +
+	"\tUsageView\x121\n" +
+	"\tfreshness\x18\x01 \x01(\x0e2\x13.orbit.v1.FreshnessR\tfreshness\x12;\n" +
+	"\vfresh_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"freshUntil\x121\n" +
+	"\x12actual_cost_micros\x18\x03 \x01(\x03H\x00R\x10actualCostMicros\x88\x01\x01\x12#\n" +
+	"\rcurrency_code\x18\x04 \x01(\tR\fcurrencyCode\x12$\n" +
+	"\vtoken_count\x18\x05 \x01(\x04H\x01R\n" +
+	"tokenCount\x88\x01\x01\x12\x15\n" +
+	"\x03tpm\x18\x06 \x01(\x04H\x02R\x03tpm\x88\x01\x01\x12;\n" +
+	"\vobserved_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAtB\x15\n" +
+	"\x13_actual_cost_microsB\x0e\n" +
+	"\f_token_countB\x06\n" +
+	"\x04_tpm\"\xa3\x02\n" +
+	"\x10CodexSessionView\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12!\n" +
+	"\fproject_name\x18\x03 \x01(\tR\vprojectName\x12\x14\n" +
+	"\x05model\x18\x04 \x01(\tR\x05model\x124\n" +
+	"\x06status\x18\x05 \x01(\x0e2\x1c.orbit.v1.CodexSessionStatusR\x06status\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
+	"\rprocess_alive\x18\a \x01(\bR\fprocessAlive\"\xb6\x02\n" +
+	"\tCodexView\x121\n" +
+	"\tfreshness\x18\x01 \x01(\x0e2\x13.orbit.v1.FreshnessR\tfreshness\x12;\n" +
+	"\vfresh_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"freshUntil\x126\n" +
+	"\bsessions\x18\x03 \x03(\v2\x1a.orbit.v1.CodexSessionViewR\bsessions\x12\x1f\n" +
+	"\vtotal_count\x18\x04 \x01(\rR\n" +
+	"totalCount\x12#\n" +
+	"\rrunning_count\x18\x05 \x01(\rR\frunningCount\x12;\n" +
+	"\vobserved_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAt\"\x8e\x04\n" +
 	"\n" +
 	"DeviceView\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x17\n" +
@@ -306,7 +624,10 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\fretain_until\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vretainUntil\x12/\n" +
 	"\aprimary\x18\a \x01(\v2\x15.orbit.v1.DisplaySlotR\aprimary\x123\n" +
 	"\tsecondary\x18\b \x01(\v2\x15.orbit.v1.DisplaySlotR\tsecondary\x12-\n" +
-	"\x06footer\x18\t \x01(\v2\x15.orbit.v1.DisplaySlotR\x06footer*g\n" +
+	"\x06footer\x18\t \x01(\v2\x15.orbit.v1.DisplaySlotR\x06footer\x12)\n" +
+	"\x05usage\x18\n" +
+	" \x01(\v2\x13.orbit.v1.UsageViewR\x05usage\x12)\n" +
+	"\x05codex\x18\v \x01(\v2\x13.orbit.v1.CodexViewR\x05codex*g\n" +
 	"\tFreshness\x12\x19\n" +
 	"\x15FRESHNESS_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fFRESHNESS_FRESH\x10\x01\x12\x13\n" +
@@ -331,29 +652,44 @@ func file_orbit_v1_view_proto_rawDescGZIP() []byte {
 }
 
 var file_orbit_v1_view_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_orbit_v1_view_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_orbit_v1_view_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_orbit_v1_view_proto_goTypes = []any{
 	(Freshness)(0),                // 0: orbit.v1.Freshness
 	(Emphasis)(0),                 // 1: orbit.v1.Emphasis
 	(*DisplaySlot)(nil),           // 2: orbit.v1.DisplaySlot
-	(*DeviceView)(nil),            // 3: orbit.v1.DeviceView
-	(*Metadata)(nil),              // 4: orbit.v1.Metadata
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(*UsageView)(nil),             // 3: orbit.v1.UsageView
+	(*CodexSessionView)(nil),      // 4: orbit.v1.CodexSessionView
+	(*CodexView)(nil),             // 5: orbit.v1.CodexView
+	(*DeviceView)(nil),            // 6: orbit.v1.DeviceView
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(CodexSessionStatus)(0),       // 8: orbit.v1.CodexSessionStatus
+	(*Metadata)(nil),              // 9: orbit.v1.Metadata
 }
 var file_orbit_v1_view_proto_depIdxs = []int32{
-	1, // 0: orbit.v1.DisplaySlot.emphasis:type_name -> orbit.v1.Emphasis
-	4, // 1: orbit.v1.DeviceView.metadata:type_name -> orbit.v1.Metadata
-	0, // 2: orbit.v1.DeviceView.freshness:type_name -> orbit.v1.Freshness
-	5, // 3: orbit.v1.DeviceView.fresh_until:type_name -> google.protobuf.Timestamp
-	5, // 4: orbit.v1.DeviceView.retain_until:type_name -> google.protobuf.Timestamp
-	2, // 5: orbit.v1.DeviceView.primary:type_name -> orbit.v1.DisplaySlot
-	2, // 6: orbit.v1.DeviceView.secondary:type_name -> orbit.v1.DisplaySlot
-	2, // 7: orbit.v1.DeviceView.footer:type_name -> orbit.v1.DisplaySlot
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	1,  // 0: orbit.v1.DisplaySlot.emphasis:type_name -> orbit.v1.Emphasis
+	0,  // 1: orbit.v1.UsageView.freshness:type_name -> orbit.v1.Freshness
+	7,  // 2: orbit.v1.UsageView.fresh_until:type_name -> google.protobuf.Timestamp
+	7,  // 3: orbit.v1.UsageView.observed_at:type_name -> google.protobuf.Timestamp
+	8,  // 4: orbit.v1.CodexSessionView.status:type_name -> orbit.v1.CodexSessionStatus
+	7,  // 5: orbit.v1.CodexSessionView.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 6: orbit.v1.CodexView.freshness:type_name -> orbit.v1.Freshness
+	7,  // 7: orbit.v1.CodexView.fresh_until:type_name -> google.protobuf.Timestamp
+	4,  // 8: orbit.v1.CodexView.sessions:type_name -> orbit.v1.CodexSessionView
+	7,  // 9: orbit.v1.CodexView.observed_at:type_name -> google.protobuf.Timestamp
+	9,  // 10: orbit.v1.DeviceView.metadata:type_name -> orbit.v1.Metadata
+	0,  // 11: orbit.v1.DeviceView.freshness:type_name -> orbit.v1.Freshness
+	7,  // 12: orbit.v1.DeviceView.fresh_until:type_name -> google.protobuf.Timestamp
+	7,  // 13: orbit.v1.DeviceView.retain_until:type_name -> google.protobuf.Timestamp
+	2,  // 14: orbit.v1.DeviceView.primary:type_name -> orbit.v1.DisplaySlot
+	2,  // 15: orbit.v1.DeviceView.secondary:type_name -> orbit.v1.DisplaySlot
+	2,  // 16: orbit.v1.DeviceView.footer:type_name -> orbit.v1.DisplaySlot
+	3,  // 17: orbit.v1.DeviceView.usage:type_name -> orbit.v1.UsageView
+	5,  // 18: orbit.v1.DeviceView.codex:type_name -> orbit.v1.CodexView
+	19, // [19:19] is the sub-list for method output_type
+	19, // [19:19] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_view_proto_init() }
@@ -362,13 +698,15 @@ func file_orbit_v1_view_proto_init() {
 		return
 	}
 	file_orbit_v1_common_proto_init()
+	file_orbit_v1_observation_proto_init()
+	file_orbit_v1_view_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orbit_v1_view_proto_rawDesc), len(file_orbit_v1_view_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   2,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

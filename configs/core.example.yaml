@@ -18,10 +18,20 @@ projection_routes:
     inputs:
       - agent_id: agent-local
         observation_type: usage
+  desk-web-01:
+    profile: overview-web
+    inputs:
+      - agent_id: agent-local
+        observation_type: usage
+      - agent_id: agent-local
+        observation_type: codex
 
 observation_policies:
   usage:
     max_ttl: 5m
+    max_future_skew: 10s
+  codex:
+    max_ttl: 1m
     max_future_skew: 10s
 
 logging:

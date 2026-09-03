@@ -40,6 +40,7 @@ type AgentIdentity struct {
 
 type AgentSources struct {
 	Sub2API Sub2APIConfig `yaml:"sub2api"`
+	Codex   CodexConfig   `yaml:"codex"`
 }
 
 type Sub2APIConfig struct {
@@ -63,12 +64,48 @@ type Sub2APICredentials struct {
 	Password     string `yaml:"-"`
 }
 
+type CodexConfig struct {
+	Enabled         bool               `yaml:"enabled"`
+	CodexHome       string             `yaml:"codex_home"`
+	PollInterval    Duration           `yaml:"poll_interval"`
+	ObservationTTL  Duration           `yaml:"observation_ttl"`
+	SessionLimit    int                `yaml:"session_limit"`
+	IncludeArchived bool               `yaml:"include_archived"`
+	Ignore          CodexIgnoreConfig  `yaml:"ignore"`
+	Privacy         CodexPrivacyConfig `yaml:"privacy"`
+}
+
+type CodexIgnoreConfig struct {
+	CWD    []string `yaml:"cwd"`
+	Source []string `yaml:"source"`
+}
+
+type CodexPrivacyConfig struct {
+	IncludeDisplayName bool `yaml:"include_display_name"`
+	IncludeProjectName bool `yaml:"include_project_name"`
+}
+
 type CoreConfig struct {
 	Core                CoreIdentity                 `yaml:"core"`
 	MQTT                MQTTConfig                   `yaml:"mqtt"`
 	ProjectionRoutes    map[string]ProjectionRoute   `yaml:"projection_routes"`
 	ObservationPolicies map[string]ObservationPolicy `yaml:"observation_policies"`
 	Logging             LoggingConfig                `yaml:"logging"`
+}
+
+type WebNodeConfig struct {
+	Node    WebNodeIdentity `yaml:"node"`
+	MQTT    MQTTConfig      `yaml:"mqtt"`
+	Web     WebConfig       `yaml:"web"`
+	Logging LoggingConfig   `yaml:"logging"`
+}
+
+type WebNodeIdentity struct {
+	ID string `yaml:"id"`
+}
+
+type WebConfig struct {
+	Listen string `yaml:"listen"`
 }
 
 type CoreIdentity struct {
