@@ -389,11 +389,7 @@ func formatMetric(value uint64) string {
 			continue
 		}
 		whole := value / unit.threshold
-		decimal := (value % unit.threshold) * 10 / unit.threshold
-		if decimal == 0 {
-			return fmt.Sprintf("%d%s", whole, unit.suffix)
-		}
-		return fmt.Sprintf("%d.%d%s", whole, decimal, unit.suffix)
+		return fmt.Sprintf("%d%s", whole, unit.suffix)
 	}
 	return fmt.Sprintf("%d", value)
 }
