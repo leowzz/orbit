@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -93,6 +94,48 @@ func TestAppJSSupportsDeviceChrome(t *testing.T) {
 	for _, feature := range unsupported {
 		if feature.pattern.Match(script) {
 			t.Errorf("app.js uses %s, which is unsupported by the device's Chromium 71", feature.name)
+		}
+	}
+}
+
+func TestAppCSSSupportsDeviceChrome(t *testing.T) {
+	t.Parallel()
+	stylesheet, err := staticFiles.ReadFile("static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsupported := []struct {
+		name    string
+		pattern *regexp.Regexp
+	}{
+		{name: "CSS min()", pattern: regexp.MustCompile(`:\s*min\(`)},
+		{name: "aspect-ratio", pattern: regexp.MustCompile(`aspect-ratio\s*:`)},
+	}
+	for _, feature := range unsupported {
+		if feature.pattern.Match(stylesheet) {
+			t.Errorf("app.css uses %s, which is unsupported by the device's Chromium 71", feature.name)
+		}
+	}
+}
+
+func TestStaticPageProvidesFullscreenToggle(t *testing.T) {
+	t.Parallel()
+	markup, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{`<button class="brand" id="fullscreen-toggle"`, `aria-pressed="false"`} {
+		if !strings.Contains(string(markup), fragment) {
+			t.Errorf("index.html is missing %q", fragment)
+		}
+	}
+	for _, api := range []string{"requestFullscreen", "webkitRequestFullscreen", "exitFullscreen", "webkitExitFullscreen"} {
+		if !strings.Contains(string(script), api) {
+			t.Errorf("app.js is missing %s support", api)
 		}
 	}
 }

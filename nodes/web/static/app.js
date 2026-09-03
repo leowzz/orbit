@@ -1,4 +1,5 @@
 const elements = {
+  fullscreenToggle: document.querySelector("#fullscreen-toggle"),
   connection: document.querySelector("#connection"),
   connectionLabel: document.querySelector("#connection-label"),
   viewFreshness: document.querySelector("#view-freshness"),
@@ -33,6 +34,38 @@ const statusLabels = {
 
 const integerFormat = new Intl.NumberFormat("zh-CN");
 let latestSnapshot = null;
+
+function fullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement;
+}
+
+function syncFullscreenState() {
+  const active = Boolean(fullscreenElement());
+  elements.fullscreenToggle.setAttribute("aria-pressed", String(active));
+  elements.fullscreenToggle.title = active ? "退出全屏" : "进入全屏";
+}
+
+function invokeFullscreen(method, target) {
+  try {
+    const result = method.call(target);
+    if (result && typeof result.catch === "function") {
+      result.catch(syncFullscreenState);
+    }
+  } catch (_) {
+    syncFullscreenState();
+  }
+}
+
+function toggleFullscreen() {
+  if (fullscreenElement()) {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) invokeFullscreen(exit, document);
+    return;
+  }
+  const root = document.documentElement;
+  const enter = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (enter) invokeFullscreen(enter, root);
+}
 
 function setConnection(state, label) {
   elements.connection.dataset.state = state;
@@ -184,6 +217,10 @@ function connectEvents() {
 
 loadInitialState().catch(() => setConnection("retrying", "正在重连"));
 connectEvents();
+elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
+document.addEventListener("fullscreenchange", syncFullscreenState);
+document.addEventListener("webkitfullscreenchange", syncFullscreenState);
+syncFullscreenState();
 setInterval(() => {
   if (latestSnapshot && latestSnapshot.codex) renderSessions(latestSnapshot.codex);
 }, 30000);
