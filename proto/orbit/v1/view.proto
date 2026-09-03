@@ -6,6 +6,7 @@ option go_package = "orbit/gen/go/orbit/v1;orbitv1";
 
 import "google/protobuf/timestamp.proto";
 import "orbit/v1/common.proto";
+import "orbit/v1/observation.proto";
 
 enum Freshness {
   FRESHNESS_UNSPECIFIED = 0;
@@ -26,6 +27,35 @@ message DisplaySlot {
   Emphasis emphasis = 2;
 }
 
+message UsageView {
+  Freshness freshness = 1;
+  google.protobuf.Timestamp fresh_until = 2;
+  optional int64 actual_cost_micros = 3;
+  string currency_code = 4;
+  optional uint64 token_count = 5;
+  optional uint64 tpm = 6;
+  google.protobuf.Timestamp observed_at = 7;
+}
+
+message CodexSessionView {
+  string session_id = 1;
+  string display_name = 2;
+  string project_name = 3;
+  string model = 4;
+  CodexSessionStatus status = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  bool process_alive = 7;
+}
+
+message CodexView {
+  Freshness freshness = 1;
+  google.protobuf.Timestamp fresh_until = 2;
+  repeated CodexSessionView sessions = 3;
+  uint32 total_count = 4;
+  uint32 running_count = 5;
+  google.protobuf.Timestamp observed_at = 6;
+}
+
 message DeviceView {
   Metadata metadata = 1;
   string node_id = 2;
@@ -36,4 +66,6 @@ message DeviceView {
   DisplaySlot primary = 7;
   DisplaySlot secondary = 8;
   DisplaySlot footer = 9;
+  UsageView usage = 10;
+  CodexView codex = 11;
 }

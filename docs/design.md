@@ -22,7 +22,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 4. Node 或可信客户端发送受限 Intent，由 Core 生成类型化命令。
 5. Agent 尝试执行短生命周期、可重复的 Capability，并在进程仍存活时返回可关联结果。
 
-工程验证里程碑 M0 可以使用合成 Observation 和无副作用的 `PingAgent` Capability 验证完整消息闭环；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，并在 OLED 128x32 上展示用量。V1 产品范围不包含 Intent 或真实动作能力；Codex 集成和 OLED 输入也不属于 V1。
+工程验证里程碑 M0 可以使用合成 Observation 和无副作用的 `PingAgent` Capability 验证完整消息闭环；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，并在 OLED 128x32 上展示用量。V1 产品范围不包含 Intent 或真实动作能力；Codex 由 Agent 采集并由 Core 投影到 Web，OLED 输入与 Codex OLED 展示不属于本里程碑。
 
 ### 2.1 设计目标
 
@@ -202,9 +202,9 @@ type Projector interface {
 
 ### 6.2 Observation 与 Canonical State
 
-Observation 表达某个 Source 在某一时刻观察到的事实，不包含设备布局。M0 支持 `SyntheticObservation`；V1 只要求 `UsageObservation`，表达 Sub2API 等来源的额度、成本、Token 和 TPM 摘要。
+Observation 表达某个 Source 在某一时刻观察到的事实，不包含设备布局。M0 支持 `SyntheticObservation`；当前 Agent 支持独立的 `UsageObservation` 和 `CodexObservation` 流。
 
-`SystemObservation` 和 `CodexObservation` 在 V1 之后按真实需求加入。
+`SystemObservation` 仍在 V1 之后按真实需求加入。
 
 V1 的 `UsageObservation` 只包含当前产品需要的字段：
 
@@ -218,6 +218,32 @@ V1 的 `UsageObservation` 只包含当前产品需要的字段：
 | `observed_at` | Source 实际完成采集的时间 | UTC 时间戳，与消息生产时间区分 |
 
 V1 的 Usage Source 在当前 Orbit 仓库中实现，由 Agent 承载并以该 Agent 的身份向 Core 发布类型化 Observation。
+
+### 6.2.1 CodexObservation
+
+Codex Source 以只读方式读取本机 Codex projection 数据库，选择最新的
+state/history 数据库，合并每个 session 的最近 turn，并可读取进程存活
+信息。它不修改数据库，不把 SQLite 行、原始 JSON 或完整本地路径交给
+Agent。Source 支持 session 数量上限、archived 开关、cwd/source 忽略规则，
+并把失败归类为稳定的 typed error code。
+
+Agent 发布的 CodexObservation 只包含 session ID、model、规范化 status、
+更新时间和 process_alive，以及 total_count、running_count 和
+observed_at。协议字符串按 UTF-8 字节上限裁剪：session ID 128 bytes、
+display name 192 bytes、project name 96 bytes、model 64 bytes。默认不发布
+display_name 或 project_name；只有 Agent 配置显式开启对应 privacy flag
+时才发布这两个已裁剪字段。display_name 可能来自 Codex title 或
+first-user-message fallback，因此开启它本身是敏感数据 opt-in。协议和日志
+没有独立 raw prompt/title 字段，默认不出现 title 或 fallback；显式开启
+display_name 后该 fallback 可能携带用户输入。source JSON、完整 cwd、
+rollout path 和 PID 永久排除在协议和日志之外。
+
+Codex observation 使用独立的非 retained topic 和独立 revision 序列；它与
+Usage Source 各自立即采集、各自 ticker、各自维护 health/last_success。
+Agent 先发布一条包含全部 enabled sources 且 health 为 `UNSPECIFIED` 的
+retained AgentState，再启动这些采集循环。Core 订阅并校验 CodexObservation，
+将脱敏字段投影到 Web 的 retained DeviceView；OLED 当前只消费 Usage 投影，
+不消费或渲染 CodexObservation。
 
 上述 V1 字段全部必填；不增加窗口时区字段，日期边界和上游时区语义由 Source 在采集时处理。数值 `0` 是有效业务值，不能表示“未提供”，因此 Protobuf schema 必须保留数值字段的 presence。成本数值与币种必须组成有效组合，且 `window_start < window_end`。任何必填字段缺失、币种无效或窗口无效都会拒绝整条 UsageObservation，不做部分 canonical state 更新或部分投影，之前接受的 canonical state 保持不变并按原 `expires_at` 自然过期。
 
@@ -404,7 +430,13 @@ sequenceDiagram
     end
 ```
 
-Agent 启动 Source 后，V1 Usage Source 必须先产生当前快照，再按自身 Adapter 选择事件订阅、上游队列或定时读取；Core 不轮询 Agent。Source 失败时，Agent 更新 retained AgentState 中对应 Observation 类型的 enabled、health、last success 和稳定错误码，不用空值覆盖最后成功观测。Core 根据最后成功时间和 `expires_at` 将相关视图区块标记为 stale。
+Agent 启动每个 enabled Source 后立即产生当前快照，再按各自 Adapter 的
+配置独立定时读取；Core 不轮询 Agent。Usage 与 Codex 的 poll interval、
+observation TTL、revision 和 health 状态彼此独立。Source 失败时，Agent
+更新 retained AgentState 中对应 Observation 类型的 enabled、health、last
+success 和稳定错误码，不发布空 observation 或用空值覆盖最后成功观测。
+首次失败为 `FAILED`，成功后再次失败为 `DEGRADED`。Core 根据最后成功时间
+和 `expires_at` 将相关视图区块标记为 stale。
 
 Agent 每次进程启动生成新的 `agent_epoch`。它按统一启动屏障发布 retained AgentState 和 ONLINE，随后才启动 Source；每种 Observation 类型的 revision 在该 Epoch 内从 1 开始递增。Core 忽略不属于 AgentState 当前 Epoch 的 Observation，因此无需持久化 revision 计数器。参见 [ADR-0013](adr/0013-use-agent-epochs-for-observation-ordering.md)。
 
@@ -477,8 +509,12 @@ Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文�
 - 轮换时创建新凭据、更新部署并重启参与者，确认新连接正常后撤销旧凭据。
 - Capability 由编译时或配置白名单注册；参数在执行前转换为内部类型。
 - `OpenUrl` 只允许受控 scheme 和可选 host allowlist。
-- Codex 标题、仓库名和任务摘要必须在 Source 或 Projector 中按明确策略脱敏。
-- 日志记录 message/command ID、状态与稳定错误码，不默认记录完整 payload。
+- Codex display/project labels 默认隐藏，只有显式 privacy 配置才发布经过
+  UTF-8 字节上限裁剪的值；display_name 可能来自 title 或
+  first-user-message fallback，因此 opt-in 后应按敏感数据处理。协议和日志
+  没有独立 raw prompt/title 字段；source JSON、完整 cwd、rollout path 和
+  PID 永远不进入 Observation 或日志。
+- 日志只记录计数、revision、bytes 和稳定错误码，不记录完整 payload。
 - 破坏性或隐私敏感动作在设计本地确认机制前不进入协议。
 - Node 固件中不保存 Codex、Sub2API 或主机登录凭据。
 
@@ -530,6 +566,9 @@ Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文�
 ### 14.2 Agent 测试
 
 - 通过 Source 接口验证初始快照、事件或定时更新、失败、超时和取消。
+- 通过 Codex fixture 验证 state/history 合并、状态归一化、过滤、只读访问和 typed error code。
+- 验证 Codex-only、Sub2API-only 与双 Source 装配；两种 Source 立即采集且 ticker、health、last_success 和 revision 互不影响。
+- 验证 Codex 默认隐藏 display/project 字段，显式 privacy flag 才发布，并验证 UTF-8 字节上限与永久排除的敏感字段。
 - 验证同一 Observation 类型只保留最新待发布值、revision 允许跳号且队列容量不会随生产速率增长。
 - 验证 AgentState 先于 Source 启动发布，旧 Agent Epoch 的 Observation 被拒绝，新 Epoch 的 revision 可从 1 开始。
 - 通过 Capability 接口验证参数校验与状态转换。
@@ -550,6 +589,7 @@ Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文�
 
 ### 14.4 集成与硬件验收
 
+- 使用 in-memory MQTT 验证 Agent 首条 retained AgentState、Codex 非 retained observation、metadata/expiry、独立健康与 revision，以及默认隐私裁剪。
 - 使用本地 MQTT broker 完成 retained view、无 Message Expiry 的参与者 State/Presence、LWT、重复 QoS 1 投递和断网重连测试。
 - 验证 CONNECT 前已配置 LWT、SUBACK/State PUBACK/ONLINE PUBACK 启动屏障，以及 LWT OFFLINE 不携带伪造的 `changed_at`。
 - 验证同一进程重连复用 Epoch、Agent 只补发最新 Observation、Core 重新发布仍有效 View，且 Node 无需订阅 CoreState。

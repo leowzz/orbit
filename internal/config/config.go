@@ -93,6 +93,21 @@ type CoreConfig struct {
 	Logging             LoggingConfig                `yaml:"logging"`
 }
 
+type WebNodeConfig struct {
+	Node    WebNodeIdentity `yaml:"node"`
+	MQTT    MQTTConfig      `yaml:"mqtt"`
+	Web     WebConfig       `yaml:"web"`
+	Logging LoggingConfig   `yaml:"logging"`
+}
+
+type WebNodeIdentity struct {
+	ID string `yaml:"id"`
+}
+
+type WebConfig struct {
+	Listen string `yaml:"listen"`
+}
+
 type CoreIdentity struct {
 	ID string `yaml:"id"`
 }

@@ -7,8 +7,9 @@ chain uses these topics:
 | --- | --- | --- | --- |
 | `orbit/v1/agents/{agent_id}/state` | Agent | Core | yes |
 | `orbit/v1/agents/{agent_id}/observations/usage` | Agent | Core | no |
-| `orbit/v1/nodes/{node_id}/state` | Node | Core | yes |
-| `orbit/v1/nodes/{node_id}/view` | Core | Node | yes |
+| `orbit/v1/agents/{agent_id}/observations/codex` | Agent | Core -> Web projection | no |
+| `orbit/v1/nodes/{node_id}/state` | OLED/Web Node | Core | yes |
+| `orbit/v1/nodes/{node_id}/view` | Core | OLED/Web Node | yes |
 
 Core rejects messages when the participant ID in the topic does not match the
 protobuf payload. Nodes subscribe only to their own view and never receive the
@@ -27,6 +28,15 @@ the wire contract. The Agent emits
 one initial retained AgentState with every enabled source marked
 `UNSPECIFIED`, then polls each source independently and publishes its own
 health updates.
+
+Core subscribes to and validates Codex observations, then projects the
+sanitized fields into the retained Web DeviceView. The OLED usage route does
+not consume or render Codex observations in this milestone.
+
+The `usage-oled-128x32` profile contains only the three bounded DisplaySlot
+fields. The `overview-web` profile may additionally contain sanitized CodexView
+fields. Both profiles use the same node-owned topics and ACL shape; consumers
+must not grant an OLED or node credential access to Agent observation topics.
 
 TLS is enabled by default and never falls back to plaintext. Production broker
 ACLs must restrict each identity to the rows above that it owns. Public broker

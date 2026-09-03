@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -53,6 +54,21 @@ func LoadCore(path string) (*CoreConfig, error) {
 	}
 	if err := cfg.validate(filepath.Dir(path)); err != nil {
 		return nil, fmt.Errorf("validate core config: %w", err)
+	}
+	return &cfg, nil
+}
+
+func LoadWebNode(path string) (*WebNodeConfig, error) {
+	cfg := WebNodeConfig{
+		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
+		Web:     WebConfig{Listen: "127.0.0.1:8080"},
+		Logging: LoggingConfig{Level: "info"},
+	}
+	if err := decodeStrict(path, &cfg); err != nil {
+		return nil, err
+	}
+	if err := cfg.validate(filepath.Dir(path)); err != nil {
+		return nil, fmt.Errorf("validate web node config: %w", err)
 	}
 	return &cfg, nil
 }
@@ -123,8 +139,8 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
-		if strings.TrimSpace(route.Profile) == "" {
-			return fmt.Errorf("projection route %q: profile is required", nodeID)
+		if route.Profile != "usage-oled-128x32" && route.Profile != "overview-web" {
+			return fmt.Errorf("projection route %q: unsupported profile %q", nodeID, route.Profile)
 		}
 		if len(route.Inputs) == 0 {
 			return fmt.Errorf("projection route %q: inputs must not be empty", nodeID)
@@ -134,7 +150,7 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 			if err := validateID("agent_id", input.AgentID); err != nil {
 				return fmt.Errorf("projection route %q input %d: %w", nodeID, i, err)
 			}
-			if input.ObservationType != "usage" {
+			if input.ObservationType != "usage" && input.ObservationType != "codex" {
 				return fmt.Errorf("projection route %q input %d: unsupported observation_type %q", nodeID, i, input.ObservationType)
 			}
 			if _, ok := seen[input.ObservationType]; ok {
@@ -142,22 +158,47 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 			}
 			seen[input.ObservationType] = struct{}{}
 		}
+		if route.Profile == "usage-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "usage") {
+			return fmt.Errorf("projection route %q: usage-oled-128x32 requires exactly one usage input", nodeID)
+		}
 	}
 
-	usage, ok := cfg.ObservationPolicies["usage"]
-	if !ok {
-		return errors.New("observation_policies.usage is required")
+	requiredPolicies := make(map[string]struct{})
+	for _, route := range cfg.ProjectionRoutes {
+		for _, input := range route.Inputs {
+			requiredPolicies[input.ObservationType] = struct{}{}
+		}
 	}
-	if usage.MaxTTL.Duration <= 0 {
-		return errors.New("observation_policies.usage.max_ttl must be positive")
-	}
-	if usage.MaxFutureSkew.Duration < 0 {
-		return errors.New("observation_policies.usage.max_future_skew must not be negative")
+	for name := range requiredPolicies {
+		policy, ok := cfg.ObservationPolicies[name]
+		if !ok {
+			return fmt.Errorf("observation_policies.%s is required", name)
+		}
+		if policy.MaxTTL.Duration <= 0 {
+			return fmt.Errorf("observation_policies.%s.max_ttl must be positive", name)
+		}
+		if policy.MaxFutureSkew.Duration < 0 {
+			return fmt.Errorf("observation_policies.%s.max_future_skew must not be negative", name)
+		}
 	}
 	for name := range cfg.ObservationPolicies {
-		if name != "usage" {
+		if name != "usage" && name != "codex" {
 			return fmt.Errorf("observation_policies contains unsupported type %q", name)
 		}
+	}
+	return validateLogLevel(cfg.Logging.Level)
+}
+
+func (cfg *WebNodeConfig) validate(baseDir string) error {
+	if err := validateID("node.id", cfg.Node.ID); err != nil {
+		return err
+	}
+	if err := cfg.MQTT.validate(baseDir); err != nil {
+		return fmt.Errorf("mqtt: %w", err)
+	}
+	host, port, err := net.SplitHostPort(cfg.Web.Listen)
+	if err != nil || strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
+		return fmt.Errorf("web.listen must be a host:port address: %q", cfg.Web.Listen)
 	}
 	return validateLogLevel(cfg.Logging.Level)
 }

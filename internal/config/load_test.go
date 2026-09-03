@@ -213,6 +213,33 @@ func TestLoadCoreRejectsDuplicateObservationInput(t *testing.T) {
 	}
 }
 
+func TestLoadCoreAcceptsWebProjection(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	path := writeConfig(t, dir, "core.yaml", validWebCoreYAML)
+	cfg, err := LoadCore(path)
+	if err != nil {
+		t.Fatalf("LoadCore() error = %v", err)
+	}
+	route := cfg.ProjectionRoutes["desk-web-01"]
+	if route.Profile != "overview-web" || len(route.Inputs) != 2 || cfg.ObservationPolicies["codex"].MaxTTL.Duration != time.Minute {
+		t.Fatalf("unexpected web route: %#v", route)
+	}
+}
+
+func TestLoadWebNode(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	path := writeConfig(t, dir, "web.yaml", validWebNodeYAML)
+	cfg, err := LoadWebNode(path)
+	if err != nil {
+		t.Fatalf("LoadWebNode() error = %v", err)
+	}
+	if cfg.Node.ID != "desk-web-01" || cfg.Web.Listen != "127.0.0.1:8080" || cfg.MQTT.Credentials.Username != "agent-user" {
+		t.Fatalf("unexpected web config: %#v", cfg)
+	}
+}
+
 func writeFixtureFiles(t *testing.T, dir string, includeSub2API bool) {
 	t.Helper()
 	files := map[string]string{
@@ -324,6 +351,55 @@ observation_policies:
   usage:
     max_ttl: 5m
     max_future_skew: 10s
+logging:
+  level: info
+`
+
+const validWebCoreYAML = `core:
+  id: core-local
+mqtt:
+  url: mqtts://broker.example.com:8883
+  tls:
+    enabled: true
+    ca_file: ca.pem
+    cert_file: client.pem
+    key_file: client.key
+  credentials:
+    username_file: mqtt-username
+    password_file: mqtt-password
+projection_routes:
+  desk-web-01:
+    profile: overview-web
+    inputs:
+      - agent_id: agent-local
+        observation_type: usage
+      - agent_id: agent-local
+        observation_type: codex
+observation_policies:
+  usage:
+    max_ttl: 5m
+    max_future_skew: 10s
+  codex:
+    max_ttl: 1m
+    max_future_skew: 10s
+logging:
+  level: info
+`
+
+const validWebNodeYAML = `node:
+  id: desk-web-01
+mqtt:
+  url: mqtts://broker.example.com:8883
+  tls:
+    enabled: true
+    ca_file: ca.pem
+    cert_file: client.pem
+    key_file: client.key
+  credentials:
+    username_file: mqtt-username
+    password_file: mqtt-password
+web:
+  listen: 127.0.0.1:8080
 logging:
   level: info
 `

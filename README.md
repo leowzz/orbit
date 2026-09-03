@@ -1,20 +1,20 @@
 # Orbit
 
-Orbit connects trusted host state to small display nodes. The current V1
-working path reads Sub2API usage in a host Agent, transports Protobuf
-observations over MQTT, projects them in Core, and publishes a retained
-three-slot view for an OLED node:
+Orbit connects trusted host state to display nodes. The current V1 path reads
+Sub2API usage and local Codex task state in a host Agent, transports Protobuf
+observations over MQTT, and lets Core publish retained views for OLED and web
+nodes:
 
 ~~~text
-Sub2API -> orbit-agent -> MQTT -> orbit-core -> retained DeviceView -> OLED node
+Sub2API / Codex -> orbit-agent -> MQTT -> orbit-core -> DeviceView -> OLED / Web
 ~~~
 
 ![Orbit system architecture data flow from Sub2API to OLED](docs/assets/orbit-system-architecture.png)
 
-Sub2API credentials stay on the Agent. The node receives only formatted cost,
-token, TPM, and freshness text. The repository currently implements the
-Sub2API-to-OLED status path; command capabilities and other sources are not
-part of the runnable V1 path yet.
+Sub2API credentials and Codex databases stay on the Agent. OLED receives only
+formatted cost, token, TPM, and freshness text. The web node receives the rich
+usage and sanitized Codex fields selected by its Core projection. Command
+capabilities are not part of the runnable V1 path yet.
 
 ## Requirements
 
@@ -62,12 +62,13 @@ access.
 
 ## Configure
 
-There are three independent YAML contracts. Copy the examples to the ignored
+There are four independent YAML contracts. Copy the examples to the ignored
 local paths before starting anything:
 
 ~~~shell
 cp configs/agent.example.yaml configs/agent.local.yaml
 cp configs/core.example.yaml configs/core.local.yaml
+cp configs/web.example.yaml configs/web.local.yaml
 cp nodes/display/models/oled-128x32/variants/yd-esp32-s3/config.example.yaml \
   nodes/display/models/oled-128x32/variants/yd-esp32-s3/config.local.yaml
 ~~~
@@ -88,6 +89,10 @@ configs/secrets/core-client.pem
 configs/secrets/core-client.key
 configs/secrets/core-mqtt-username
 configs/secrets/core-mqtt-password
+configs/secrets/web-client.pem
+configs/secrets/web-client.key
+configs/secrets/web-mqtt-username
+configs/secrets/web-mqtt-password
 configs/secrets/sub2api-email
 configs/secrets/sub2api-password
 ~~~
@@ -99,11 +104,12 @@ Update the local YAML values for the selected broker and account:
   files; Codex uses codex_home (or the local CODEX_HOME/default) and its
   polling, filtering, and privacy settings.
 - core.local.yaml: core.id, MQTT URL/TLS files, and projection_routes.
+- web.local.yaml: node.id, its MQTT credentials, and the local HTTP listen address.
 
-The Core route key must equal the node configuration's node.id; its
-inputs[0].agent_id must equal the Agent's resolved ID (agent.id when it is
-explicitly set). These three values must describe the same deployment. The
-example route therefore connects desk-oled-01 to agent-local.
+Each Core route key must equal the corresponding node configuration's node.id;
+every input agent_id must equal the Agent's resolved ID (agent.id when it is
+explicitly set). The example routes connect desk-oled-01 and desk-web-01 to
+agent-local.
 
 Host configuration is strict and is validated before a process connects. IDs
 must match [a-z0-9][a-z0-9_-]{0,63}. Agent host_label, Core routes, the usage
@@ -210,6 +216,17 @@ make dev AGENT_CONFIG=configs/agent.local.yaml \
   CORE_CONFIG=configs/core.local.yaml
 ~~~
 
+Start the web node in a third terminal:
+
+~~~shell
+make dev-web WEB_CONFIG=configs/web.local.yaml
+~~~
+
+The startup log prints its local URL (127.0.0.1:8080 in the example). The page
+keeps one SSE connection open and updates whenever a new retained DeviceView is
+accepted. Its MQTT credential needs publish access to its own NodeState topic
+and subscribe access to its own DeviceView topic only.
+
 Each service exits non-zero on a configuration, TLS, authentication, ACL, or
 initial MQTT connection error. A successful startup emits an "orbit core
 started" or "orbit agent started" log message after the MQTT connection is
@@ -225,6 +242,7 @@ configured interval. A successful live chain has these messages in the broker:
 | --- | --- | --- | --- |
 | orbit/v1/agents/{agent_id}/state | Agent | Core | yes |
 | orbit/v1/agents/{agent_id}/observations/usage | Agent | Core | no |
+| orbit/v1/agents/{agent_id}/observations/codex | Agent | Core -> Web projection; OLED ignores | no |
 | orbit/v1/nodes/{node_id}/state | Node | Core | yes |
 | orbit/v1/nodes/{node_id}/view | Core | Node | yes |
 
@@ -260,7 +278,9 @@ make dev-agent AGENT_CONFIG=configs/agent.codex.local.yaml
 
 The in-memory integration test is the deterministic Agent-side version of this
 sequence; the broker command additionally proves deployment TLS, credentials,
-ACLs, and MQTT delivery.
+ACLs, and MQTT delivery. Core consumes the observation and projects sanitized
+Codex data to the Web node. OLED intentionally does not consume or render
+Codex data in this milestone.
 
 ## Build, flash, and inspect the OLED node
 
@@ -346,6 +366,7 @@ internal/               config, source, transport, Agent, and Core logic
 proto/orbit/v1/         versioned wire schemas
 gen/go/                 generated Go Protobuf bindings
 nodes/display/          shared display firmware and model/variant delivery units
+nodes/web/              browser display node, HTTP/SSE server, and static UI
 configs/                non-sensitive host configuration examples
 docs/                   architecture, security, MQTT, and ADR documentation
 ~~~

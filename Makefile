@@ -7,8 +7,9 @@ PROTOC_GEN_GO := $(TOOLS_DIR)/protoc-gen-go
 NODE_DIR := nodes/display/models/oled-128x32/variants/yd-esp32-s3
 AGENT_CONFIG ?= configs/agent.local.yaml
 CORE_CONFIG ?= configs/core.local.yaml
+WEB_CONFIG ?= configs/web.local.yaml
 
-.PHONY: dev dev-agent dev-core build build-go build-node test test-go test-node \
+.PHONY: dev dev-agent dev-core dev-web build build-go build-node test test-go test-node \
 	lint fmt fmt-check proto-lint generate verify
 
 dev:
@@ -19,6 +20,9 @@ dev-agent:
 
 dev-core:
 	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
+
+dev-web:
+	$(GO) run ./cmd/orbit-web -config "$(WEB_CONFIG)"
 
 build: build-go
 
