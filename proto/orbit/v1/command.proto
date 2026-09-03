@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package orbit.v1;
+
+option go_package = "orbit/gen/go/orbit/v1;orbitv1";
+
+import "orbit/v1/common.proto";
+
+enum RequesterKind {
+  REQUESTER_KIND_UNSPECIFIED = 0;
+  REQUESTER_KIND_NODE = 1;
+}
+
+enum CommandStatus {
+  COMMAND_STATUS_UNSPECIFIED = 0;
+  COMMAND_STATUS_SUCCEEDED = 1;
+  COMMAND_STATUS_FAILED = 2;
+  COMMAND_STATUS_REJECTED = 3;
+  COMMAND_STATUS_EXPIRED = 4;
+}
+
+message IntentRef {
+  string intent_id = 1;
+  RequesterKind requester_kind = 2;
+  string requester_id = 3;
+}
+
+message OpenCodexSessionIntent {
+  string session_id = 1;
+}
+
+message Intent {
+  Metadata metadata = 1;
+  string intent_id = 2;
+  string node_epoch = 3;
+  uint64 view_revision = 4;
+
+  oneof action {
+    OpenCodexSessionIntent open_codex_session = 10;
+  }
+}
+
+message OpenCodexSession {
+  string session_id = 1;
+}
+
+message Command {
+  Metadata metadata = 1;
+  string command_id = 2;
+  string target_agent_id = 3;
+  IntentRef intent_ref = 4;
+
+  oneof action {
+    OpenCodexSession open_codex_session = 10;
+  }
+}
+
+message CommandResult {
+  Metadata metadata = 1;
+  string command_id = 2;
+  IntentRef intent_ref = 3;
+  CommandStatus status = 4;
+  string error_code = 5;
+  string safe_message = 6;
+}

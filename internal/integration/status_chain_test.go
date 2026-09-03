@@ -86,7 +86,7 @@ func TestSub2APIToRetainedDeviceView(t *testing.T) {
 		Location:       location,
 		PollInterval:   time.Minute,
 		ObservationTTL: 2 * time.Minute,
-	}, agent.Sources{Usage: source}, broker, zap.NewNop())
+	}, agent.Sources{Usage: source}, agent.Capabilities{}, broker, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +280,7 @@ func TestCodexAgentPublishesSanitizedObservation(t *testing.T) {
 		HostLabel:           "integration test",
 		CodexPollInterval:   time.Hour,
 		CodexObservationTTL: 2 * time.Hour,
-	}, agent.Sources{Codex: source}, broker, zap.NewNop())
+	}, agent.Sources{Codex: source}, agent.Capabilities{}, broker, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}

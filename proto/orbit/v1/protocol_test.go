@@ -97,6 +97,32 @@ func TestObservationUsesTypedUsagePayload(t *testing.T) {
 	}
 }
 
+func TestOpenCodexIntentAndCommandUseTypedActions(t *testing.T) {
+	t.Parallel()
+	intent := &orbitv1.Intent{
+		Action: &orbitv1.Intent_OpenCodexSession{
+			OpenCodexSession: &orbitv1.OpenCodexSessionIntent{SessionId: "01a066af-69d4-77d1-a21b-26d84534a817"},
+		},
+	}
+	command := &orbitv1.Command{
+		Action: &orbitv1.Command_OpenCodexSession{
+			OpenCodexSession: &orbitv1.OpenCodexSession{SessionId: intent.GetOpenCodexSession().GetSessionId()},
+		},
+	}
+	for name, message := range map[string]proto.Message{"intent": intent, "command": command} {
+		encoded, err := proto.Marshal(message)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", name, err)
+		}
+		if len(encoded) == 0 {
+			t.Fatalf("%s typed action encoded to an empty payload", name)
+		}
+	}
+	if command.GetOpenCodexSession().GetSessionId() != intent.GetOpenCodexSession().GetSessionId() {
+		t.Fatal("typed OpenCodexSession action was not preserved")
+	}
+}
+
 func TestDeviceViewHasFixedSlotsAndFreshness(t *testing.T) {
 	view := &orbitv1.DeviceView{
 		Freshness: orbitv1.Freshness_FRESHNESS_FRESH,

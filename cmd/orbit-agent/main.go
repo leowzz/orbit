@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"orbit/internal/agent"
+	codexcap "orbit/internal/capabilities/codex"
 	"orbit/internal/config"
 	"orbit/internal/logging"
 	"orbit/internal/mqtt"
-	"orbit/internal/sources/codex"
+	codexsource "orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
 
 	"go.uber.org/zap"
@@ -79,7 +80,7 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 		runnerConfig.ObservationTTL = cfg.Sources.Sub2API.ObservationTTL.Duration
 	}
 	if cfg.Sources.Codex.Enabled {
-		source, sourceErr := codex.New(codex.Config{
+		source, sourceErr := codexsource.New(codexsource.Config{
 			Home:            cfg.Sources.Codex.CodexHome,
 			Limit:           cfg.Sources.Codex.SessionLimit,
 			IncludeArchived: cfg.Sources.Codex.IncludeArchived,
@@ -94,6 +95,10 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 		runnerConfig.CodexObservationTTL = cfg.Sources.Codex.ObservationTTL.Duration
 		runnerConfig.CodexDisplayName = cfg.Sources.Codex.Privacy.IncludeDisplayName
 		runnerConfig.CodexProjectName = cfg.Sources.Codex.Privacy.IncludeProjectName
+	}
+	var capabilities agent.Capabilities
+	if cfg.Capabilities.OpenCodexSession.Enabled {
+		capabilities.OpenCodexSession = codexcap.NewOpener()
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -115,7 +120,7 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 	}
 	defer disconnect(client, logger)
 
-	runner, err := agent.New(runnerConfig, sources, client, logger)
+	runner, err := agent.New(runnerConfig, sources, capabilities, client, logger)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -18,6 +19,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const webTestSessionID = "01a066af-69d4-77d1-a21b-26d84534a817"
 
 type recordingTransport struct {
 	mu        sync.Mutex
@@ -60,7 +63,7 @@ func TestStoreExposesLatestRichView(t *testing.T) {
 
 	request := httptest.NewRequest(http.MethodGet, "/api/state", nil)
 	response := httptest.NewRecorder()
-	Handler(store).ServeHTTP(response, request)
+	Handler(store, nil).ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d", response.Code)
 	}
@@ -140,6 +143,26 @@ func TestStaticPageProvidesFullscreenToggle(t *testing.T) {
 	}
 }
 
+func TestStaticPageOpensSessionsThroughNodeIntent(t *testing.T) {
+	t.Parallel()
+	markup, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{`document.createElement("button")`, `document.createElement("span")`, "/api/sessions/", "view_revision"} {
+		if !strings.Contains(string(script), fragment) {
+			t.Errorf("app.js is missing %q", fragment)
+		}
+	}
+	if !strings.Contains(string(markup), `id="action-status"`) {
+		t.Fatal("index.html is missing the session action live region")
+	}
+}
+
 func TestStoreKeepsCachedSectionsAcrossPartialViews(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
@@ -158,7 +181,7 @@ func TestStoreKeepsCachedSectionsAcrossPartialViews(t *testing.T) {
 	for client := 1; client <= 2; client++ {
 		request := httptest.NewRequest(http.MethodGet, "/api/state", nil)
 		response := httptest.NewRecorder()
-		Handler(store).ServeHTTP(response, request)
+		Handler(store, nil).ServeHTTP(response, request)
 		if response.Code != http.StatusOK {
 			t.Fatalf("client %d status = %d", client, response.Code)
 		}
@@ -267,6 +290,45 @@ func TestRunnerRegistersAndAcceptsOnlyItsView(t *testing.T) {
 	}
 }
 
+func TestOpenCodexSessionEndpointPublishesIntent(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
+	store := NewStore()
+	if err := store.Update(testView(now), now); err != nil {
+		t.Fatal(err)
+	}
+	transport := &recordingTransport{}
+	runner, err := NewRunner(RunnerConfig{
+		NodeID: "web-a", NodeEpoch: "node-epoch", FirmwareVersion: "test",
+	}, transport, store, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.now = func() time.Time { return now }
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/sessions/"+webTestSessionID+"/open",
+		bytes.NewBufferString(`{"view_revision":1}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	Handler(store, runner).ServeHTTP(response, request)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+	}
+	published, _, _ := transport.snapshot()
+	if published.Topic != "orbit/v1/nodes/web-a/intents" || published.Retain {
+		t.Fatalf("unexpected intent publish: %+v", published)
+	}
+	var intent orbitv1.Intent
+	if err := proto.Unmarshal(published.Payload, &intent); err != nil {
+		t.Fatal(err)
+	}
+	if intent.Metadata.GetProducerId() != "web-a" || intent.NodeEpoch != "node-epoch" || intent.ViewRevision != 1 || intent.GetOpenCodexSession().GetSessionId() != webTestSessionID {
+		t.Fatalf("unexpected intent: %+v", &intent)
+	}
+}
+
 func testView(now time.Time) *orbitv1.DeviceView {
 	cost := int64(1_250_000)
 	tokens := uint64(1234)
@@ -287,7 +349,7 @@ func testView(now time.Time) *orbitv1.DeviceView {
 			Freshness: orbitv1.Freshness_FRESHNESS_FRESH, FreshUntil: timestamppb.New(now.Add(time.Minute)),
 			TotalCount: 1, RunningCount: 1, ObservedAt: timestamppb.New(now),
 			Sessions: []*orbitv1.CodexSessionView{{
-				SessionId: "session-a", DisplayName: "Web node", ProjectName: "orbit", Model: "gpt-5",
+				SessionId: webTestSessionID, DisplayName: "Web node", ProjectName: "orbit", Model: "gpt-5",
 				Status: orbitv1.CodexSessionStatus_CODEX_SESSION_STATUS_RUNNING, UpdatedAt: timestamppb.New(now), ProcessAlive: true,
 			}},
 		},

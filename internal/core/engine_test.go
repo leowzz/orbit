@@ -10,6 +10,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const testCodexSessionID = "01a066af-69d4-77d1-a21b-26d84534a817"
+
 func TestUsageProjectionAndStaleTransition(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
@@ -270,7 +272,7 @@ func testCodexObservation(now time.Time) *orbitv1.Observation {
 		AgentEpoch: "agent-epoch-a",
 		Payload: &orbitv1.Observation_Codex{Codex: &orbitv1.CodexObservation{
 			Sessions: []*orbitv1.CodexSession{{
-				SessionId: "session-a", DisplayName: "Build web node", ProjectName: "orbit",
+				SessionId: testCodexSessionID, DisplayName: "Build web node", ProjectName: "orbit",
 				Model: "gpt-5", Status: orbitv1.CodexSessionStatus_CODEX_SESSION_STATUS_RUNNING,
 				UpdatedAt: timestamppb.New(now), ProcessAlive: true,
 			}},

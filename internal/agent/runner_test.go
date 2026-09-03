@@ -47,6 +47,22 @@ func (source *stubCodexSource) Fetch(context.Context) (codex.Snapshot, error) {
 type recordingPublisher struct {
 	mu       sync.Mutex
 	messages []mqtt.Message
+	filter   string
+	handler  mqtt.Handler
+}
+
+func (publisher *recordingPublisher) Subscribe(_ context.Context, filter string, handler mqtt.Handler) error {
+	publisher.mu.Lock()
+	defer publisher.mu.Unlock()
+	publisher.filter = filter
+	publisher.handler = handler
+	return nil
+}
+
+func (publisher *recordingPublisher) Subscription() (string, mqtt.Handler) {
+	publisher.mu.Lock()
+	defer publisher.mu.Unlock()
+	return publisher.filter, publisher.handler
 }
 
 func (publisher *recordingPublisher) Publish(_ context.Context, message mqtt.Message) error {
@@ -424,7 +440,7 @@ func TestRunPublishesInitialStateBeforeIndependentSources(t *testing.T) {
 
 func TestNewRejectsIncompleteConfig(t *testing.T) {
 	t.Parallel()
-	_, err := New(Config{}, Sources{Usage: &stubSource{}}, &recordingPublisher{}, zap.NewNop())
+	_, err := New(Config{}, Sources{Usage: &stubSource{}}, Capabilities{}, &recordingPublisher{}, zap.NewNop())
 	if err == nil || errors.Is(err, context.Canceled) {
 		t.Fatalf("New returned unexpected error: %v", err)
 	}
@@ -434,7 +450,7 @@ func TestNewRejectsUnsupportedCurrency(t *testing.T) {
 	t.Parallel()
 	runnerConfig := usageConfig()
 	runnerConfig.CurrencyCode = "EUR"
-	_, err := New(runnerConfig, Sources{Usage: &stubSource{}}, &recordingPublisher{}, zap.NewNop())
+	_, err := New(runnerConfig, Sources{Usage: &stubSource{}}, Capabilities{}, &recordingPublisher{}, zap.NewNop())
 	if err == nil {
 		t.Fatal("New accepted a currency that V1 cannot render correctly")
 	}
@@ -443,42 +459,42 @@ func TestNewRejectsUnsupportedCurrency(t *testing.T) {
 func TestNewSupportsCodexOnlyAndDualSources(t *testing.T) {
 	t.Parallel()
 	config := codexConfig(false, false)
-	if _, err := New(config, Sources{Codex: &stubCodexSource{}}, &recordingPublisher{}, zap.NewNop()); err != nil {
+	if _, err := New(config, Sources{Codex: &stubCodexSource{}}, Capabilities{}, &recordingPublisher{}, zap.NewNop()); err != nil {
 		t.Fatalf("Codex-only New: %v", err)
 	}
 	config = usageConfig()
 	config.CodexPollInterval = time.Minute
 	config.CodexObservationTTL = 2 * time.Minute
-	if _, err := New(config, Sources{Usage: &stubSource{}, Codex: &stubCodexSource{}}, &recordingPublisher{}, zap.NewNop()); err != nil {
+	if _, err := New(config, Sources{Usage: &stubSource{}, Codex: &stubCodexSource{}}, Capabilities{}, &recordingPublisher{}, zap.NewNop()); err != nil {
 		t.Fatalf("dual-source New: %v", err)
 	}
 }
 
-func newTestRunner(t *testing.T, source UsageSource, publisher Publisher) *Runner {
+func newTestRunner(t *testing.T, source UsageSource, publisher Transport) *Runner {
 	t.Helper()
-	runner, err := New(usageConfig(), Sources{Usage: source}, publisher, zap.NewNop())
+	runner, err := New(usageConfig(), Sources{Usage: source}, Capabilities{}, publisher, zap.NewNop())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	return runner
 }
 
-func newCodexTestRunner(t *testing.T, source CodexSource, publisher Publisher, displayName, projectName bool) *Runner {
+func newCodexTestRunner(t *testing.T, source CodexSource, publisher Transport, displayName, projectName bool) *Runner {
 	t.Helper()
 	config := codexConfig(displayName, projectName)
-	runner, err := New(config, Sources{Codex: source}, publisher, zap.NewNop())
+	runner, err := New(config, Sources{Codex: source}, Capabilities{}, publisher, zap.NewNop())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	return runner
 }
 
-func newDualTestRunner(t *testing.T, usageSource UsageSource, codexSource CodexSource, publisher Publisher) *Runner {
+func newDualTestRunner(t *testing.T, usageSource UsageSource, codexSource CodexSource, publisher Transport) *Runner {
 	t.Helper()
 	config := usageConfig()
 	config.CodexPollInterval = time.Minute
 	config.CodexObservationTTL = 2 * time.Minute
-	runner, err := New(config, Sources{Usage: usageSource, Codex: codexSource}, publisher, zap.NewNop())
+	runner, err := New(config, Sources{Usage: usageSource, Codex: codexSource}, Capabilities{}, publisher, zap.NewNop())
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}

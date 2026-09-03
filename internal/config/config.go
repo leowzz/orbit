@@ -27,10 +27,11 @@ type MQTTCredentials struct {
 }
 
 type AgentConfig struct {
-	Agent   AgentIdentity `yaml:"agent"`
-	MQTT    MQTTConfig    `yaml:"mqtt"`
-	Sources AgentSources  `yaml:"sources"`
-	Logging LoggingConfig `yaml:"logging"`
+	Agent        AgentIdentity     `yaml:"agent"`
+	MQTT         MQTTConfig        `yaml:"mqtt"`
+	Sources      AgentSources      `yaml:"sources"`
+	Capabilities AgentCapabilities `yaml:"capabilities"`
+	Logging      LoggingConfig     `yaml:"logging"`
 }
 
 type AgentIdentity struct {
@@ -41,6 +42,14 @@ type AgentIdentity struct {
 type AgentSources struct {
 	Sub2API Sub2APIConfig `yaml:"sub2api"`
 	Codex   CodexConfig   `yaml:"codex"`
+}
+
+type AgentCapabilities struct {
+	OpenCodexSession CapabilityConfig `yaml:"open_codex_session"`
+}
+
+type CapabilityConfig struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 type Sub2APIConfig struct {

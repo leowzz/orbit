@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -75,18 +76,26 @@ type canonicalCodex struct {
 	agentEpoch string
 }
 
+type cachedIntentCommand struct {
+	fingerprint [sha256.Size]byte
+	command     *orbitv1.Command
+}
+
 // Engine owns the in-memory canonical state and the only DeviceView construction path.
 type Engine struct {
 	mu sync.Mutex
 
-	config       Config
-	agents       map[string]participantState
-	nodes        map[string]participantState
-	nodeProducts map[string]*orbitv1.NodeState
-	usage        map[string]canonicalUsage
-	codex        map[string]canonicalCodex
-	viewRevision map[string]uint64
-	lastFresh    map[string]string
+	config          Config
+	agents          map[string]participantState
+	nodes           map[string]participantState
+	nodeProducts    map[string]*orbitv1.NodeState
+	usage           map[string]canonicalUsage
+	codex           map[string]canonicalCodex
+	viewRevision    map[string]uint64
+	lastFresh       map[string]string
+	intentCommands  map[string]cachedIntentCommand
+	intentOrder     []string
+	commandRevision uint64
 }
 
 func New(config Config) (*Engine, error) {
@@ -134,14 +143,15 @@ func New(config Config) (*Engine, error) {
 		return nil, errors.New("codex max TTL must be positive and future skew cannot be negative")
 	}
 	return &Engine{
-		config:       config,
-		agents:       make(map[string]participantState),
-		nodes:        make(map[string]participantState),
-		nodeProducts: make(map[string]*orbitv1.NodeState),
-		usage:        make(map[string]canonicalUsage),
-		codex:        make(map[string]canonicalCodex),
-		viewRevision: make(map[string]uint64),
-		lastFresh:    make(map[string]string),
+		config:         config,
+		agents:         make(map[string]participantState),
+		nodes:          make(map[string]participantState),
+		nodeProducts:   make(map[string]*orbitv1.NodeState),
+		usage:          make(map[string]canonicalUsage),
+		codex:          make(map[string]canonicalCodex),
+		viewRevision:   make(map[string]uint64),
+		lastFresh:      make(map[string]string),
+		intentCommands: make(map[string]cachedIntentCommand),
 	}, nil
 }
 

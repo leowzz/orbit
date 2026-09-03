@@ -21,6 +21,18 @@
   box-sizing: border-box;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   min-width: 320px;
   min-height: 100vh;
@@ -267,7 +279,13 @@ h2 {
   padding: 14px 18px;
   border: 1px solid var(--line);
   border-radius: 6px;
+  color: inherit;
   background: var(--surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .session-row:hover {
@@ -275,8 +293,33 @@ h2 {
   background: #fbfcfc;
 }
 
+.session-row:focus {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.session-row[data-action="pending"] {
+  border-color: var(--blue);
+}
+
+.session-row[data-action="sent"] {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+
+.session-row[data-action="failed"] {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.session-row:disabled {
+  opacity: 1;
+  cursor: wait;
+}
+
 .session-main,
 .session-meta {
+  display: block;
   min-width: 0;
 }
 
@@ -289,6 +332,7 @@ h2 {
 }
 
 .session-name {
+  display: block;
   margin: 0 0 7px;
   font-size: 14px;
   font-weight: 680;
@@ -301,6 +345,11 @@ h2 {
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
+}
+
+.session-id,
+.session-time {
+  display: block;
 }
 
 .session-project,
@@ -437,6 +486,11 @@ footer {
     align-items: center;
   }
 
+  .overview > .section-heading {
+    /* Keep text clear of the display cutout without moving the rules. */
+    padding-left: 48px;
+  }
+
   .section-heading > * + * {
     margin-left: 12px;
   }
@@ -472,8 +526,9 @@ footer {
   }
 
   .metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     margin-top: 10px;
+    padding-left: 48px;
   }
 
   .metric {
@@ -481,17 +536,18 @@ footer {
   }
 
   .metric + .metric {
-    padding-left: 12px;
-  }
-
-  .metric:nth-child(3) {
+    position: relative;
     padding-left: 0;
-    border-top: 1px solid var(--line);
     border-left: 0;
   }
 
-  .metric:nth-child(4) {
+  .metric + .metric::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: -48px;
     border-top: 1px solid var(--line);
+    content: "";
   }
 
   .metric-label,
@@ -521,21 +577,42 @@ footer {
   }
 
   .session-row {
+    display: flex;
     grid-template-columns: minmax(200px, 1.7fr) minmax(72px, 0.55fr) minmax(92px, 0.65fr) minmax(82px, 0.6fr);
     min-height: 48px;
     padding: 6px 10px;
   }
 
+  .session-main {
+    width: 44%;
+    flex: 0 0 44%;
+  }
+
+  .session-project {
+    width: 18%;
+    flex: 0 0 18%;
+  }
+
+  .session-model {
+    width: 20%;
+    flex: 0 0 20%;
+  }
+
+  .session-meta {
+    width: 18%;
+    flex: 0 0 18%;
+  }
+
   .session-name {
     margin-bottom: 3px;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .session-id,
   .session-project,
   .session-model,
   .session-time {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .session-project,
@@ -544,7 +621,7 @@ footer {
   }
 
   .status {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .status::before {

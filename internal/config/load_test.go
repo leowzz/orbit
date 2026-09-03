@@ -59,6 +59,9 @@ func TestLoadAgentAcceptsCodexOnlyAndResolvesHome(t *testing.T) {
 	if cfg.Sources.Codex.Privacy.IncludeDisplayName || cfg.Sources.Codex.Privacy.IncludeProjectName {
 		t.Fatal("Codex privacy fields must default to disabled")
 	}
+	if !cfg.Capabilities.OpenCodexSession.Enabled {
+		t.Fatal("Open Codex session capability was not loaded")
+	}
 }
 
 func TestLoadAgentAcceptsSub2APIAndCodexTogether(t *testing.T) {
@@ -102,6 +105,18 @@ func TestLoadAgentRejectsWhenAllSourcesAreDisabled(t *testing.T) {
 	_, err := LoadAgent(path)
 	if err == nil || !strings.Contains(err.Error(), "at least one of sources.sub2api or sources.codex") {
 		t.Fatalf("LoadAgent() error = %v, want source requirement", err)
+	}
+}
+
+func TestLoadAgentRejectsOpenCodexCapabilityWithoutCodexSource(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, true)
+	yaml := strings.Replace(validAgentYAML, "logging:\n", "capabilities:\n  open_codex_session:\n    enabled: true\nlogging:\n", 1)
+	path := writeConfig(t, dir, "agent.yaml", yaml)
+
+	_, err := LoadAgent(path)
+	if err == nil || !strings.Contains(err.Error(), "requires sources.codex") {
+		t.Fatalf("LoadAgent() error = %v, want Codex source requirement", err)
 	}
 }
 
@@ -325,6 +340,9 @@ sources:
     privacy:
       include_display_name: false
       include_project_name: false
+capabilities:
+  open_codex_session:
+    enabled: true
 logging:
   level: info
 `

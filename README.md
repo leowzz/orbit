@@ -3,10 +3,12 @@
 Orbit connects trusted host state to display nodes. The current V1 path reads
 Sub2API usage and local Codex task state in a host Agent, transports Protobuf
 observations over MQTT, and lets Core publish retained views for OLED and web
-nodes:
+nodes. A Web session click travels back through the same trust model as a typed
+Intent and Command:
 
 ~~~text
 Sub2API / Codex -> orbit-agent -> MQTT -> orbit-core -> DeviceView -> OLED / Web
+Web click -> Intent -> orbit-core -> OpenCodexSession Command -> orbit-agent -> Codex
 ~~~
 
 ![Orbit system architecture data flow from Sub2API to OLED](docs/assets/orbit-system-architecture.png)
@@ -14,7 +16,9 @@ Sub2API / Codex -> orbit-agent -> MQTT -> orbit-core -> DeviceView -> OLED / Web
 Sub2API credentials and Codex databases stay on the Agent. OLED receives only
 formatted cost, token, TPM, and freshness text. The web node receives the rich
 usage and sanitized Codex fields selected by its Core projection. Command
-capabilities are not part of the runnable V1 path yet.
+execution is limited to the explicitly enabled `open_codex_session` capability;
+the Agent validates the session UUID and opens `codex://threads/{session_id}`
+locally. There is no arbitrary URL or shell command payload.
 
 ## Requirements
 
@@ -102,7 +106,9 @@ Update the local YAML values for the selected broker and account:
 - agent.local.yaml: agent.id and agent.host_label, MQTT URL/TLS files, and the
   settings for each enabled source. Sub2API uses HTTPS endpoints and secret
   files; Codex uses codex_home (or the local CODEX_HOME/default) and its
-  polling, filtering, and privacy settings.
+  polling, filtering, and privacy settings. Enable
+  capabilities.open_codex_session to let approved Web intents open a local
+  Codex task.
 - core.local.yaml: core.id, MQTT URL/TLS files, and projection_routes.
 - web.local.yaml: node.id, its MQTT credentials, and the local HTTP listen address.
 
@@ -245,6 +251,9 @@ configured interval. A successful live chain has these messages in the broker:
 | orbit/v1/agents/{agent_id}/observations/codex | Agent | Core -> Web projection; OLED ignores | no |
 | orbit/v1/nodes/{node_id}/state | Node | Core | yes |
 | orbit/v1/nodes/{node_id}/view | Core | Node | yes |
+| orbit/v1/nodes/{node_id}/intents | Node | Core | no |
+| orbit/v1/agents/{agent_id}/commands | Core | Agent | no |
+| orbit/v1/agents/{agent_id}/results | Agent | Core | no |
 
 All Go MQTT payloads use application/protobuf and QoS 1. Broker ACLs should
 allow each identity only the publish/subscribe rows it owns. See
@@ -256,7 +265,8 @@ security requirements.
 
 1. Copy `configs/agent.example.yaml` to a local file, enable
    `sources.codex`, set `sources.codex.codex_home` when the projections are not
-   under the default `~/.codex`, and disable `sources.sub2api`.
+   under the default `~/.codex`, enable `capabilities.open_codex_session` when
+   Web clicks should open Codex, and disable `sources.sub2api`.
 2. Start the Agent with a reachable broker:
 
 ~~~shell
@@ -281,6 +291,13 @@ sequence; the broker command additionally proves deployment TLS, credentials,
 ACLs, and MQTT delivery. Core consumes the observation and projects sanitized
 Codex data to the Web node. OLED intentionally does not consume or render
 Codex data in this milestone.
+
+On the Web node, click a session row. The HTTP endpoint accepts only JSON for a
+session present in the cached fresh view, then publishes a 20-second Intent.
+Core revalidates the Node epoch, view revision, current Codex snapshot, and
+projection route before publishing `OpenCodexSession` to the selected Agent.
+The Agent accepts only a non-retained, at-most-30-second command containing a
+lowercase UUID and invokes `/usr/bin/open codex://threads/{session_id}`.
 
 ## Build, flash, and inspect the OLED node
 

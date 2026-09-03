@@ -50,6 +50,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		{filter: "orbit/v1/nodes/+/state", handler: r.handleNodeState},
 		{filter: "orbit/v1/agents/+/observations/usage", handler: r.handleObservation},
 		{filter: "orbit/v1/agents/+/observations/codex", handler: r.handleCodexObservation},
+		{filter: "orbit/v1/nodes/+/intents", handler: r.handleIntent},
 	} {
 		if err := r.transport.Subscribe(ctx, item.filter, item.handler); err != nil {
 			return err
@@ -74,6 +75,45 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (r *Runner) handleIntent(ctx context.Context, message mqtt.Message) error {
+	nodeID, err := topicIdentity(message.Topic, "nodes", "intents")
+	if err != nil {
+		return err
+	}
+	if message.Retain {
+		return errors.New("retained intents are not accepted")
+	}
+	var intent orbitv1.Intent
+	if err := unmarshalInbound(message.Payload, &intent); err != nil {
+		return fmt.Errorf("decode intent: %w", err)
+	}
+	if intent.Metadata == nil || intent.Metadata.ProducerId != nodeID {
+		return errors.New("intent topic identity does not match payload")
+	}
+	command, err := r.engine.CommandForIntent(r.now().UTC(), &intent)
+	if err != nil {
+		return err
+	}
+	payload, err := proto.Marshal(command)
+	if err != nil {
+		return fmt.Errorf("marshal command: %w", err)
+	}
+	if len(payload) > maxInboundPayload {
+		return fmt.Errorf("command payload exceeds %d bytes", maxInboundPayload)
+	}
+	topic := fmt.Sprintf("orbit/v1/agents/%s/commands", command.TargetAgentId)
+	if err := r.transport.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload}); err != nil {
+		return err
+	}
+	r.logger.Info("command published",
+		zap.String("command_id", command.CommandId),
+		zap.String("node_id", nodeID),
+		zap.String("agent_id", command.TargetAgentId),
+		zap.String("action_type", "open_codex_session"),
+	)
+	return nil
 }
 
 func (r *Runner) handleAgentState(_ context.Context, message mqtt.Message) error {

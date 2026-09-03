@@ -108,6 +108,9 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 	if !cfg.Sources.Sub2API.Enabled && !cfg.Sources.Codex.Enabled {
 		return errors.New("at least one of sources.sub2api or sources.codex must be enabled")
 	}
+	if cfg.Capabilities.OpenCodexSession.Enabled && !cfg.Sources.Codex.Enabled {
+		return errors.New("capabilities.open_codex_session requires sources.codex")
+	}
 	if err := cfg.MQTT.validate(baseDir); err != nil {
 		return fmt.Errorf("mqtt: %w", err)
 	}

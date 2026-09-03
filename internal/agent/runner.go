@@ -27,13 +27,22 @@ type CodexSource interface {
 	Fetch(context.Context) (codex.Snapshot, error)
 }
 
-type Publisher interface {
+type Transport interface {
 	Publish(context.Context, mqtt.Message) error
+	Subscribe(context.Context, string, mqtt.Handler) error
 }
 
 type Sources struct {
 	Usage UsageSource
 	Codex CodexSource
+}
+
+type CodexSessionOpener interface {
+	Open(context.Context, string) error
+}
+
+type Capabilities struct {
+	OpenCodexSession CodexSessionOpener
 }
 
 type Config struct {
@@ -60,18 +69,23 @@ type sourceState struct {
 }
 
 type Runner struct {
-	config    Config
-	sources   Sources
-	publisher Publisher
-	logger    *zap.Logger
-	now       func() time.Time
+	config       Config
+	sources      Sources
+	capabilities Capabilities
+	transport    Transport
+	logger       *zap.Logger
+	now          func() time.Time
 
-	mu sync.Mutex
+	mu        sync.Mutex
+	commandMu sync.Mutex
 
-	usageRevision uint64
-	codexRevision uint64
-	stateRevision uint64
-	sourceStates  map[orbitv1.ObservationType]sourceState
+	usageRevision  uint64
+	codexRevision  uint64
+	stateRevision  uint64
+	sourceStates   map[orbitv1.ObservationType]sourceState
+	commandResults map[string]cachedCommandResult
+	commandOrder   []string
+	resultRevision uint64
 }
 
 const (
@@ -81,11 +95,11 @@ const (
 	codexModelMaxBytes       = 64
 )
 
-func New(config Config, sources Sources, publisher Publisher, logger *zap.Logger) (*Runner, error) {
-	return newRunner(config, sources, publisher, logger)
+func New(config Config, sources Sources, capabilities Capabilities, transport Transport, logger *zap.Logger) (*Runner, error) {
+	return newRunner(config, sources, capabilities, transport, logger)
 }
 
-func newRunner(config Config, sources Sources, publisher Publisher, logger *zap.Logger) (*Runner, error) {
+func newRunner(config Config, sources Sources, capabilities Capabilities, transport Transport, logger *zap.Logger) (*Runner, error) {
 	if config.AgentID == "" || config.AgentEpoch == "" || config.AgentVersion == "" || config.HostLabel == "" {
 		return nil, errors.New("agent identity, epoch, version, and host label are required")
 	}
@@ -103,8 +117,11 @@ func newRunner(config Config, sources Sources, publisher Publisher, logger *zap.
 	if sources.Codex != nil && (config.CodexPollInterval <= 0 || config.CodexObservationTTL < config.CodexPollInterval) {
 		return nil, errors.New("codex valid polling durations are required")
 	}
-	if publisher == nil {
-		return nil, errors.New("agent publisher is required")
+	if capabilities.OpenCodexSession != nil && sources.Codex == nil {
+		return nil, errors.New("open Codex session capability requires the Codex source")
+	}
+	if transport == nil {
+		return nil, errors.New("agent transport is required")
 	}
 	if logger == nil {
 		logger = zap.NewNop()
@@ -123,16 +140,25 @@ func newRunner(config Config, sources Sources, publisher Publisher, logger *zap.
 		}
 	}
 	return &Runner{
-		config:       config,
-		sources:      sources,
-		publisher:    publisher,
-		logger:       logger,
-		now:          time.Now,
-		sourceStates: states,
+		config:         config,
+		sources:        sources,
+		capabilities:   capabilities,
+		transport:      transport,
+		logger:         logger,
+		now:            time.Now,
+		sourceStates:   states,
+		commandResults: make(map[string]cachedCommandResult),
 	}, nil
 }
 
 func (r *Runner) Run(ctx context.Context) error {
+	if r.capabilities.OpenCodexSession != nil {
+		topic := fmt.Sprintf("orbit/v1/agents/%s/commands", r.config.AgentID)
+		if err := r.transport.Subscribe(ctx, topic, r.handleCommand); err != nil {
+			return err
+		}
+		r.logger.Debug("agent command subscription ready", zap.String("topic", topic))
+	}
 	if err := r.publishState(ctx); err != nil {
 		return err
 	}
@@ -291,7 +317,7 @@ func (r *Runner) publishObservation(ctx context.Context, name string, observatio
 		return fmt.Errorf("marshal %s observation: %w", name, err)
 	}
 	topic := fmt.Sprintf("orbit/v1/agents/%s/observations/%s", r.config.AgentID, name)
-	if err := r.publisher.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload}); err != nil {
+	if err := r.transport.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload}); err != nil {
 		return fmt.Errorf("publish %s observation: %w", name, err)
 	}
 	fields := []zap.Field{
@@ -397,7 +423,7 @@ func (r *Runner) publishStateLocked(ctx context.Context) error {
 		return fmt.Errorf("marshal agent state: %w", err)
 	}
 	topic := fmt.Sprintf("orbit/v1/agents/%s/state", r.config.AgentID)
-	if err := r.publisher.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload, Retain: true}); err != nil {
+	if err := r.transport.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload, Retain: true}); err != nil {
 		return fmt.Errorf("publish agent state: %w", err)
 	}
 	r.logger.Debug("agent state published",

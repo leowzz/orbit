@@ -12,6 +12,7 @@ const elements = {
   runningCount: document.querySelector("#running-count"),
   totalCount: document.querySelector("#total-count"),
   sessionList: document.querySelector("#session-list"),
+  actionStatus: document.querySelector("#action-status"),
   nodeID: document.querySelector("#node-id"),
   revision: document.querySelector("#revision"),
 };
@@ -141,11 +142,34 @@ function relativeTime(value) {
 }
 
 function appendText(parent, className, text) {
-  const element = document.createElement("div");
+  const element = document.createElement("span");
   element.className = className;
   element.textContent = text;
   parent.append(element);
   return element;
+}
+
+async function openCodexSession(row, session) {
+  if (row.disabled || !latestSnapshot) return;
+  row.disabled = true;
+  row.dataset.action = "pending";
+  elements.actionStatus.textContent = `正在打开 ${session.display_name || session.id}`;
+  try {
+    const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ view_revision: latestSnapshot.revision }),
+    });
+    if (!response.ok) throw new Error(`request failed with status ${response.status}`);
+    row.dataset.action = "sent";
+    row.title = "打开请求已发送";
+    elements.actionStatus.textContent = "打开请求已发送";
+  } catch (_) {
+    row.dataset.action = "failed";
+    row.title = "打开请求失败";
+    elements.actionStatus.textContent = "打开请求失败";
+  }
+  row.disabled = false;
 }
 
 function renderSessions(codex) {
@@ -164,10 +188,13 @@ function renderSessions(codex) {
   }
 
   for (const session of codex.sessions) {
-    const row = document.createElement("article");
+    const row = document.createElement("button");
+    row.type = "button";
     row.className = "session-row";
+    row.title = "在 Codex 中打开";
+    row.addEventListener("click", () => openCodexSession(row, session));
 
-    const main = document.createElement("div");
+    const main = document.createElement("span");
     main.className = "session-main";
     appendText(main, "session-name", session.display_name || `会话 ${session.id.slice(0, 8)}`);
     appendText(main, "session-id", session.id);
@@ -175,7 +202,7 @@ function renderSessions(codex) {
     appendText(row, "session-project", session.project_name || "项目未公开");
     appendText(row, "session-model", session.model || "模型未知");
 
-    const meta = document.createElement("div");
+    const meta = document.createElement("span");
     meta.className = "session-meta";
     const status = appendText(meta, "status", statusLabels[session.status] || statusLabels.unknown);
     status.dataset.state = session.status || "unknown";

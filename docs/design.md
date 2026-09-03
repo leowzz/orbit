@@ -22,7 +22,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 4. Node 或可信客户端发送受限 Intent，由 Core 生成类型化命令。
 5. Agent 尝试执行短生命周期、可重复的 Capability，并在进程仍存活时返回可关联结果。
 
-工程验证里程碑 M0 可以使用合成 Observation 和无副作用的 `PingAgent` Capability 验证完整消息闭环；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，并在 OLED 128x32 上展示用量。V1 产品范围不包含 Intent 或真实动作能力；Codex 由 Agent 采集并由 Core 投影到 Web，OLED 输入与 Codex OLED 展示不属于本里程碑。
+工程验证里程碑 M0 可以使用合成 Observation 和无副作用的 `PingAgent` Capability 验证完整消息闭环；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，并在 OLED 128x32 上展示用量。当前 Web Node 还实现了首个真实动作 `OpenCodexSession`：Node 发送受限 Intent，Core 路由类型化 Command，Agent 在可信主机打开本地 Codex 会话；OLED 输入与 Codex OLED 展示不属于本里程碑。
 
 ### 2.1 设计目标
 
@@ -294,7 +294,7 @@ OLED 128x32 的 DeviceView 固定为 Primary、Secondary 和 Footer 三个槽位
 
 ### 6.4 Command 与 CommandResult
 
-Command 使用 `oneof action` 形成能力白名单。M0 只实现无破坏性的 `PingAgent` 测试能力；V1 不提供产品动作，首个真实动作 `OpenCodexSession` 在 Codex 集成阶段再加入。
+Command 使用 `oneof action` 形成能力白名单。首个真实动作是 `OpenCodexSession`；它只接受 session UUID，由 Core 从 Web Node Intent 和当前 Codex 投影路由生成，Agent 不接受任意 URL 或 shell 命令。
 
 每个 Command 同时包含：
 

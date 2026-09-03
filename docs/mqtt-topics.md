@@ -10,6 +10,9 @@ chain uses these topics:
 | `orbit/v1/agents/{agent_id}/observations/codex` | Agent | Core -> Web projection | no |
 | `orbit/v1/nodes/{node_id}/state` | OLED/Web Node | Core | yes |
 | `orbit/v1/nodes/{node_id}/view` | Core | OLED/Web Node | yes |
+| `orbit/v1/nodes/{node_id}/intents` | Web Node | Core | no |
+| `orbit/v1/agents/{agent_id}/commands` | Core | Agent | no |
+| `orbit/v1/agents/{agent_id}/results` | Agent | Core | no |
 
 Core rejects messages when the participant ID in the topic does not match the
 protobuf payload. Nodes subscribe only to their own view and never receive the
@@ -33,6 +36,14 @@ Core subscribes to and validates Codex observations, then projects the
 sanitized fields into the retained Web DeviceView. The OLED usage route does
 not consume or render Codex observations in this milestone.
 
+The Web Node publishes a typed `OpenCodexSessionIntent` only for a session in
+its fresh cached view. Core resolves the target Agent from its private
+projection route and publishes a typed `OpenCodexSession` command. The Agent
+validates the target, expiry, requester reference, and lowercase session UUID,
+deduplicates by command ID in bounded process memory, opens the local Codex URI,
+and publishes a final result. Intent, Command, and CommandResult are never
+retained and contain no arbitrary URL or shell command string.
+
 The `usage-oled-128x32` profile contains only the three bounded DisplaySlot
 fields. The `overview-web` profile may additionally contain sanitized CodexView
 fields. Both profiles use the same node-owned topics and ACL shape; consumers
@@ -43,5 +54,5 @@ ACLs must restrict each identity to the rows above that it owns. Public broker
 TLS, credentials, ACL rejection, Last Will, and reconnect behavior still require
 deployment-level acceptance; the local memory-bus test does not prove them.
 
-The broader presence, command, result, and intent contract remains specified by
-[design.md](design.md#7-mqtt-设计) and is outside the V1 status-display scope.
+The broader presence contract remains specified by
+[design.md](design.md#7-mqtt-设计) and is outside the current runnable scope.

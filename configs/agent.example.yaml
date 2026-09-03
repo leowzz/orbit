@@ -42,5 +42,9 @@ sources:
       include_display_name: false
       include_project_name: false
 
+capabilities:
+  open_codex_session:
+    enabled: false
+
 logging:
   level: info

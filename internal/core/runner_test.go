@@ -120,6 +120,37 @@ func TestRunnerAcceptsCodexObservationTopic(t *testing.T) {
 	}
 }
 
+func TestRunnerRoutesIntentToAgentCommand(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	engine := newCodexCommandEngine(t, now)
+	transport := &fakeTransport{}
+	runner, err := NewRunner(engine, transport, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.now = func() time.Time { return now }
+	payload, err := proto.Marshal(testOpenCodexIntent(now, "intent-runner", testCodexSessionID, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.handleIntent(context.Background(), mqtt.Message{
+		Topic: "orbit/v1/nodes/web-a/intents", Payload: payload,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(transport.messages) != 1 || transport.messages[0].Topic != "orbit/v1/agents/agent-a/commands" || transport.messages[0].Retain {
+		t.Fatalf("unexpected command publish: %+v", transport.messages)
+	}
+	var command orbitv1.Command
+	if err := proto.Unmarshal(transport.messages[0].Payload, &command); err != nil {
+		t.Fatal(err)
+	}
+	if command.GetOpenCodexSession().GetSessionId() != testCodexSessionID {
+		t.Fatalf("unexpected command: %+v", &command)
+	}
+}
+
 func TestUnmarshalInboundRejectsOversizedPayload(t *testing.T) {
 	t.Parallel()
 	if err := unmarshalInbound(make([]byte, maxInboundPayload+1), &orbitv1.Observation{}); err == nil {

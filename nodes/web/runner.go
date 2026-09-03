@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
@@ -16,7 +17,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const maxViewPayload = 32 * 1024
+const (
+	maxViewPayload = 32 * 1024
+	intentTTL      = 20 * time.Second
+)
 
 type Transport interface {
 	Publish(context.Context, mqtt.Message) error
@@ -35,6 +39,9 @@ type Runner struct {
 	store     *Store
 	logger    *zap.Logger
 	now       func() time.Time
+
+	intentMu       sync.Mutex
+	intentRevision uint64
 }
 
 func NewRunner(config RunnerConfig, transport Transport, store *Store, logger *zap.Logger) (*Runner, error) {
@@ -48,6 +55,64 @@ func NewRunner(config RunnerConfig, transport Transport, store *Store, logger *z
 		logger = zap.NewNop()
 	}
 	return &Runner{config: config, transport: transport, store: store, logger: logger, now: time.Now}, nil
+}
+
+func (r *Runner) OpenCodexSession(ctx context.Context, sessionID string, viewRevision uint64) (string, error) {
+	snapshot, err := r.store.Snapshot()
+	if err != nil {
+		return "", err
+	}
+	if snapshot == nil || snapshot.Codex == nil || snapshot.Codex.Freshness != "fresh" {
+		return "", errors.New("fresh Codex state is unavailable")
+	}
+	if viewRevision == 0 || viewRevision > snapshot.Revision {
+		return "", errors.New("view revision is invalid")
+	}
+	found := false
+	for _, session := range snapshot.Codex.Sessions {
+		if session.ID == sessionID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return "", errors.New("Codex session is not present in the current view")
+	}
+
+	r.intentMu.Lock()
+	r.intentRevision++
+	revision := r.intentRevision
+	r.intentMu.Unlock()
+	now := r.now().UTC()
+	intentID := newID()
+	intent := &orbitv1.Intent{
+		Metadata: &orbitv1.Metadata{
+			MessageId:  newID(),
+			ProducerId: r.config.NodeID,
+			Revision:   revision,
+			ProducedAt: timestamppb.New(now),
+			ExpiresAt:  timestamppb.New(now.Add(intentTTL)),
+		},
+		IntentId:     intentID,
+		NodeEpoch:    r.config.NodeEpoch,
+		ViewRevision: viewRevision,
+		Action: &orbitv1.Intent_OpenCodexSession{
+			OpenCodexSession: &orbitv1.OpenCodexSessionIntent{SessionId: sessionID},
+		},
+	}
+	payload, err := proto.Marshal(intent)
+	if err != nil {
+		return "", fmt.Errorf("marshal open Codex session intent: %w", err)
+	}
+	topic := fmt.Sprintf("orbit/v1/nodes/%s/intents", r.config.NodeID)
+	if err := r.transport.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload}); err != nil {
+		return "", fmt.Errorf("publish open Codex session intent: %w", err)
+	}
+	r.logger.Info("open Codex session intent published",
+		zap.String("intent_id", intentID),
+		zap.Uint64("view_revision", viewRevision),
+	)
+	return intentID, nil
 }
 
 func (r *Runner) Run(ctx context.Context) error {

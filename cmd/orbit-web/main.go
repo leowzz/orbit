@@ -76,7 +76,7 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger) error {
 		return err
 	}
 	server := &http.Server{
-		Handler: webnode.Handler(store), ReadHeaderTimeout: 5 * time.Second,
+		Handler: webnode.Handler(store, runner), ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout: 60 * time.Second,
 	}
 	errCh := make(chan error, 2)
