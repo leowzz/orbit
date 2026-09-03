@@ -51,7 +51,7 @@ function formatCost(micros, currency) {
     currency: currency || "USD",
     minimumFractionDigits: 2,
     maximumFractionDigits: 6,
-  }).format(micros / 1_000_000);
+  }).format(micros / 1000000);
 }
 
 function formatDate(value) {
@@ -98,7 +98,7 @@ function appendText(parent, className, text) {
 }
 
 function renderSessions(codex) {
-  elements.sessionList.replaceChildren();
+  elements.sessionList.textContent = "";
   if (!codex || !codex.sessions || codex.sessions.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
@@ -158,14 +158,14 @@ function render(snapshot) {
 
   const usage = snapshot.usage;
   elements.cost.textContent = usage ? formatCost(usage.actual_cost_micros, usage.currency_code) : "--";
-  elements.currency.textContent = usage?.currency_code || "USD";
+  elements.currency.textContent = usage && usage.currency_code ? usage.currency_code : "USD";
   elements.tokens.textContent = usage ? integerFormat.format(usage.token_count) : "--";
   elements.tpm.textContent = usage ? integerFormat.format(usage.tpm) : "--";
 
   const codex = snapshot.codex;
   elements.runningCount.textContent = codex ? integerFormat.format(codex.running_count) : "--";
   elements.totalCount.textContent = codex ? `共 ${integerFormat.format(codex.total_count)} 个` : "共 -- 个";
-  setFreshness(elements.codexFreshness, codex?.freshness || "unknown");
+  setFreshness(elements.codexFreshness, codex && codex.freshness ? codex.freshness : "unknown");
   renderSessions(codex);
   requestAnimationFrame(fitMetrics);
 }
@@ -185,6 +185,6 @@ function connectEvents() {
 loadInitialState().catch(() => setConnection("retrying", "正在重连"));
 connectEvents();
 setInterval(() => {
-  if (latestSnapshot?.codex) renderSessions(latestSnapshot.codex);
-}, 30_000);
+  if (latestSnapshot && latestSnapshot.codex) renderSessions(latestSnapshot.codex);
+}, 30000);
 window.addEventListener("resize", fitMetrics);

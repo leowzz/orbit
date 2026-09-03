@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sync"
 	"testing"
 	"time"
@@ -71,6 +72,28 @@ func TestStoreExposesLatestRichView(t *testing.T) {
 	}
 	if snapshot.Codex.Sessions[0].DisplayName != "Web node" || snapshot.Freshness != "fresh" {
 		t.Fatalf("unexpected projected fields: %+v", snapshot)
+	}
+}
+
+func TestAppJSSupportsDeviceChrome(t *testing.T) {
+	t.Parallel()
+	script, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unsupported := []struct {
+		name    string
+		pattern *regexp.Regexp
+	}{
+		{name: "optional chaining", pattern: regexp.MustCompile(`\?\.`)},
+		{name: "nullish coalescing", pattern: regexp.MustCompile(`\?\?`)},
+		{name: "numeric separators", pattern: regexp.MustCompile(`[0-9]_[0-9]`)},
+		{name: "Element.replaceChildren", pattern: regexp.MustCompile(`\.replaceChildren\(`)},
+	}
+	for _, feature := range unsupported {
+		if feature.pattern.Match(script) {
+			t.Errorf("app.js uses %s, which is unsupported by the device's Chromium 71", feature.name)
+		}
 	}
 }
 
