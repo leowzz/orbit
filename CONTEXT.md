@@ -28,6 +28,10 @@ _Avoid_: Host ID, Agent ID
 维护规范状态、应用策略并为设备生成视图的参与者。
 _Avoid_: Backend, Cloud
 
+**Core ID**:
+Core 实例的规范身份，用于 Topic、凭据授权和单实例连接约束；V1 必须由部署显式指定。
+_Avoid_: Core Epoch, MQTT Client ID
+
 **Core Instance**:
 一次正在运行的 Core 部署；V1 只允许一个活动实例。
 _Avoid_: Core Node, Node
@@ -52,12 +56,16 @@ _Avoid_: Device Type, Firmware
 拥有唯一 `node_id` 和凭据、实际接入 Orbit 的一个物理或软件 Node。物理 Node 还关联 Device Series、Device Model 和 Hardware Variant。
 _Avoid_: Device Instance, Client
 
+**Node ID**:
+Node Instance 的规范身份，用于 Topic 和凭据授权；它必须在设备部署时显式指定。
+_Avoid_: Node Epoch, Device Model, MQTT Client ID
+
 **Node Epoch**:
 一次 Node 进程或固件启动周期的随机身份，用于区分同一 Node ID 重启前后的 Node State 修订序列。
 _Avoid_: Node ID, MQTT Session
 
 **Node State**:
-Node 对当前 Epoch、产品身份、固件版本和唯一目标 Agent 的 retained 自描述，是 Core 通过 MQTT 发现 Node 的依据。
+Node 对当前 Epoch、产品身份和固件版本的 retained 自描述，是 Core 通过 MQTT 发现 Node 的依据；它不声明上游 Agent。
 _Avoid_: Node Registration, Hello
 
 **Device Series**:
@@ -92,8 +100,16 @@ _Avoid_: Shell Command, Intent
 Core 根据最新有效 Observation 维护的规范领域状态，是 DeviceView 的投影来源而不是公共线协议。
 _Avoid_: DeviceView, History
 
+**Projection Route**:
+Core 持有的投影规则，决定哪些 Canonical State 被组合并生成指定 Node 的 DeviceView；Node 不选择或感知数据来自哪个 Agent。
+_Avoid_: Target Agent, Node Binding
+
+**Freshness**:
+Observation 或 DeviceView 仍可视为当前事实的时间边界，与参与者是否在线无关。
+_Avoid_: Presence, Retention
+
 **DeviceView**:
-Core 为一个 Node Instance 投影出的设备型号专属视图，包含已经格式化的文本与状态，由该 Node 映射到本地像素。
+Core 为一个 Node Instance 投影出的设备型号专属视图，包含已经格式化的文本与状态，由该 Node 映射到本地像素；它不向 Node 暴露上游 Agent 身份。
 _Avoid_: Frame, Observation
 
 **Display Slot**:
@@ -117,5 +133,5 @@ Core 从 Command Result 裁剪并投影给原始 Intent 发起者的安全状态
 _Avoid_: Command Result, Raw Result
 
 **Presence**:
-参与者通过 retained Last Will 表达的当前连接存活状态，不代表其业务数据仍然新鲜。
+参与者通过 retained 上线消息与 Last Will 表达的当前连接状态，不代表其业务数据仍然新鲜，也不依赖应用层心跳。
 _Avoid_: Freshness, Health
