@@ -12,6 +12,14 @@ _Avoid_: Collector, Host Service
 Agent 实例的规范身份，用于消息路由、授权和命令寻址；它可以由部署显式指定，也可以从所在机器的稳定信息生成默认值。
 _Avoid_: Machine ID, Host ID, Host Label, MQTT Client ID
 
+**Agent Epoch**:
+一次 Agent 进程生命周期的随机身份，用于区分同一 Agent ID 重启前后的 Observation 修订序列。
+_Avoid_: Agent ID, MQTT Session
+
+**Agent State**:
+Agent 对当前 Epoch、版本、Host Label、可用功能及各 Source 状态的 retained 自描述，不包含领域观测值。
+_Avoid_: Observation, Presence
+
 **Host Label**:
 供人辨认 Agent 所在主机的可变显示名称，不参与路由、授权或唯一性判断。
 _Avoid_: Host ID, Agent ID
@@ -55,6 +63,10 @@ _Avoid_: Device State, View
 **Source**:
 Agent 承载的一类数据获取功能，向 Orbit 提供一种 Observation；它不是独立的网络参与者或 Command Capability。
 _Avoid_: Backend Source, MQTT Producer, Capability
+
+**Source Status**:
+Agent State 中描述某个 Source 是否启用、当前是否健康及最近成功时间的状态，不是独立 Observation。
+_Avoid_: SourceHealth Observation, Presence
 
 **Capability**:
 Agent 明确注册、可由有效 Command 调用的一种受限动作能力。

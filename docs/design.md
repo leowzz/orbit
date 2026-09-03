@@ -38,6 +38,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 - 通用远程执行平台。
 - 由云端生成像素帧或统一控制各设备的页面导航。
 - 以 MQTT retained message 充当历史数据库。
+- V1 引入 PostgreSQL、Redis 或其他外部数据库。
 - 首版支持任意第三方插件、动态脚本或用户自定义命令字符串。
 - 首版实现跨区域高可用、复杂多租户或大规模设备编排。
 
@@ -61,7 +62,7 @@ flowchart LR
     Sources[Sub2API / Codex / OS]
     Agent[Orbit Agent<br/>trusted host]
     Core[Orbit Core<br/>policy + projection]
-    State[(latest canonical state<br/>optional persistence)]
+    State[(in-memory<br/>canonical state)]
     Node[Orbit Node<br/>OLED / TFT / Web]
     Display[display + input]
 
@@ -84,7 +85,7 @@ Agent 是运行在可信主机上的深模块实例，通常一台机器只运�
 职责：
 
 - 启动并管理多个已注册 Source；各 Source 自行封装本机读取、远端 API 或事件订阅方式。
-- 发布观测值、Source 健康状态和 Agent presence。
+- 发布 Observation、retained AgentState 和 Agent presence。
 - 接收只发往自身 `agent_id` 的命令。
 - 在执行前完成解码、版本、目标、时效、授权上下文和参数校验。
 - 使用有界内存记录抑制同一进程生命周期内的重复 Command；不承诺跨重启恢复。
@@ -96,13 +97,13 @@ Core 是状态与策略模块，接口是“接收观测或 Intent，发布 cano
 
 职责：
 
-- 通过 MQTT 接收 Agent 发布的 Observation；Source 不以独立身份接入 MQTT。
+- 通过 MQTT 接收 Agent 发布的 Observation 和 retained AgentState；Source 不以独立身份接入 MQTT。
 - 按生产者、修订号和过期时间维护最新 canonical state。
 - 应用优先级、隐私、过期与设备策略，生成已经格式化文本的 DeviceView。
 - 将受支持的 Intent 映射为类型化命令并路由到目标 Agent。
 - 维护 Node Registration，并隔离自报产品身份与注册信息不一致的 Node。
-- 可连接 PostgreSQL 保存耐久注册、策略和配置，也可通过可选 Adapter 连接 Redis；参与者之间的核心业务消息始终通过 MQTT。
-- 发布 retained view；后续可选择性持久化历史。
+- 从 YAML 加载 Node Registration、策略和配置，并在 V1 运行期间保持只读。
+- 发布 retained view；V1 不持久化 canonical state 或历史。
 
 #### Orbit Node
 
@@ -209,14 +210,11 @@ type Projector interface {
 | `produced_at` | 生产时间 | UTC 时间戳 |
 | `expires_at` | 应用层过期时间 | 状态用于 stale 判定，命令用于拒绝迟到执行 |
 
-设备不能仅依赖本地墙钟判断乱序，应先比较 `revision`，再使用 `expires_at` 判断时效。生产者重启后必须恢复修订号，或使用新的逻辑对象/epoch；具体编码在 Protobuf 设计阶段固定。
+设备不能仅依赖本地墙钟判断乱序，应先比较 `revision`，再使用 `expires_at` 判断时效。Agent Observation 还携带每次进程启动时随机生成的 `agent_epoch`；同一 `(agent_id, agent_epoch, observation_type)` 内的 revision 从 1 单调递增。
 
 ### 6.2 Observation 与 Canonical State
 
-Observation 表达某个 Source 在某一时刻观察到的事实，不包含设备布局。M0 支持 `SyntheticObservation`；V1 只要求：
-
-- `UsageObservation`：Sub2API 等来源的额度、成本、Token 和 TPM 摘要。
-- `SourceHealth`：最近成功时间、健康状态和稳定错误码。
+Observation 表达某个 Source 在某一时刻观察到的事实，不包含设备布局。M0 支持 `SyntheticObservation`；V1 只要求 `UsageObservation`，表达 Sub2API 等来源的额度、成本、Token 和 TPM 摘要。
 
 `SystemObservation` 和 `CodexObservation` 在 V1 之后按真实需求加入。
 
@@ -233,7 +231,7 @@ V1 的 `UsageObservation` 只包含当前产品需要的字段：
 
 V1 的 Usage Source 在当前 Orbit 仓库中实现，由 Agent 承载并以该 Agent 的身份向 Core 发布类型化 Observation。
 
-Core 依据 `(producer_id, observation_type)` 识别逻辑对象，只接受修订号更新的 Observation；Agent 的 `producer_id` 就是 `agent_id`，协议中不存在 `source_id` 或 `subject_id`。Canonical State 是 Core 内部模型，不直接承诺为公共线协议。
+Core 依据 `(producer_id, observation_type)` 识别逻辑对象。它先从 retained AgentState 确认当前 `agent_epoch`，再只接受该 Epoch 内 revision 更新的 Observation；Agent 的 `producer_id` 就是 `agent_id`，协议中不存在 `source_id` 或 `subject_id`。Canonical State 是 Core 内部模型，不直接承诺为公共线协议。
 
 ### 6.3 DeviceView
 
@@ -341,14 +339,14 @@ orbit/v1/cores/{core_id}/presence
 | 消息 | QoS | Retained | 说明 |
 | --- | --- | --- | --- |
 | Observation | 1 | 否 | Core 自行维护最新状态 |
-| Agent state | 1 | 是 | 供授权客户端读取最新 Agent 状态 |
+| AgentState | 1 | 是 | 当前 Agent Epoch、版本、Host Label、功能声明和各 Source 状态，不包含 Observation 值 |
 | DeviceView | 1 | 是 | Node 重连后立即获得最新视图 |
 | Command | 1 | 否 | 应用层时效与去重 |
 | CommandResult | 1 | 否 | 尽力发布最终结果，不保证跨重启恢复 |
 | Presence | 1 | 是 | 使用 LWT 发布离线状态 |
 | Intent | 1 | 否 | 必须带时效与 view revision |
 
-所有 payload 使用 `application/protobuf`。Agent、Core、Node 和管理客户端都使用 clean start（Session Expiry Interval 为 0），Broker 不为离线参与者排队 Observation、Intent、Command 或 Result。DeviceView、Agent state 和 Presence 通过 retained 消息恢复最新状态；其他消息允许在断线时丢失。MQTT 5 Message Expiry 只负责清理 Broker 中的 retained 或在途消息，不能替代 payload 内的业务时效字段。
+所有 payload 使用 `application/protobuf`。Agent、Core、Node 和管理客户端都使用 clean start（Session Expiry Interval 为 0），Broker 不为离线参与者排队 Observation、Intent、Command 或 Result。DeviceView、AgentState 和 Presence 通过 retained 消息恢复最新状态；其他消息允许在断线时丢失。MQTT 5 Message Expiry 只负责清理 Broker 中的 retained 或在途消息，不能替代 payload 内的业务时效字段。
 
 ### 7.3 ACL 原则
 
@@ -373,9 +371,9 @@ sequenceDiagram
     participant Core
     participant Node
 
-    Agent->>Source: Observe
-    alt 采集成功
-        Source-->>Agent: ObservationPayload
+    Agent->>Source: Run
+    alt Source 产生初始快照或后续更新
+        Source-->>Agent: emit ObservationPayload
         Agent->>MQTT: Observation (QoS 1)
         MQTT->>Core: Observation
         Core->>Core: validate / order / expire
@@ -384,15 +382,17 @@ sequenceDiagram
         Core->>MQTT: retained DeviceView (QoS 1)
         MQTT->>Node: DeviceView
         Node->>Node: local render
-    else 采集失败
-        Source-->>Agent: error
-        Agent->>MQTT: SourceHealth (QoS 1)
-        MQTT->>Core: SourceHealth
+    else Source 状态变化
+        Source-->>Agent: health / last success / error code
+        Agent->>MQTT: retained AgentState (QoS 1)
+        MQTT->>Core: AgentState
         Core->>Core: retain last value and mark stale when expired
     end
 ```
 
-Source 失败时，Agent 发布稳定的 SourceHealth 变化，不用空值覆盖最后成功观测。Core 根据最后成功时间和 `expires_at` 将相关视图区块标记为 stale。
+Agent 启动 Source 后，V1 Usage Source 必须先产生当前快照，再按自身 Adapter 选择事件订阅、上游队列或定时读取；Core 不轮询 Agent。Source 失败时，Agent 更新 retained AgentState 中对应 Observation 类型的 enabled、health、last success 和稳定错误码，不用空值覆盖最后成功观测。Core 根据最后成功时间和 `expires_at` 将相关视图区块标记为 stale。
+
+Agent 每次进程启动生成新的 `agent_epoch`。连接 MQTT 后，它必须先发布 retained AgentState 并收到 PUBACK，随后才启动 Source；每种 Observation 类型的 revision 在该 Epoch 内从 1 开始递增。Core 忽略不属于 AgentState 当前 Epoch 的 Observation，因此无需持久化 revision 计数器。参见 [ADR-0013](adr/0013-use-agent-epochs-for-observation-ordering.md)。
 
 ### 8.2 命令执行与去重
 
@@ -415,18 +415,11 @@ Agent 重启会清空去重表和未发布结果，Broker 重新投递的未过�
 - Agent 使用 MQTT LWT 标记意外离线，正常停机主动发布 offline；所有参与者重连时建立全新会话。
 - Core 重启后若没有持久状态，可以等待新 Observation；不得把旧 retained view 当作新观测来源。
 
-## 9. Core 数据存储
+## 9. V1 状态保存
 
-MQTT 是 Orbit 唯一必需的核心消息传输。Core 可以按数据语义连接 PostgreSQL 与 Redis，但两者不承载 Agent、Core 与 Node 之间的消息流，也不是同一个 Store 接口的可互换实现：
+MQTT 是 V1 唯一引入的运行时基础设施；不引入 PostgreSQL 或 Redis 客户端、连接配置、数据表或缓存。Core 从 YAML 加载只读的 Node Registration、投影策略和其他配置，canonical state 只保存在内存中。Retained AgentState、DeviceView 和 Presence 用于参与者重连后的状态恢复，不充当历史数据库。参见 [ADR-0010](adr/0010-keep-mqtt-as-core-transport.md)。
 
-| 存储 | V1 职责 |
-| --- | --- |
-| PostgreSQL | Node Registration、投影策略和其他耐久配置 |
-| Redis | 可选的外部数据 Adapter、缓存或限流，不属于 V1 核心事件链 |
-
-PostgreSQL 保留逻辑 `*_id` 并按真实查询建立唯一约束和索引；引用校验、更新与删除行为由应用事务保证，不创建物理外键。Redis 不作为 Orbit 历史数据库或 MQTT 的替代消息总线。参见 [ADR-0010](adr/0010-keep-mqtt-as-core-transport.md)。
-
-Agent 不持久化 Command 或 CommandResult。V1 的内存去重表有固定容量和 TTL，进程退出后直接丢弃。
+Agent 不持久化 Observation revision、Command 或 CommandResult。V1 的内存状态和去重表在进程退出后直接丢弃。
 
 ## 10. 配置与身份
 
@@ -435,7 +428,6 @@ Agent 不持久化 Command 或 CommandResult。V1 的内存去重表有固定容
 - 进程 identity、可选 Agent ID 覆盖值、Host Label 和 Node ID。
 - Node 的 `series_id`、`model_id`、`variant_id` 和 firmware version。
 - Broker 地址、`tls.enabled`、TLS CA 和客户端凭据引用；EMQX Cloud Serverless 使用 TLS，关闭开关时必须配置支持明文 MQTT 的其他 Broker。
-- PostgreSQL 与 Redis 连接引用及各自连接上限。
 - Source 的启用状态、采集周期和超时。
 - Capability 白名单及本地确认策略。
 - payload、字符串、队列和并发上限。
@@ -453,6 +445,8 @@ Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、�
 
 - `tls.enabled` 默认为 `true`，只控制 MQTT 使用 TLS 还是明文协议，不改变 Topic、消息类型、ACL 或 Capability 行为。客户端不得因证书校验或握手失败自动切换为明文；显式关闭时，操作者接受凭据和 payload 可被监听或篡改的风险。
 - 每个身份单独签发与轮换凭据，禁止固件共享全局凭据。
+- V1 凭据由操作者在 Broker 中手动创建；每个 Agent、Core 和 Node 使用独立用户名、密码与最小权限 ACL，不提供自助注册。
+- 轮换时创建新凭据、更新部署并重启参与者，确认新连接正常后撤销旧凭据。
 - Capability 由编译时或配置白名单注册；参数在执行前转换为内部类型。
 - `OpenUrl` 只允许受控 scheme 和可选 host allowlist。
 - Codex 标题、仓库名和任务摘要必须在 Source 或 Projector 中按明确策略脱敏。
@@ -503,7 +497,8 @@ Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、�
 
 ### 14.2 Agent 测试
 
-- 通过 Source 接口验证成功、失败、超时和调度取消。
+- 通过 Source 接口验证初始快照、事件或定时更新、失败、超时和取消。
+- 验证 AgentState 先于 Source 启动发布，旧 Agent Epoch 的 Observation 被拒绝，新 Epoch 的 revision 可从 1 开始。
 - 通过 Capability 接口验证参数校验与状态转换。
 - 有界内存去重表的容量、TTL、合并执行和结果缓存测试。
 - 同一进程内同 ID 同 payload 返回缓存结果；同 ID 不同 payload 确定性拒绝。
@@ -592,7 +587,6 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 
 | 决策 | 默认建议 | 决策时点 |
 | --- | --- | --- |
-| 设备凭据发放与轮换 | 每设备证书或独立凭据，禁止共享密钥 | 真机接入前 |
 | OLED 三槽内容与显示限制 | 单独确定字段映射、文案、字节上限、字体与截断规则 | OLED 显示实现前 |
 | 首个 TFT Model 与分辨率 | 归入 `display` Series，确定前不进入共享协议假设 | TFT 里程碑前 |
 | Codex 隐私策略 | 默认隐藏提示词、正文、路径；标题和仓库名需显式配置 | Codex 接入前 |
