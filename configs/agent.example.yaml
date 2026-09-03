@@ -28,6 +28,19 @@ sources:
     poll_interval: 30s
     timeout: 10s
     observation_ttl: 2m
+  codex:
+    enabled: false
+    codex_home: ""
+    poll_interval: 5s
+    observation_ttl: 15s
+    session_limit: 3
+    include_archived: false
+    ignore:
+      cwd: []
+      source: []
+    privacy:
+      include_display_name: false
+      include_project_name: false
 
 logging:
   level: info

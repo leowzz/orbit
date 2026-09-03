@@ -22,7 +22,8 @@ part of the runnable V1 path yet.
 - uv and Python 3.13 or newer for the firmware project.
 - A C++17 toolchain supported by PlatformIO.
 - For live operation: an MQTT broker reachable by all participants, credentials
-  and ACLs for the Agent, Core, and node, and a reachable Sub2API account.
+  and ACLs for the Agent, Core, and node; a reachable Sub2API account when that
+  source is enabled; and a local Codex home when Codex is enabled.
 - For hardware operation: a YD-ESP32-S3, an SSD1306 128x32 I2C OLED, and a
   USB data connection.
 
@@ -93,8 +94,10 @@ configs/secrets/sub2api-password
 
 Update the local YAML values for the selected broker and account:
 
-- agent.local.yaml: agent.id and agent.host_label, MQTT URL/TLS files,
-  and the Sub2API HTTPS endpoints and credential file paths.
+- agent.local.yaml: agent.id and agent.host_label, MQTT URL/TLS files, and the
+  settings for each enabled source. Sub2API uses HTTPS endpoints and secret
+  files; Codex uses codex_home (or the local CODEX_HOME/default) and its
+  polling, filtering, and privacy settings.
 - core.local.yaml: core.id, MQTT URL/TLS files, and projection_routes.
 
 The Core route key must equal the node configuration's node.id; its
@@ -104,9 +107,14 @@ example route therefore connects desk-oled-01 to agent-local.
 
 Host configuration is strict and is validated before a process connects. IDs
 must match [a-z0-9][a-z0-9_-]{0,63}. Agent host_label, Core routes, the usage
-policy, MQTT credentials, and all enabled Sub2API values are required.
-Durations use Go syntax such as 30s, 10s, and 2m; V1 requires USD and an
-observation TTL at least as long as the poll interval.
+policy, MQTT credentials, and all enabled source values are required. Durations
+use Go syntax such as 30s, 10s, and 2m; Sub2API requires USD and each source's
+observation TTL must be at least its poll interval.
+
+The Codex source reads local projection databases in read-only mode. Display
+names and project names are omitted unless their privacy flags are explicitly
+enabled. `include_display_name` is a deliberate opt-in because the value may
+come from a Codex title or first-user-message fallback.
 
 TLS is enabled by default. With TLS enabled, use an mqtts:// URL and provide
 the CA file; client certificate and key must be supplied together if the broker
@@ -144,7 +152,11 @@ Run these from the repository root. A passing check exits with status 0; any
 non-zero status is a failure even if some earlier packages passed.
 
 ~~~shell
-make test-go       # Go unit tests and the in-memory Sub2API -> DeviceView test
+make test-go       # Go unit tests and in-memory source/integration tests
+go test ./internal/agent ./internal/integration
+go test -race ./internal/agent ./internal/integration
+go test ./internal/sources/codex
+env ORBIT_CODEX_LIVE_TEST=1 go test ./internal/sources/codex -run '^TestLiveSmoke$' -count=1
 make test-node     # YAML tests and PlatformIO native firmware tests
 make proto-lint    # Buf schema lint; installs the pinned Buf if needed
 make generate      # regenerate Go bindings under gen/go/
@@ -153,9 +165,14 @@ make build-node    # generate nanopb and compile the YD-ESP32-S3 firmware
 make verify        # fmt-check, lint, all tests, protocol checks, and builds
 ~~~
 
-make test-go uses an in-memory MQTT broker and an httptest Sub2API server. It
-proves the software chain and formatting invariants, but does not use the
-local YAML, a real broker, real Sub2API credentials, or hardware.
+make test-go uses an in-memory MQTT broker, an httptest Sub2API server, and
+Codex fixtures. It proves source selection, initial AgentState ordering,
+independent revisions/health, and privacy bounds, but does not use the local
+YAML, a real broker, real Sub2API credentials, local Codex files, or hardware.
+
+The `TestLiveSmoke` command is a read-only local Codex adapter check. It passes
+only when the current user's Codex projections contain at least one session;
+it does not publish MQTT or expose session contents in the test output.
 
 make verify is accepted only when the command exits with status 0 after every
 stage (format check, Go vet/tests, Buf lint, node tests, and both builds). A
@@ -201,10 +218,8 @@ includes "usage observation published" from Agent, "usage observation
 accepted" and "device view published" from Core, and "node state accepted"
 after the node connects.
 
-After startup, the Agent polls Sub2API immediately and then at the configured
-interval (30 seconds in the example). A successful live chain has these
-retained messages in the broker, in addition to the non-retained usage
-observation:
+After startup, each enabled source is polled immediately and then at its own
+configured interval. A successful live chain has these messages in the broker:
 
 | Topic | Publisher | Consumer | Retained |
 | --- | --- | --- | --- |
@@ -218,6 +233,34 @@ allow each identity only the publish/subscribe rows it owns. See
 [docs/mqtt-topics.md](docs/mqtt-topics.md) and
 [docs/security.md](docs/security.md) for the contract and deployment
 security requirements.
+
+### Codex-only live acceptance
+
+1. Copy `configs/agent.example.yaml` to a local file, enable
+   `sources.codex`, set `sources.codex.codex_home` when the projections are not
+   under the default `~/.codex`, and disable `sources.sub2api`.
+2. Start the Agent with a reachable broker:
+
+~~~shell
+make dev-agent AGENT_CONFIG=configs/agent.codex.local.yaml
+~~~
+
+3. Subscribe with a credential authorized for the Agent topic subtree and
+   confirm the first message is retained AgentState with Codex health
+   `UNSPECIFIED`, followed by a non-retained Codex observation and a retained
+   healthy AgentState. Decode the Protobuf and verify metadata revision `1`,
+   the configured `agent_epoch`, and an `expires_at` after `produced_at`.
+4. With the default privacy settings, `display_name` and `project_name` must be
+   empty, so no title or first-user-message fallback appears. There is no
+   separate raw prompt/title field. If `include_display_name` is enabled, its
+   value may carry the Codex title or first-user-message fallback and must be
+   treated as sensitive opt-in data. Source JSON, full paths, rollout paths,
+   and PIDs never appear in the payload or logs. Logs contain source type,
+   aggregate counts, revision, bytes, and stable error codes only.
+
+The in-memory integration test is the deterministic Agent-side version of this
+sequence; the broker command additionally proves deployment TLS, credentials,
+ACLs, and MQTT delivery.
 
 ## Build, flash, and inspect the OLED node
 

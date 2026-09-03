@@ -10,6 +10,17 @@ import "orbit/v1/common.proto";
 enum ObservationType {
   OBSERVATION_TYPE_UNSPECIFIED = 0;
   OBSERVATION_TYPE_USAGE = 1;
+  OBSERVATION_TYPE_CODEX = 2;
+}
+
+enum CodexSessionStatus {
+  CODEX_SESSION_STATUS_UNSPECIFIED = 0;
+  CODEX_SESSION_STATUS_UNKNOWN = 1;
+  CODEX_SESSION_STATUS_RUNNING = 2;
+  CODEX_SESSION_STATUS_COMPLETED = 3;
+  CODEX_SESSION_STATUS_FAILED = 4;
+  CODEX_SESSION_STATUS_INTERRUPTED = 5;
+  CODEX_SESSION_STATUS_CANCELLED = 6;
 }
 
 message UsageObservation {
@@ -22,11 +33,29 @@ message UsageObservation {
   google.protobuf.Timestamp observed_at = 7;
 }
 
+message CodexSession {
+  string session_id = 1;
+  string display_name = 2;
+  string project_name = 3;
+  string model = 4;
+  CodexSessionStatus status = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  bool process_alive = 7;
+}
+
+message CodexObservation {
+  repeated CodexSession sessions = 1;
+  uint32 total_count = 2;
+  uint32 running_count = 3;
+  google.protobuf.Timestamp observed_at = 4;
+}
+
 message Observation {
   Metadata metadata = 1;
   string agent_epoch = 2;
 
   oneof payload {
     UsageObservation usage = 3;
+    CodexObservation codex = 4;
   }
 }

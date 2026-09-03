@@ -38,6 +38,107 @@ func TestLoadAgent(t *testing.T) {
 	}
 }
 
+func TestLoadAgentAcceptsCodexOnlyAndResolvesHome(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	if err := os.Mkdir(filepath.Join(dir, "codex-home"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := writeConfig(t, dir, "agent.yaml", validCodexOnlyYAML)
+
+	cfg, err := LoadAgent(path)
+	if err != nil {
+		t.Fatalf("LoadAgent() error = %v", err)
+	}
+	if !filepath.IsAbs(cfg.Sources.Codex.CodexHome) {
+		t.Fatalf("CodexHome = %q, want absolute path", cfg.Sources.Codex.CodexHome)
+	}
+	if want := filepath.Join(dir, "codex-home"); cfg.Sources.Codex.CodexHome != want {
+		t.Fatalf("CodexHome = %q, want %q", cfg.Sources.Codex.CodexHome, want)
+	}
+	if cfg.Sources.Codex.Privacy.IncludeDisplayName || cfg.Sources.Codex.Privacy.IncludeProjectName {
+		t.Fatal("Codex privacy fields must default to disabled")
+	}
+}
+
+func TestLoadAgentAcceptsSub2APIAndCodexTogether(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, true)
+	if err := os.Mkdir(filepath.Join(dir, "codex-home"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	codexYAML := `  codex:
+    enabled: true
+    codex_home: codex-home
+    poll_interval: 5s
+    observation_ttl: 15s
+    session_limit: 3
+    include_archived: false
+    ignore:
+      cwd: []
+      source: []
+    privacy:
+      include_display_name: false
+      include_project_name: false
+`
+	yaml := strings.Replace(validAgentYAML, "logging:\n", codexYAML+"logging:\n", 1)
+	path := writeConfig(t, dir, "agent.yaml", yaml)
+
+	cfg, err := LoadAgent(path)
+	if err != nil {
+		t.Fatalf("LoadAgent() error = %v", err)
+	}
+	if !cfg.Sources.Sub2API.Enabled || !cfg.Sources.Codex.Enabled {
+		t.Fatalf("sources = %#v, want Sub2API and Codex enabled", cfg.Sources)
+	}
+}
+
+func TestLoadAgentRejectsWhenAllSourcesAreDisabled(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, true)
+	yaml := strings.Replace(validAgentYAML, "  sub2api:\n    enabled: true", "  sub2api:\n    enabled: false", 1)
+	path := writeConfig(t, dir, "agent.yaml", yaml)
+
+	_, err := LoadAgent(path)
+	if err == nil || !strings.Contains(err.Error(), "at least one of sources.sub2api or sources.codex") {
+		t.Fatalf("LoadAgent() error = %v, want source requirement", err)
+	}
+}
+
+func TestLoadAgentRejectsInvalidCodexConfiguration(t *testing.T) {
+	tests := []struct {
+		name    string
+		replace string
+		with    string
+		want    string
+	}{
+		{name: "poll interval", replace: "poll_interval: 5s", with: "poll_interval: 0s", want: "poll_interval"},
+		{name: "observation ttl", replace: "observation_ttl: 15s", with: "observation_ttl: 1s", want: "observation_ttl"},
+		{name: "session limit too low", replace: "session_limit: 3", with: "session_limit: 0", want: "session_limit"},
+		{name: "session limit too high", replace: "session_limit: 3", with: "session_limit: 21", want: "session_limit"},
+		{name: "missing home", replace: "codex_home: codex-home", with: "codex_home: missing", want: "codex_home"},
+		{name: "empty cwd ignore", replace: "cwd: []", with: "cwd: [\"\"]", want: "ignore.cwd"},
+		{name: "empty source ignore", replace: "source: []", with: "source: [\"\"]", want: "ignore.source"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFixtureFiles(t, dir, false)
+			if err := os.Mkdir(filepath.Join(dir, "codex-home"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			yaml := strings.Replace(validCodexOnlyYAML, tt.replace, tt.with, 1)
+			path := writeConfig(t, dir, "agent.yaml", yaml)
+
+			_, err := LoadAgent(path)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("LoadAgent() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func TestLoadAgentRejectsInvalidConfiguration(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -166,6 +267,37 @@ sources:
     poll_interval: 30s
     timeout: 10s
     observation_ttl: 2m
+logging:
+  level: info
+`
+
+const validCodexOnlyYAML = `agent:
+  id: agent-local
+  host_label: Local workstation
+mqtt:
+  url: mqtts://broker.example.com:8883
+  tls:
+    enabled: true
+    ca_file: ca.pem
+    cert_file: client.pem
+    key_file: client.key
+  credentials:
+    username_file: mqtt-username
+    password_file: mqtt-password
+sources:
+  codex:
+    enabled: true
+    codex_home: codex-home
+    poll_interval: 5s
+    observation_ttl: 15s
+    session_limit: 3
+    include_archived: false
+    ignore:
+      cwd: []
+      source: []
+    privacy:
+      include_display_name: false
+      include_project_name: false
 logging:
   level: info
 `

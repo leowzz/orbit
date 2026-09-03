@@ -89,12 +89,20 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 	if strings.TrimSpace(cfg.Agent.HostLabel) == "" {
 		return errors.New("agent.host_label is required")
 	}
+	if !cfg.Sources.Sub2API.Enabled && !cfg.Sources.Codex.Enabled {
+		return errors.New("at least one of sources.sub2api or sources.codex must be enabled")
+	}
 	if err := cfg.MQTT.validate(baseDir); err != nil {
 		return fmt.Errorf("mqtt: %w", err)
 	}
 	if cfg.Sources.Sub2API.Enabled {
 		if err := cfg.Sources.Sub2API.validate(baseDir); err != nil {
 			return fmt.Errorf("sources.sub2api: %w", err)
+		}
+	}
+	if cfg.Sources.Codex.Enabled {
+		if err := cfg.Sources.Codex.validate(baseDir); err != nil {
+			return fmt.Errorf("sources.codex: %w", err)
 		}
 	}
 	return validateLogLevel(cfg.Logging.Level)
@@ -262,6 +270,30 @@ func (cfg *Sub2APIConfig) validate(baseDir string) error {
 	return nil
 }
 
+func (cfg *CodexConfig) validate(baseDir string) error {
+	if cfg.PollInterval.Duration <= 0 {
+		return errors.New("poll_interval must be positive")
+	}
+	if cfg.ObservationTTL.Duration <= 0 {
+		return errors.New("observation_ttl must be positive")
+	}
+	if cfg.ObservationTTL.Duration < cfg.PollInterval.Duration {
+		return errors.New("observation_ttl must be at least poll_interval")
+	}
+	if cfg.SessionLimit < 1 || cfg.SessionLimit > 20 {
+		return errors.New("session_limit must be between 1 and 20")
+	}
+	if cfg.CodexHome != "" {
+		if err := resolveReadableDir(baseDir, &cfg.CodexHome); err != nil {
+			return fmt.Errorf("codex_home: %w", err)
+		}
+	}
+	if err := validateNonEmptyStrings("ignore.cwd", cfg.Ignore.CWD); err != nil {
+		return err
+	}
+	return validateNonEmptyStrings("ignore.source", cfg.Ignore.Source)
+}
+
 func parseHTTPSURL(name, raw string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -309,6 +341,53 @@ func resolveReadableFile(baseDir string, path *string) error {
 	}
 	file.Close()
 	*path = abs
+	return nil
+}
+
+func resolveReadableDir(baseDir string, path *string) error {
+	if *path == "" {
+		return errors.New("path is required")
+	}
+	if *path == "~" || strings.HasPrefix(*path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		if *path == "~" {
+			*path = home
+		} else {
+			*path = filepath.Join(home, strings.TrimPrefix(*path, "~/"))
+		}
+	}
+	if !filepath.IsAbs(*path) {
+		*path = filepath.Join(baseDir, *path)
+	}
+	abs, err := filepath.Abs(*path)
+	if err != nil {
+		return err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return errors.New("must reference a directory")
+	}
+	directory, err := os.Open(abs)
+	if err != nil {
+		return err
+	}
+	directory.Close()
+	*path = abs
+	return nil
+}
+
+func validateNonEmptyStrings(field string, values []string) error {
+	for index, value := range values {
+		if strings.TrimSpace(value) == "" {
+			return fmt.Errorf("%s[%d] must not be empty", field, index)
+		}
+	}
 	return nil
 }
 

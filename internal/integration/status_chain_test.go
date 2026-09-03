@@ -15,6 +15,7 @@ import (
 	"orbit/internal/agent"
 	"orbit/internal/core"
 	"orbit/internal/mqtt"
+	"orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
 
 	"go.uber.org/zap"
@@ -85,7 +86,7 @@ func TestSub2APIToRetainedDeviceView(t *testing.T) {
 		Location:       location,
 		PollInterval:   time.Minute,
 		ObservationTTL: 2 * time.Minute,
-	}, source, broker, zap.NewNop())
+	}, agent.Sources{Usage: source}, broker, zap.NewNop())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,4 +230,127 @@ func topicMatches(filter, topic string) bool {
 		}
 	}
 	return true
+}
+
+type integrationCodexSource struct {
+	snapshot codex.Snapshot
+}
+
+func (source *integrationCodexSource) Fetch(context.Context) (codex.Snapshot, error) {
+	return source.snapshot, nil
+}
+
+func TestCodexAgentPublishesSanitizedObservation(t *testing.T) {
+	updated := time.Date(2026, 9, 3, 16, 0, 0, 0, time.UTC)
+	source := &integrationCodexSource{snapshot: codex.Snapshot{
+		Sessions: []codex.Session{{
+			ID:           "codex-session",
+			DisplayName:  "prompt-title-must-not-travel",
+			ProjectName:  "secret-repo",
+			Model:        "gpt-5.6-luna",
+			Status:       "running",
+			UpdatedAt:    updated,
+			ProcessAlive: true,
+		}},
+		TotalCount:   1,
+		RunningCount: 1,
+	}}
+	broker := newMemoryBroker()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events := make(chan mqtt.Message, 3)
+	stateTopic := "orbit/v1/agents/codex-agent/state"
+	observationTopic := "orbit/v1/agents/codex-agent/observations/codex"
+	if err := broker.Subscribe(ctx, stateTopic, func(_ context.Context, message mqtt.Message) error {
+		events <- message
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := broker.Subscribe(ctx, observationTopic, func(_ context.Context, message mqtt.Message) error {
+		events <- message
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	runner, err := agent.New(agent.Config{
+		AgentID:             "codex-agent",
+		AgentEpoch:          "codex-epoch",
+		AgentVersion:        "test",
+		HostLabel:           "integration test",
+		CodexPollInterval:   time.Hour,
+		CodexObservationTTL: 2 * time.Hour,
+	}, agent.Sources{Codex: source}, broker, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- runner.Run(ctx) }()
+	first := receiveMessage(t, events)
+	if first.Topic != stateTopic || !first.Retain {
+		t.Fatalf("first Agent message was not retained state: %+v", first)
+	}
+	var initial orbitv1.AgentState
+	if err := proto.Unmarshal(first.Payload, &initial); err != nil {
+		t.Fatal(err)
+	}
+	if len(initial.Sources) != 1 || initial.Sources[0].ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_CODEX || initial.Sources[0].Health != orbitv1.SourceHealth_SOURCE_HEALTH_UNSPECIFIED {
+		t.Fatalf("unexpected initial Codex state: %+v", &initial)
+	}
+
+	observationMessage := receiveMessage(t, events)
+	if observationMessage.Topic != observationTopic || observationMessage.Retain {
+		t.Fatalf("unexpected Codex observation delivery: %+v", observationMessage)
+	}
+	var observation orbitv1.Observation
+	if err := proto.Unmarshal(observationMessage.Payload, &observation); err != nil {
+		t.Fatal(err)
+	}
+	if observation.GetMetadata().GetRevision() != 1 || observation.GetAgentEpoch() != "codex-epoch" || observation.GetCodex().GetRunningCount() != 1 {
+		t.Fatalf("unexpected Codex observation: %+v", &observation)
+	}
+	if observation.GetMetadata().GetExpiresAt().AsTime().Sub(observation.GetMetadata().GetProducedAt().AsTime()) != 2*time.Hour {
+		t.Fatalf("unexpected Codex observation TTL: %+v", observation.GetMetadata())
+	}
+	session := observation.GetCodex().GetSessions()[0]
+	if session.GetDisplayName() != "" || session.GetProjectName() != "" || session.GetModel() != "gpt-5.6-luna" || session.GetStatus() != orbitv1.CodexSessionStatus_CODEX_SESSION_STATUS_RUNNING || !session.GetProcessAlive() || !session.GetUpdatedAt().AsTime().Equal(updated) {
+		t.Fatalf("unexpected sanitized Codex session: %+v", session)
+	}
+	for _, forbidden := range []string{"prompt-title-must-not-travel", "secret-repo"} {
+		if strings.Contains(string(observationMessage.Payload), forbidden) {
+			t.Fatalf("forbidden Codex value %q leaked into payload", forbidden)
+		}
+	}
+
+	finalStateMessage := receiveMessage(t, events)
+	if finalStateMessage.Topic != stateTopic || !finalStateMessage.Retain {
+		t.Fatalf("unexpected final AgentState delivery: %+v", finalStateMessage)
+	}
+	var finalState orbitv1.AgentState
+	if err := proto.Unmarshal(finalStateMessage.Payload, &finalState); err != nil {
+		t.Fatal(err)
+	}
+	if finalState.Sources[0].Health != orbitv1.SourceHealth_SOURCE_HEALTH_HEALTHY || finalState.Sources[0].LastSuccessAt == nil {
+		t.Fatalf("Codex source did not become healthy: %+v", finalState.Sources[0])
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("agent runner returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("agent runner did not stop")
+	}
+}
+
+func receiveMessage(t *testing.T, events <-chan mqtt.Message) mqtt.Message {
+	t.Helper()
+	select {
+	case message := <-events:
+		return message
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for Agent MQTT message")
+		return mqtt.Message{}
+	}
 }

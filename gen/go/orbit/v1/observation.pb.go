@@ -27,6 +27,7 @@ type ObservationType int32
 const (
 	ObservationType_OBSERVATION_TYPE_UNSPECIFIED ObservationType = 0
 	ObservationType_OBSERVATION_TYPE_USAGE       ObservationType = 1
+	ObservationType_OBSERVATION_TYPE_CODEX       ObservationType = 2
 )
 
 // Enum value maps for ObservationType.
@@ -34,10 +35,12 @@ var (
 	ObservationType_name = map[int32]string{
 		0: "OBSERVATION_TYPE_UNSPECIFIED",
 		1: "OBSERVATION_TYPE_USAGE",
+		2: "OBSERVATION_TYPE_CODEX",
 	}
 	ObservationType_value = map[string]int32{
 		"OBSERVATION_TYPE_UNSPECIFIED": 0,
 		"OBSERVATION_TYPE_USAGE":       1,
+		"OBSERVATION_TYPE_CODEX":       2,
 	}
 )
 
@@ -66,6 +69,67 @@ func (x ObservationType) Number() protoreflect.EnumNumber {
 // Deprecated: Use ObservationType.Descriptor instead.
 func (ObservationType) EnumDescriptor() ([]byte, []int) {
 	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{0}
+}
+
+type CodexSessionStatus int32
+
+const (
+	CodexSessionStatus_CODEX_SESSION_STATUS_UNSPECIFIED CodexSessionStatus = 0
+	CodexSessionStatus_CODEX_SESSION_STATUS_UNKNOWN     CodexSessionStatus = 1
+	CodexSessionStatus_CODEX_SESSION_STATUS_RUNNING     CodexSessionStatus = 2
+	CodexSessionStatus_CODEX_SESSION_STATUS_COMPLETED   CodexSessionStatus = 3
+	CodexSessionStatus_CODEX_SESSION_STATUS_FAILED      CodexSessionStatus = 4
+	CodexSessionStatus_CODEX_SESSION_STATUS_INTERRUPTED CodexSessionStatus = 5
+	CodexSessionStatus_CODEX_SESSION_STATUS_CANCELLED   CodexSessionStatus = 6
+)
+
+// Enum value maps for CodexSessionStatus.
+var (
+	CodexSessionStatus_name = map[int32]string{
+		0: "CODEX_SESSION_STATUS_UNSPECIFIED",
+		1: "CODEX_SESSION_STATUS_UNKNOWN",
+		2: "CODEX_SESSION_STATUS_RUNNING",
+		3: "CODEX_SESSION_STATUS_COMPLETED",
+		4: "CODEX_SESSION_STATUS_FAILED",
+		5: "CODEX_SESSION_STATUS_INTERRUPTED",
+		6: "CODEX_SESSION_STATUS_CANCELLED",
+	}
+	CodexSessionStatus_value = map[string]int32{
+		"CODEX_SESSION_STATUS_UNSPECIFIED": 0,
+		"CODEX_SESSION_STATUS_UNKNOWN":     1,
+		"CODEX_SESSION_STATUS_RUNNING":     2,
+		"CODEX_SESSION_STATUS_COMPLETED":   3,
+		"CODEX_SESSION_STATUS_FAILED":      4,
+		"CODEX_SESSION_STATUS_INTERRUPTED": 5,
+		"CODEX_SESSION_STATUS_CANCELLED":   6,
+	}
+)
+
+func (x CodexSessionStatus) Enum() *CodexSessionStatus {
+	p := new(CodexSessionStatus)
+	*p = x
+	return p
+}
+
+func (x CodexSessionStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CodexSessionStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_orbit_v1_observation_proto_enumTypes[1].Descriptor()
+}
+
+func (CodexSessionStatus) Type() protoreflect.EnumType {
+	return &file_orbit_v1_observation_proto_enumTypes[1]
+}
+
+func (x CodexSessionStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CodexSessionStatus.Descriptor instead.
+func (CodexSessionStatus) EnumDescriptor() ([]byte, []int) {
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{1}
 }
 
 type UsageObservation struct {
@@ -160,6 +224,166 @@ func (x *UsageObservation) GetObservedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+type CodexSession struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	ProjectName   string                 `protobuf:"bytes,3,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"`
+	Model         string                 `protobuf:"bytes,4,opt,name=model,proto3" json:"model,omitempty"`
+	Status        CodexSessionStatus     `protobuf:"varint,5,opt,name=status,proto3,enum=orbit.v1.CodexSessionStatus" json:"status,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	ProcessAlive  bool                   `protobuf:"varint,7,opt,name=process_alive,json=processAlive,proto3" json:"process_alive,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CodexSession) Reset() {
+	*x = CodexSession{}
+	mi := &file_orbit_v1_observation_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodexSession) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodexSession) ProtoMessage() {}
+
+func (x *CodexSession) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_observation_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodexSession.ProtoReflect.Descriptor instead.
+func (*CodexSession) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CodexSession) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *CodexSession) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *CodexSession) GetProjectName() string {
+	if x != nil {
+		return x.ProjectName
+	}
+	return ""
+}
+
+func (x *CodexSession) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *CodexSession) GetStatus() CodexSessionStatus {
+	if x != nil {
+		return x.Status
+	}
+	return CodexSessionStatus_CODEX_SESSION_STATUS_UNSPECIFIED
+}
+
+func (x *CodexSession) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *CodexSession) GetProcessAlive() bool {
+	if x != nil {
+		return x.ProcessAlive
+	}
+	return false
+}
+
+type CodexObservation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sessions      []*CodexSession        `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	TotalCount    uint32                 `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	RunningCount  uint32                 `protobuf:"varint,3,opt,name=running_count,json=runningCount,proto3" json:"running_count,omitempty"`
+	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CodexObservation) Reset() {
+	*x = CodexObservation{}
+	mi := &file_orbit_v1_observation_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodexObservation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodexObservation) ProtoMessage() {}
+
+func (x *CodexObservation) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_observation_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodexObservation.ProtoReflect.Descriptor instead.
+func (*CodexObservation) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CodexObservation) GetSessions() []*CodexSession {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+func (x *CodexObservation) GetTotalCount() uint32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+func (x *CodexObservation) GetRunningCount() uint32 {
+	if x != nil {
+		return x.RunningCount
+	}
+	return 0
+}
+
+func (x *CodexObservation) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
 type Observation struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Metadata   *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -167,6 +391,7 @@ type Observation struct {
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*Observation_Usage
+	//	*Observation_Codex
 	Payload       isObservation_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -174,7 +399,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_orbit_v1_observation_proto_msgTypes[1]
+	mi := &file_orbit_v1_observation_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -186,7 +411,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_observation_proto_msgTypes[1]
+	mi := &file_orbit_v1_observation_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -199,7 +424,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{1}
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Observation) GetMetadata() *Metadata {
@@ -232,6 +457,15 @@ func (x *Observation) GetUsage() *UsageObservation {
 	return nil
 }
 
+func (x *Observation) GetCodex() *CodexObservation {
+	if x != nil {
+		if x, ok := x.Payload.(*Observation_Codex); ok {
+			return x.Codex
+		}
+	}
+	return nil
+}
+
 type isObservation_Payload interface {
 	isObservation_Payload()
 }
@@ -240,7 +474,13 @@ type Observation_Usage struct {
 	Usage *UsageObservation `protobuf:"bytes,3,opt,name=usage,proto3,oneof"`
 }
 
+type Observation_Codex struct {
+	Codex *CodexObservation `protobuf:"bytes,4,opt,name=codex,proto3,oneof"`
+}
+
 func (*Observation_Usage) isObservation_Payload() {}
+
+func (*Observation_Codex) isObservation_Payload() {}
 
 var File_orbit_v1_observation_proto protoreflect.FileDescriptor
 
@@ -260,16 +500,43 @@ const file_orbit_v1_observation_proto_rawDesc = "" +
 	"observedAtB\x15\n" +
 	"\x13_actual_cost_microsB\x0e\n" +
 	"\f_token_countB\x06\n" +
-	"\x04_tpm\"\x9d\x01\n" +
+	"\x04_tpm\"\x9f\x02\n" +
+	"\fCodexSession\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12!\n" +
+	"\fproject_name\x18\x03 \x01(\tR\vprojectName\x12\x14\n" +
+	"\x05model\x18\x04 \x01(\tR\x05model\x124\n" +
+	"\x06status\x18\x05 \x01(\x0e2\x1c.orbit.v1.CodexSessionStatusR\x06status\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
+	"\rprocess_alive\x18\a \x01(\bR\fprocessAlive\"\xc9\x01\n" +
+	"\x10CodexObservation\x122\n" +
+	"\bsessions\x18\x01 \x03(\v2\x16.orbit.v1.CodexSessionR\bsessions\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\rR\n" +
+	"totalCount\x12#\n" +
+	"\rrunning_count\x18\x03 \x01(\rR\frunningCount\x12;\n" +
+	"\vobserved_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAt\"\xd1\x01\n" +
 	"\vObservation\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x1f\n" +
 	"\vagent_epoch\x18\x02 \x01(\tR\n" +
 	"agentEpoch\x122\n" +
-	"\x05usage\x18\x03 \x01(\v2\x1a.orbit.v1.UsageObservationH\x00R\x05usageB\t\n" +
-	"\apayload*O\n" +
+	"\x05usage\x18\x03 \x01(\v2\x1a.orbit.v1.UsageObservationH\x00R\x05usage\x122\n" +
+	"\x05codex\x18\x04 \x01(\v2\x1a.orbit.v1.CodexObservationH\x00R\x05codexB\t\n" +
+	"\apayload*k\n" +
 	"\x0fObservationType\x12 \n" +
 	"\x1cOBSERVATION_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16OBSERVATION_TYPE_USAGE\x10\x01B\x1fZ\x1dorbit/gen/go/orbit/v1;orbitv1b\x06proto3"
+	"\x16OBSERVATION_TYPE_USAGE\x10\x01\x12\x1a\n" +
+	"\x16OBSERVATION_TYPE_CODEX\x10\x02*\x8d\x02\n" +
+	"\x12CodexSessionStatus\x12$\n" +
+	" CODEX_SESSION_STATUS_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cCODEX_SESSION_STATUS_UNKNOWN\x10\x01\x12 \n" +
+	"\x1cCODEX_SESSION_STATUS_RUNNING\x10\x02\x12\"\n" +
+	"\x1eCODEX_SESSION_STATUS_COMPLETED\x10\x03\x12\x1f\n" +
+	"\x1bCODEX_SESSION_STATUS_FAILED\x10\x04\x12$\n" +
+	" CODEX_SESSION_STATUS_INTERRUPTED\x10\x05\x12\"\n" +
+	"\x1eCODEX_SESSION_STATUS_CANCELLED\x10\x06B\x1fZ\x1dorbit/gen/go/orbit/v1;orbitv1b\x06proto3"
 
 var (
 	file_orbit_v1_observation_proto_rawDescOnce sync.Once
@@ -283,26 +550,34 @@ func file_orbit_v1_observation_proto_rawDescGZIP() []byte {
 	return file_orbit_v1_observation_proto_rawDescData
 }
 
-var file_orbit_v1_observation_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_orbit_v1_observation_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_orbit_v1_observation_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_orbit_v1_observation_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_orbit_v1_observation_proto_goTypes = []any{
 	(ObservationType)(0),          // 0: orbit.v1.ObservationType
-	(*UsageObservation)(nil),      // 1: orbit.v1.UsageObservation
-	(*Observation)(nil),           // 2: orbit.v1.Observation
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
-	(*Metadata)(nil),              // 4: orbit.v1.Metadata
+	(CodexSessionStatus)(0),       // 1: orbit.v1.CodexSessionStatus
+	(*UsageObservation)(nil),      // 2: orbit.v1.UsageObservation
+	(*CodexSession)(nil),          // 3: orbit.v1.CodexSession
+	(*CodexObservation)(nil),      // 4: orbit.v1.CodexObservation
+	(*Observation)(nil),           // 5: orbit.v1.Observation
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*Metadata)(nil),              // 7: orbit.v1.Metadata
 }
 var file_orbit_v1_observation_proto_depIdxs = []int32{
-	3, // 0: orbit.v1.UsageObservation.window_start:type_name -> google.protobuf.Timestamp
-	3, // 1: orbit.v1.UsageObservation.window_end:type_name -> google.protobuf.Timestamp
-	3, // 2: orbit.v1.UsageObservation.observed_at:type_name -> google.protobuf.Timestamp
-	4, // 3: orbit.v1.Observation.metadata:type_name -> orbit.v1.Metadata
-	1, // 4: orbit.v1.Observation.usage:type_name -> orbit.v1.UsageObservation
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	6,  // 0: orbit.v1.UsageObservation.window_start:type_name -> google.protobuf.Timestamp
+	6,  // 1: orbit.v1.UsageObservation.window_end:type_name -> google.protobuf.Timestamp
+	6,  // 2: orbit.v1.UsageObservation.observed_at:type_name -> google.protobuf.Timestamp
+	1,  // 3: orbit.v1.CodexSession.status:type_name -> orbit.v1.CodexSessionStatus
+	6,  // 4: orbit.v1.CodexSession.updated_at:type_name -> google.protobuf.Timestamp
+	3,  // 5: orbit.v1.CodexObservation.sessions:type_name -> orbit.v1.CodexSession
+	6,  // 6: orbit.v1.CodexObservation.observed_at:type_name -> google.protobuf.Timestamp
+	7,  // 7: orbit.v1.Observation.metadata:type_name -> orbit.v1.Metadata
+	2,  // 8: orbit.v1.Observation.usage:type_name -> orbit.v1.UsageObservation
+	4,  // 9: orbit.v1.Observation.codex:type_name -> orbit.v1.CodexObservation
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_observation_proto_init() }
@@ -312,16 +587,17 @@ func file_orbit_v1_observation_proto_init() {
 	}
 	file_orbit_v1_common_proto_init()
 	file_orbit_v1_observation_proto_msgTypes[0].OneofWrappers = []any{}
-	file_orbit_v1_observation_proto_msgTypes[1].OneofWrappers = []any{
+	file_orbit_v1_observation_proto_msgTypes[3].OneofWrappers = []any{
 		(*Observation_Usage)(nil),
+		(*Observation_Codex)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orbit_v1_observation_proto_rawDesc), len(file_orbit_v1_observation_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   2,
+			NumEnums:      2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

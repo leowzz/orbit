@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -15,6 +14,7 @@ import (
 	"orbit/internal/config"
 	"orbit/internal/logging"
 	"orbit/internal/mqtt"
+	"orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
 
 	"go.uber.org/zap"
@@ -44,27 +44,56 @@ func main() {
 }
 
 func run(cfg *config.AgentConfig, logger *zap.Logger) error {
-	if !cfg.Sources.Sub2API.Enabled {
-		return errors.New("sources.sub2api.enabled must be true for the V1 Agent")
-	}
 	agentID, err := agent.ResolveID(cfg.Agent.ID)
 	if err != nil {
 		return err
 	}
-	location, err := time.LoadLocation(cfg.Sources.Sub2API.Timezone)
-	if err != nil {
-		return fmt.Errorf("load Sub2API timezone: %w", err)
+
+	var sources agent.Sources
+	runnerConfig := agent.Config{
+		AgentID:      agentID,
+		AgentEpoch:   agent.NewEpoch(),
+		AgentVersion: version,
+		HostLabel:    cfg.Agent.HostLabel,
 	}
-	source, err := sub2api.New(sub2api.Config{
-		LoginEndpoint:   cfg.Sources.Sub2API.LoginEndpoint,
-		RefreshEndpoint: cfg.Sources.Sub2API.RefreshEndpoint,
-		UsageEndpoint:   cfg.Sources.Sub2API.UsageEndpoint,
-		Email:           cfg.Sources.Sub2API.Credentials.Email,
-		Password:        cfg.Sources.Sub2API.Credentials.Password,
-		Timeout:         cfg.Sources.Sub2API.Timeout.Duration,
-	})
-	if err != nil {
-		return err
+	if cfg.Sources.Sub2API.Enabled {
+		location, locationErr := time.LoadLocation(cfg.Sources.Sub2API.Timezone)
+		if locationErr != nil {
+			return fmt.Errorf("load Sub2API timezone: %w", locationErr)
+		}
+		source, sourceErr := sub2api.New(sub2api.Config{
+			LoginEndpoint:   cfg.Sources.Sub2API.LoginEndpoint,
+			RefreshEndpoint: cfg.Sources.Sub2API.RefreshEndpoint,
+			UsageEndpoint:   cfg.Sources.Sub2API.UsageEndpoint,
+			Email:           cfg.Sources.Sub2API.Credentials.Email,
+			Password:        cfg.Sources.Sub2API.Credentials.Password,
+			Timeout:         cfg.Sources.Sub2API.Timeout.Duration,
+		})
+		if sourceErr != nil {
+			return sourceErr
+		}
+		sources.Usage = source
+		runnerConfig.CurrencyCode = cfg.Sources.Sub2API.CurrencyCode
+		runnerConfig.Location = location
+		runnerConfig.PollInterval = cfg.Sources.Sub2API.PollInterval.Duration
+		runnerConfig.ObservationTTL = cfg.Sources.Sub2API.ObservationTTL.Duration
+	}
+	if cfg.Sources.Codex.Enabled {
+		source, sourceErr := codex.New(codex.Config{
+			Home:            cfg.Sources.Codex.CodexHome,
+			Limit:           cfg.Sources.Codex.SessionLimit,
+			IncludeArchived: cfg.Sources.Codex.IncludeArchived,
+			IgnoreCWD:       cfg.Sources.Codex.Ignore.CWD,
+			IgnoreSource:    cfg.Sources.Codex.Ignore.Source,
+		})
+		if sourceErr != nil {
+			return sourceErr
+		}
+		sources.Codex = source
+		runnerConfig.CodexPollInterval = cfg.Sources.Codex.PollInterval.Duration
+		runnerConfig.CodexObservationTTL = cfg.Sources.Codex.ObservationTTL.Duration
+		runnerConfig.CodexDisplayName = cfg.Sources.Codex.Privacy.IncludeDisplayName
+		runnerConfig.CodexProjectName = cfg.Sources.Codex.Privacy.IncludeProjectName
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -86,16 +115,7 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 	}
 	defer disconnect(client, logger)
 
-	runner, err := agent.New(agent.Config{
-		AgentID:        agentID,
-		AgentEpoch:     agent.NewEpoch(),
-		AgentVersion:   version,
-		HostLabel:      cfg.Agent.HostLabel,
-		CurrencyCode:   cfg.Sources.Sub2API.CurrencyCode,
-		Location:       location,
-		PollInterval:   cfg.Sources.Sub2API.PollInterval.Duration,
-		ObservationTTL: cfg.Sources.Sub2API.ObservationTTL.Duration,
-	}, source, client, logger)
+	runner, err := agent.New(runnerConfig, sources, client, logger)
 	if err != nil {
 		return err
 	}
