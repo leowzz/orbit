@@ -32,6 +32,14 @@ _Avoid_: Backend, Cloud
 一次正在运行的 Core 部署；V1 只允许一个活动实例。
 _Avoid_: Core Node, Node
 
+**Core Epoch**:
+一次 Core 进程生命周期的随机身份，用于区分同一 Core ID 重启前后的 DeviceView 修订序列。
+_Avoid_: Core ID, MQTT Session
+
+**Core State**:
+Core 对当前 Epoch 和版本的 retained 自描述，不包含 Canonical State 或 DeviceView。
+_Avoid_: Canonical State, DeviceView, Presence
+
 **Node**:
 设备或软件客户端接入 Orbit 网络后承担的运行时角色。
 _Avoid_: Device Type, Firmware
@@ -39,10 +47,6 @@ _Avoid_: Device Type, Firmware
 **Node Instance**:
 拥有唯一 `node_id` 和凭据、实际接入 Orbit 的一个物理或软件 Node。物理 Node 还关联 Device Series、Device Model 和 Hardware Variant。
 _Avoid_: Device Instance, Client
-
-**Node Registration**:
-Core 持有的 Node Instance 权威记录，将 `node_id` 绑定到允许的产品身份和目标 Agent。
-_Avoid_: Node Hello, Self-Reported Identity
 
 **Device Series**:
 共享产品定位、交互范式和固件主干的一组物理设备。

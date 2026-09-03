@@ -48,6 +48,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 | --- | --- |
 | 后端与主机端 | Go |
 | V1 Agent 平台 | macOS；Windows 和 Linux 不在 V1 支持范围 |
+| V1 Core 平台 | 长期在线的 Linux 主机；开发时允许在 macOS 本地运行 |
 | 结构化协议 | Protocol Buffers，包名从 `orbit.v1` 开始 |
 | 消息传输 | EMQX Cloud Serverless 上的公网 MQTT 5；默认 TLS，允许配置显式关闭，禁止自动降级 |
 | 命令模型 | `oneof` 类型化动作，禁止 `google.protobuf.Any` 和任意命令字符串 |
@@ -101,8 +102,8 @@ Core 是状态与策略模块，接口是“接收观测或 Intent，发布 cano
 - 按生产者、修订号和过期时间维护最新 canonical state。
 - 应用优先级、隐私、过期与设备策略，生成已经格式化文本的 DeviceView。
 - 将受支持的 Intent 映射为类型化命令并路由到目标 Agent。
-- 维护 Node Registration，并隔离自报产品身份与注册信息不一致的 Node。
-- 从 YAML 加载 Node Registration、策略和配置，并在 V1 运行期间保持只读。
+- 通过 MQTT 发现 Node，并根据其协议自描述选择受支持的投影。
+- 从 YAML 加载投影策略和其他本地配置，并在 V1 运行期间保持只读。
 - 发布 retained view；V1 不持久化 canonical state 或历史。
 
 #### Orbit Node
@@ -112,7 +113,7 @@ Node 是设备接入 Orbit 网络后承担的运行时角色，不是硬件产�
 职责：
 
 - 使用设备独立凭据连接 MQTT。
-- 在 Hello 中报告 `node_id`、产品身份与固件版本，但不自行改变 Core 中的 Node Registration。
+- 通过 MQTT 报告 `node_id`、产品身份与固件版本，不依赖 Core 中的预注册记录。
 - 订阅自己的 retained view，并把 Core 生成的文本行映射到本地字体与像素位置。
 - 数据过期时保留最后可用内容，同时呈现 stale 状态。
 - 可选地将按钮、触摸等输入发布为有限的 Intent。
@@ -120,7 +121,7 @@ Node 是设备接入 Orbit 网络后承担的运行时角色，不是硬件产�
 
 ### 4.2 首版部署形态
 
-Agent 与 Core 从首版起作为两个独立 Go 进程运行，并通过 MQTT 使用正式消息契约通信。两者使用独立身份和凭据；不提供隐藏该边界的进程内传输模式。V1 只允许一个活动 Core。Core 是唯一可以构造和发布 DeviceView、生成和发布 Command 的参与者，Agent 不能让 Source 直接构造或发布设备视图。参见 [ADR-0001](adr/0001-separate-agent-and-core-processes.md) 和 [ADR-0002](adr/0002-core-owns-views-and-commands.md)。
+Agent 与 Core 从首版起作为两个独立 Go 进程运行，并通过 MQTT 使用正式消息契约通信。两者使用独立身份和凭据；不提供隐藏该边界的进程内传输模式。V1 正式环境在一台长期在线的 Linux 主机运行 Core，开发时允许在 macOS 本地运行；Core 只主动连接公网 MQTT，不开放公网入站服务。V1 只允许一个活动 Core，同一 `core_id` 派生相同 MQTT Client ID，由 Broker 在新连接建立时替换旧连接。Core 是唯一可以构造和发布 DeviceView、生成和发布 Command 的参与者，Agent 不能让 Source 直接构造或发布设备视图。参见 [ADR-0001](adr/0001-separate-agent-and-core-processes.md) 和 [ADR-0002](adr/0002-core-owns-views-and-commands.md)。
 
 ### 4.3 设备产品模型
 
@@ -237,6 +238,8 @@ Core 依据 `(producer_id, observation_type)` 识别逻辑对象。它先从 ret
 
 DeviceView 是 Core 面向某个 Node Instance 生成的型号专属文本视图。Core 负责数值格式化、单位、文本内容、顺序和有限强调语义；Node 不接收原始 Metric，也不接收云端像素帧。
 
+Core 每次启动生成随机 `core_epoch`，DeviceView 携带该值并在同一 Epoch 内使用递增 revision。Node 接受新 Core Epoch 的首个 View，随后拒绝该 Epoch 内较低的 revision。Core 不恢复上一 Epoch 的 canonical state，也不以旧 retained DeviceView 作为输入；只有 Core 启动后收到的新 Observation 才能产生新 Epoch 的 View。参见 [ADR-0015](adr/0015-core-processes-only-new-observations.md)。
+
 ```mermaid
 flowchart TD
     View[DeviceView]
@@ -331,6 +334,7 @@ orbit/v1/nodes/{node_id}/intents
 orbit/v1/nodes/{node_id}/presence
 orbit/v1/clients/{client_id}/intents
 orbit/v1/clients/{client_id}/intent-results
+orbit/v1/cores/{core_id}/state
 orbit/v1/cores/{core_id}/presence
 ```
 
@@ -340,20 +344,23 @@ orbit/v1/cores/{core_id}/presence
 | --- | --- | --- | --- |
 | Observation | 1 | 否 | Core 自行维护最新状态 |
 | AgentState | 1 | 是 | 当前 Agent Epoch、版本、Host Label、功能声明和各 Source 状态，不包含 Observation 值 |
+| CoreState | 1 | 是 | 当前 Core Epoch 和版本，不包含 canonical state |
 | DeviceView | 1 | 是 | Node 重连后立即获得最新视图 |
 | Command | 1 | 否 | 应用层时效与去重 |
 | CommandResult | 1 | 否 | 尽力发布最终结果，不保证跨重启恢复 |
 | Presence | 1 | 是 | 使用 LWT 发布离线状态 |
 | Intent | 1 | 否 | 必须带时效与 view revision |
 
-所有 payload 使用 `application/protobuf`。Agent、Core、Node 和管理客户端都使用 clean start（Session Expiry Interval 为 0），Broker 不为离线参与者排队 Observation、Intent、Command 或 Result。DeviceView、AgentState 和 Presence 通过 retained 消息恢复最新状态；其他消息允许在断线时丢失。MQTT 5 Message Expiry 只负责清理 Broker 中的 retained 或在途消息，不能替代 payload 内的业务时效字段。
+所有 payload 使用 `application/protobuf`。Agent、Core、Node 和管理客户端都使用 clean start（Session Expiry Interval 为 0），Broker 不为离线参与者排队 Observation、Intent、Command 或 Result。DeviceView、AgentState、CoreState 和 Presence 使用 retained，但这不表示 Core 会恢复 canonical state；其他消息允许在断线时丢失。
+
+Retained payload 同时携带业务时效 `fresh_until` 和更长的保存边界 `retain_until`。过了 freshness 仍可作为 stale 状态或最后画面，过了 retention 则由对应的 MQTT 5 Message Expiry 清理；具体时长在部署配置阶段决定。删除参与者时，操作者必须撤销凭据并向其 retained Topics 发布零字节 tombstone。MQTT Message Expiry 只负责 Broker 清理，不能替代 payload 内的业务时效字段。
 
 ### 7.3 ACL 原则
 
 | 身份 | 可订阅 | 可发布 |
 | --- | --- | --- |
 | Agent `{agent_id}` | 自己的 commands | 自己的 observations、results、presence |
-| Core | 全部 observations、intents、results、presence | views、commands、requester-scoped intent results、自己的 presence、必要的 canonical state |
+| Core | 全部 observations、participant state、intents、results、presence | views、commands、requester-scoped intent results、自己的 state 与 presence |
 | Node `{node_id}` | 自己的 view | 自己的 intents、presence |
 | 管理客户端 `{client_id}` | 明确授权的 view、自己的 intent results | 自己的 intents |
 
@@ -413,11 +420,11 @@ Agent 重启会清空去重表和未发布结果，Broker 重新投递的未过�
 - DeviceView 携带绝对 `fresh_until`；Node 在启动联网后先通过 SNTP 同步时间，超过该时间后继续显示最后内容但呈现 stale 标识。
 - Node 时钟尚未可信时不得把 retained DeviceView 标为 fresh，而是保留内容并显示 stale。
 - Agent 使用 MQTT LWT 标记意外离线，正常停机主动发布 offline；所有参与者重连时建立全新会话。
-- Core 重启后若没有持久状态，可以等待新 Observation；不得把旧 retained view 当作新观测来源。
+- Core 每次启动发布 retained CoreState 中的新 `core_epoch`，清空内存状态，只处理启动后抵达的新 Observation；不请求 Agent 重发旧值，也不把旧 retained view 当作新观测来源。
 
 ## 9. V1 状态保存
 
-MQTT 是 V1 唯一引入的运行时基础设施；不引入 PostgreSQL 或 Redis 客户端、连接配置、数据表或缓存。Core 从 YAML 加载只读的 Node Registration、投影策略和其他配置，canonical state 只保存在内存中。Retained AgentState、DeviceView 和 Presence 用于参与者重连后的状态恢复，不充当历史数据库。参见 [ADR-0010](adr/0010-keep-mqtt-as-core-transport.md)。
+MQTT 是 V1 唯一引入的运行时基础设施；不引入 PostgreSQL 或 Redis 客户端、连接配置、数据表或缓存。Core 从 YAML 加载只读的投影策略和其他本地配置，canonical state 只保存在内存中。Retained AgentState、CoreState、DeviceView 和 Presence 只表达有限的当前状态或最后画面，不充当历史数据库，也不用于恢复 Core 的 canonical state。参见 [ADR-0010](adr/0010-keep-mqtt-as-core-transport.md)。
 
 Agent 不持久化 Observation revision、Command 或 CommandResult。V1 的内存状态和去重表在进程退出后直接丢弃。
 
@@ -437,9 +444,7 @@ Agent ID 标识 Agent 运行实例，通常因一台机器只运行一个 Agent 
 
 MQTT 用户名和密钥由部署配置显式提供，不从 `agent_id` 推导，也不要求用户名文本包含 Agent ID；但 Broker ACL 必须把该凭据限制在一个 Agent ID 的 Topic 子树。MQTT Client ID 从 Agent ID 稳定派生，同一 Agent ID 的第二个连接会替换旧连接。
 
-Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、目标 `agent_id` 和启用状态。Node Hello 中的自报值只用于兼容性校验和诊断，不得直接覆盖注册信息。参见 [ADR-0005](adr/0005-core-owns-node-registration.md)。
-
-启动时必须验证 ID 格式、Topic 可用性、TLS 配置和重复注册；配置错误应快速失败，不以降级明文连接继续运行。
+启动时必须验证 ID 格式、Topic 可用性、TLS 配置和本地重复身份；配置错误应快速失败，不以降级明文连接继续运行。
 
 ## 11. 安全与隐私
 
@@ -509,7 +514,7 @@ Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、�
 
 - Observation 乱序、重复、过期和生产者重启场景。
 - 隐私字段永远不进入 DeviceView 的契约测试。
-- 不同设备策略生成受尺寸约束的视图。
+- 不同设备自描述和投影策略生成受尺寸约束的视图。
 - stale 传播和 Intent 的 view revision 校验。
 
 ### 14.4 集成与硬件验收
@@ -573,7 +578,7 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 
 - Agent 能以 Protobuf 发布真实、脱敏的 UsageObservation，Core 能发布 retained DeviceView。
 - OLED 节点重连后立即渲染最新视图，并在过期后保留内容且标记 stale。
-- Node 能上报 `display` / `oled-128x32` / `yd-esp32-s3`，Core 能依据 Node Registration 隔离不匹配身份并拒绝不兼容投影。
+- Node 能通过 MQTT 上报 `display` / `oled-128x32` / `yd-esp32-s3`，Core 能拒绝不支持的产品身份且无需预注册记录。
 - M0 中管理 CLI 能发送 `PingAgent` Intent，Core 能生成类型化命令，并返回关联状态和最终结果；V1 不要求产品动作。
 - 同一 Agent 进程内的重复、过期、畸形、错目标、未授权和不支持命令被确定性处理；断线或跨重启允许 Command 丢失或重复。
 - 公网 MQTT 默认验证 TLS；显式关闭时不发生自动降级，且 Agent、Core、Node 的凭据与 ACL 相互隔离。
