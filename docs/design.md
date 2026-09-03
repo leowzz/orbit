@@ -51,6 +51,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 | V1 Core 平台 | 长期在线的 Linux 主机；开发时允许在 macOS 本地运行 |
 | 结构化协议 | Protocol Buffers，包名从 `orbit.v1` 开始 |
 | 消息传输 | EMQX Cloud Serverless 上的公网 MQTT 5；默认 TLS，允许配置显式关闭，禁止自动降级 |
+| 网络边界 | 一个专用 Broker 部署对应一个 Orbit Network；V1 不增加 `tenant_id` 或 `network_id` |
 | 命令模型 | `oneof` 类型化动作，禁止 `google.protobuf.Any` 和任意命令字符串 |
 | 设备数据 | 只发送语义视图，不发送提示词、正文、终端输出、凭据或任意本地路径 |
 | 投递语义 | MQTT QoS 1；同一进程内按 `command_id` 做有界去重，跨重启允许 Command 丢失或重复 |
@@ -113,7 +114,7 @@ Node 是设备接入 Orbit 网络后承担的运行时角色，不是硬件产�
 职责：
 
 - 使用设备独立凭据连接 MQTT。
-- 通过 MQTT 报告 `node_id`、产品身份与固件版本，不依赖 Core 中的预注册记录。
+- 发布 retained NodeState，报告 `node_id`、产品身份、固件版本和唯一 `target_agent_id`，不依赖 Core 中的预注册记录。
 - 订阅自己的 retained view，并把 Core 生成的文本行映射到本地字体与像素位置。
 - 数据过期时保留最后可用内容，同时呈现 stale 状态。
 - 可选地将按钮、触摸等输入发布为有限的 Intent。
@@ -329,6 +330,7 @@ orbit/v1/agents/{agent_id}/state
 orbit/v1/agents/{agent_id}/commands
 orbit/v1/agents/{agent_id}/results
 orbit/v1/agents/{agent_id}/presence
+orbit/v1/nodes/{node_id}/state
 orbit/v1/nodes/{node_id}/view
 orbit/v1/nodes/{node_id}/intents
 orbit/v1/nodes/{node_id}/presence
@@ -345,6 +347,7 @@ orbit/v1/cores/{core_id}/presence
 | Observation | 1 | 否 | Core 自行维护最新状态 |
 | AgentState | 1 | 是 | 当前 Agent Epoch、版本、Host Label、功能声明和各 Source 状态，不包含 Observation 值 |
 | CoreState | 1 | 是 | 当前 Core Epoch 和版本，不包含 canonical state |
+| NodeState | 1 | 是 | Node ID、Series、Model、Variant、固件版本和唯一目标 Agent |
 | DeviceView | 1 | 是 | Node 重连后立即获得最新视图 |
 | Command | 1 | 否 | 应用层时效与去重 |
 | CommandResult | 1 | 否 | 尽力发布最终结果，不保证跨重启恢复 |
@@ -359,12 +362,12 @@ Retained payload 同时携带业务时效 `fresh_until` 和更长的保存边界
 
 | 身份 | 可订阅 | 可发布 |
 | --- | --- | --- |
-| Agent `{agent_id}` | 自己的 commands | 自己的 observations、results、presence |
-| Core | 全部 observations、participant state、intents、results、presence | views、commands、requester-scoped intent results、自己的 state 与 presence |
-| Node `{node_id}` | 自己的 view | 自己的 intents、presence |
+| Agent `{agent_id}` | 自己的 commands | 自己的 observations、state、results、presence |
+| Core | `orbit/#` | views、commands、requester-scoped intent results、自己的 state 与 presence |
+| Node `{node_id}` | 自己的 view、Core state | 自己的 state、intents、presence |
 | 管理客户端 `{client_id}` | 明确授权的 view、自己的 intent results | 自己的 intents |
 
-Broker ACL 负责 Topic 级权限，应用层仍必须核验消息中的 producer、target 和 Node identity，形成纵深校验。
+Core 使用单个 `orbit/#` 通配订阅接收 Orbit Network 内的消息。Broker 负责凭据认证和 Topic ACL；普通 MQTT payload 不携带发布者用户名，因此 Core 核验 Topic 与 payload 中的 producer、target 和 identity 是否一致，并拒绝未知消息类型或不支持的产品身份。
 
 ## 8. 关键运行时流程
 
@@ -417,6 +420,7 @@ Agent 重启会清空去重表和未发布结果，Broker 重新投递的未过�
 
 - Node 重连后接收 retained DeviceView。
 - Node 比较修订号，拒绝状态回退。
+- Node 收到新 CoreState 时，如果当前 DeviceView 属于旧 `core_epoch`，立即将其标记为 stale 并保留文本，直到新事件产生当前 Epoch 的 DeviceView。
 - DeviceView 携带绝对 `fresh_until`；Node 在启动联网后先通过 SNTP 同步时间，超过该时间后继续显示最后内容但呈现 stale 标识。
 - Node 时钟尚未可信时不得把 retained DeviceView 标为 fresh，而是保留内容并显示 stale。
 - Agent 使用 MQTT LWT 标记意外离线，正常停机主动发布 offline；所有参与者重连时建立全新会话。
@@ -440,6 +444,8 @@ Agent 不持久化 Observation revision、Command 或 CommandResult。V1 的内�
 - payload、字符串、队列和并发上限。
 - 日志级别，不包含协议正文的默认脱敏规则。
 
+一个 Broker 部署只承载一个 Orbit Network。V1 不配置 `tenant_id`、`network_id` 或 Core 成员表；Broker 中拥有独立凭据和正确 Topic ACL 的参与者即为该网络成员。
+
 Agent ID 标识 Agent 运行实例，通常因一台机器只运行一个 Agent 而与机器形成一对一关系，但这不是领域约束。部署时必须提供完整 MQTT 连接配置，并可显式填写 `agent_id`；该值存在时是权威身份。未填写时，macOS Agent 使用 `agt_` 加 SHA-256 前 128 位十六进制文本作为 ID，哈希输入为 `orbit.agent.v1` 命名空间与规范化 Platform UUID，原始 UUID 不得出现在线路、日志或 Broker 用户名中。手动与自动 ID 都必须匹配 `[a-z0-9][a-z0-9_-]{0,63}`，否则启动失败；同一机器运行多个 Agent 时必须为每个实例配置不同 ID。Host Label 是独立的可变显示字段，不参与路由或授权。参见 [ADR-0012](adr/0012-agent-id-identifies-agent-instance.md)。
 
 MQTT 用户名和密钥由部署配置显式提供，不从 `agent_id` 推导，也不要求用户名文本包含 Agent ID；但 Broker ACL 必须把该凭据限制在一个 Agent ID 的 Topic 子树。MQTT Client ID 从 Agent ID 稳定派生，同一 Agent ID 的第二个连接会替换旧连接。
@@ -451,6 +457,7 @@ MQTT 用户名和密钥由部署配置显式提供，不从 `agent_id` 推导，
 - `tls.enabled` 默认为 `true`，只控制 MQTT 使用 TLS 还是明文协议，不改变 Topic、消息类型、ACL 或 Capability 行为。客户端不得因证书校验或握手失败自动切换为明文；显式关闭时，操作者接受凭据和 payload 可被监听或篡改的风险。
 - 每个身份单独签发与轮换凭据，禁止固件共享全局凭据。
 - V1 凭据由操作者在 Broker 中手动创建；每个 Agent、Core 和 Node 使用独立用户名、密码与最小权限 ACL，不提供自助注册。
+- V1 使用专用 Broker 部署作为网络和准入边界，不与其他 Orbit Network 共用同一 Topic 空间。
 - 轮换时创建新凭据、更新部署并重启参与者，确认新连接正常后撤销旧凭据。
 - Capability 由编译时或配置白名单注册；参数在执行前转换为内部类型。
 - `OpenUrl` 只允许受控 scheme 和可选 host allowlist。
@@ -578,7 +585,7 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 
 - Agent 能以 Protobuf 发布真实、脱敏的 UsageObservation，Core 能发布 retained DeviceView。
 - OLED 节点重连后立即渲染最新视图，并在过期后保留内容且标记 stale。
-- Node 能通过 MQTT 上报 `display` / `oled-128x32` / `yd-esp32-s3`，Core 能拒绝不支持的产品身份且无需预注册记录。
+- Node 能通过 retained NodeState 上报 `display` / `oled-128x32` / `yd-esp32-s3` 和目标 Agent，Core 通过 `orbit/#` 发现它、拒绝不支持的产品身份并在无需预注册记录的情况下生成视图。
 - M0 中管理 CLI 能发送 `PingAgent` Intent，Core 能生成类型化命令，并返回关联状态和最终结果；V1 不要求产品动作。
 - 同一 Agent 进程内的重复、过期、畸形、错目标、未授权和不支持命令被确定性处理；断线或跨重启允许 Command 丢失或重复。
 - 公网 MQTT 默认验证 TLS；显式关闭时不发生自动降级，且 Agent、Core、Node 的凭据与 ACL 相互隔离。

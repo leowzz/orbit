@@ -40,6 +40,10 @@ _Avoid_: Core ID, MQTT Session
 Core 对当前 Epoch 和版本的 retained 自描述，不包含 Canonical State 或 DeviceView。
 _Avoid_: Canonical State, DeviceView, Presence
 
+**Orbit Network**:
+共享一个专用 MQTT Broker 部署和 ACL 边界的一组 Core、Agent 与 Node；V1 不在协议中增加租户或网络标识。
+_Avoid_: Tenant, MQTT Topic Prefix
+
 **Node**:
 设备或软件客户端接入 Orbit 网络后承担的运行时角色。
 _Avoid_: Device Type, Firmware
@@ -47,6 +51,10 @@ _Avoid_: Device Type, Firmware
 **Node Instance**:
 拥有唯一 `node_id` 和凭据、实际接入 Orbit 的一个物理或软件 Node。物理 Node 还关联 Device Series、Device Model 和 Hardware Variant。
 _Avoid_: Device Instance, Client
+
+**Node State**:
+Node 对产品身份、固件版本和唯一目标 Agent 的 retained 自描述，是 Core 通过 MQTT 发现 Node 的依据。
+_Avoid_: Node Registration, Hello
 
 **Device Series**:
 共享产品定位、交互范式和固件主干的一组物理设备。

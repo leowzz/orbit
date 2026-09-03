@@ -4,4 +4,4 @@ status: accepted
 
 # Discover V1 Nodes over MQTT
 
-V1 has no Node Registration store or pre-registration workflow. Nodes and Core communicate through MQTT, and Core discovers a Node from protocol messages authenticated by that Node's Broker credentials. The exact self-description and Agent binding fields remain part of the MQTT protocol design rather than an external registration database or configuration file.
+V1 has no Node Registration store or pre-registration workflow. A Node publishes retained NodeState containing its `node_id`, Series, Model, Variant, firmware version, and one `target_agent_id`; Core subscribes to `orbit/#` and discovers the Node from that message. Broker credentials and ACL establish membership and Topic ownership, while Core validates Topic/payload consistency and supports only known product identities.
