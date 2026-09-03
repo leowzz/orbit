@@ -1,0 +1,21 @@
+.DS_Store
+.idea/
+.vscode/
+
+# Build and test output
+bin/
+build/
+coverage.out
+
+# Python and PlatformIO tooling
+.venv/
+__pycache__/
+.pytest_cache/
+.pio/
+
+# Local configuration and credentials
+configs/*.local.yaml
+certs/
+*.key
+*.pem
+
