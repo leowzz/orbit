@@ -5,12 +5,12 @@ Orbit 将可信主机的状态与显式能力连接到个人设备。本文只�
 ## Language
 
 **Agent**:
-运行在可信主机上的参与者，代表该主机发布观测并执行明确允许的命令。
+运行在可信主机上的 Orbit 实例，通常一台机器只运行一个；它可以承载多个 Source 和 Capability。
 _Avoid_: Collector, Host Service
 
 **Agent ID**:
-代表运行 Agent 的物理机器的规范身份，用于消息路由、授权和命令寻址；系统重装或双系统不改变它，更换主板则形成新身份。
-_Avoid_: Host ID, Host Label, Agent Installation ID, MQTT Client ID
+Agent 实例的规范身份，用于消息路由、授权和命令寻址；它可以由部署显式指定，也可以从所在机器的稳定信息生成默认值。
+_Avoid_: Machine ID, Host ID, Host Label, MQTT Client ID
 
 **Host Label**:
 供人辨认 Agent 所在主机的可变显示名称，不参与路由、授权或唯一性判断。
@@ -53,16 +53,8 @@ Source 在特定时刻观察到的领域事实，不包含设备布局。
 _Avoid_: Device State, View
 
 **Source**:
-向 Orbit 提供特定类型 Observation 的命名事实来源。
-_Avoid_: Device, Projector
-
-**Host Source**:
-由 Agent 在可信主机本地读取的 Source。
-_Avoid_: Backend Source, Capability
-
-**Backend Source**:
-在后台产生 Observation 并通过 MQTT 发布给 Core 的 Source。
-_Avoid_: Host Source, Agent
+Agent 承载的一类数据获取功能，向 Orbit 提供一种 Observation；它不是独立的网络参与者或 Command Capability。
+_Avoid_: Backend Source, MQTT Producer, Capability
 
 **Capability**:
 Agent 明确注册、可由有效 Command 调用的一种受限动作能力。
@@ -76,9 +68,9 @@ _Avoid_: DeviceView, History
 Core 为一个 Node Instance 投影出的设备型号专属视图，包含已经格式化的文本与状态，由该 Node 映射到本地像素。
 _Avoid_: Frame, Observation
 
-**Text Line**:
-Core 为指定 Device Model 生成的一行最终显示文本及其有限强调语义。
-_Avoid_: Metric, Pixel Frame
+**Display Slot**:
+DeviceView 中由 Device Model 定义位置的一块最终显示内容；OLED 128x32 固定为 Primary、Secondary 和 Footer 三个槽位。
+_Avoid_: Arbitrary Line, Metric, Pixel Frame
 
 **Intent**:
 Node 基于当前 DeviceView 表达的有限用户意图，尚不是发往主机的具体命令。

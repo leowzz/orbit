@@ -22,7 +22,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 4. Node 或可信客户端发送受限 Intent，由 Core 生成类型化命令。
 5. Agent 尝试执行短生命周期、可重复的 Capability，并在进程仍存活时返回可关联结果。
 
-工程验证里程碑 M0 可以使用合成 Observation 和测试 Capability；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，在 OLED 128x32 上展示用量，并由管理 CLI 发起一次类型化的 RefreshUsage Intent。Codex 集成和 OLED 输入不属于 V1。
+工程验证里程碑 M0 可以使用合成 Observation 和无副作用的 `PingAgent` Capability 验证完整消息闭环；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，并在 OLED 128x32 上展示用量。V1 产品范围不包含 Intent 或真实动作能力；Codex 集成和 OLED 输入也不属于 V1。
 
 ### 2.1 设计目标
 
@@ -52,14 +52,13 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 | 命令模型 | `oneof` 类型化动作，禁止 `google.protobuf.Any` 和任意命令字符串 |
 | 设备数据 | 只发送语义视图，不发送提示词、正文、终端输出、凭据或任意本地路径 |
 | 投递语义 | MQTT QoS 1；同一进程内按 `command_id` 做有界去重，跨重启允许 Command 丢失或重复 |
-| 身份 | 每个 Agent、Core、Node 使用独立身份和最小权限 ACL；Agent ID 代表物理机器，Host Label 只供人辨认 |
+| 身份 | 每个 Agent、Core、Node 使用独立身份和最小权限 ACL；Agent ID 标识运行实例，可由部署显式指定，未指定时从本机稳定信息生成，Host Label 只供人辨认 |
 
 ## 4. 总体结构
 
 ```mermaid
 flowchart LR
-    Sources[Codex / OS]
-    BackendSources[Sub2API / backend integrations]
+    Sources[Sub2API / Codex / OS]
     Agent[Orbit Agent<br/>trusted host]
     Core[Orbit Core<br/>policy + projection]
     State[(latest canonical state<br/>optional persistence)]
@@ -67,7 +66,6 @@ flowchart LR
     Display[display + input]
 
     Sources -->|source adapters| Agent
-    BackendSources -->|observations<br/>MQTT QoS 1| Core
     Agent -->|observations<br/>QoS 1| Core
     Core -->|commands<br/>QoS 1| Agent
     Agent -->|command results<br/>QoS 1| Core
@@ -81,11 +79,11 @@ flowchart LR
 
 #### Orbit Agent
 
-Agent 是可信主机上的深模块。外部接口是“注册 Host Source、注册能力、启动/停止”；采集调度、连接恢复、命令校验、去重、执行和结果发布隐藏在实现内部。
+Agent 是运行在可信主机上的深模块实例，通常一台机器只运行一个。外部接口是“注册 Source、注册 Capability、启动/停止”；数据获取、连接恢复、命令校验、去重、执行和结果发布隐藏在实现内部。
 
 职责：
 
-- 按自身触发策略采集已注册 Host Source。
+- 启动并管理多个已注册 Source；各 Source 自行封装本机读取、远端 API 或事件订阅方式。
 - 发布观测值、Source 健康状态和 Agent presence。
 - 接收只发往自身 `agent_id` 的命令。
 - 在执行前完成解码、版本、目标、时效、授权上下文和参数校验。
@@ -98,7 +96,7 @@ Core 是状态与策略模块，接口是“接收观测或 Intent，发布 cano
 
 职责：
 
-- 通过 MQTT 接收 Agent 发布的 Host Observation 和受信 Backend Source 发布的 Observation。
+- 通过 MQTT 接收 Agent 发布的 Observation；Source 不以独立身份接入 MQTT。
 - 按生产者、修订号和过期时间维护最新 canonical state。
 - 应用优先级、隐私、过期与设备策略，生成已经格式化文本的 DeviceView。
 - 将受支持的 Intent 映射为类型化命令并路由到目标 Agent。
@@ -117,7 +115,7 @@ Node 是设备接入 Orbit 网络后承担的运行时角色，不是硬件产�
 - 订阅自己的 retained view，并把 Core 生成的文本行映射到本地字体与像素位置。
 - 数据过期时保留最后可用内容，同时呈现 stale 状态。
 - 可选地将按钮、触摸等输入发布为有限的 Intent。
-- 呈现命令已接收、执行中、成功、失败或结果未知状态。
+- 在支持输入的后续版本中呈现 Core 投影的发起者专属命令反馈；V1 OLED 不呈现产品命令状态。
 
 ### 4.2 首版部署形态
 
@@ -174,8 +172,8 @@ Agent 与 Core 从首版起作为两个独立 Go 进程运行，并通过 MQTT �
 以下接口用于说明模块形状，最终命名可随 Go 包结构微调。
 
 ```go
-type HostSource interface {
-	Observe(ctx context.Context) (ObservationPayload, error)
+type Source interface {
+	Run(ctx context.Context, emit func(ObservationPayload) error) error
 }
 
 type Capability interface {
@@ -189,10 +187,11 @@ type Projector interface {
 
 接口约束：
 
-- `HostSource` 返回领域观测，不直接发布 MQTT 消息；Agent 负责封装并发布 MQTT Observation。
+- `Source` 通过 Agent 提供的回调提交领域观测，不直接发布 MQTT 消息；无论数据来自本机、远端 API 还是事件订阅，都由承载它的 Agent 使用自身身份封装并发布 MQTT Observation。
 - `Capability` 只接收 Agent 已验证并转换后的类型化动作。
 - `Projector` 是隐私与设备投影的唯一入口；调用者不能绕过它发布 DeviceView。
-- V1 的 Host Source 使用可取消的本地采集接口；Backend Source 直接向 MQTT 发布类型化 Observation，两者不强行共享同一个接口。
+- Source 使用可取消的长运行接口，并全部运行在 Agent 内；数据获取是 Agent 职责，不是由 Command 调用的 Capability。不存在独立的 Backend Source 参与者或 `source_id` MQTT 身份。
+- 同一 Agent 不允许注册两个产生相同 Observation 类型的 Source；V1 的逻辑 Observation 流只由 `(agent_id, observation_type)` 标识。
 - MQTT、Codex、Sub2API 和具体存储实现是各自 seam 上的 Adapter。
 - 只有确实存在第二种实现或测试替身时才抽取额外接口。
 
@@ -232,9 +231,9 @@ V1 的 `UsageObservation` 只包含当前产品需要的字段：
 | `tpm` | 采集时的每分钟 Token 速率 | `uint64` |
 | `observed_at` | Source 实际完成采集的时间 | UTC 时间戳，与消息生产时间区分 |
 
-V1 的 Usage Backend Source 在当前 Orbit 仓库中实现，并通过 MQTT 向 Core 发布类型化 Observation。
+V1 的 Usage Source 在当前 Orbit 仓库中实现，由 Agent 承载并以该 Agent 的身份向 Core 发布类型化 Observation。
 
-Core 依据 `(producer_id, source_type, subject_id)` 识别逻辑对象，只接受修订号更新的 Observation。Canonical State 是 Core 内部模型，不直接承诺为公共线协议。
+Core 依据 `(producer_id, observation_type)` 识别逻辑对象，只接受修订号更新的 Observation；Agent 的 `producer_id` 就是 `agent_id`，协议中不存在 `source_id` 或 `subject_id`。Canonical State 是 Core 内部模型，不直接承诺为公共线协议。
 
 ### 6.3 DeviceView
 
@@ -246,33 +245,34 @@ flowchart TD
     Metadata[metadata]
     NodeID[node_id]
     Freshness[freshness]
-    Lines[lines]
-    Text[text]
-    Emphasis[emphasis]
+    FreshUntil[fresh_until]
+    Primary[primary slot]
+    Secondary[secondary slot]
+    Footer[footer slot]
     Feedback[command_feedback]
 
     View --> Metadata
     View --> NodeID
     View --> Freshness
-    View --> Lines
-    Lines --> Text
-    Lines --> Emphasis
+    View --> FreshUntil
+    View --> Primary
+    View --> Secondary
+    View --> Footer
     View --> Feedback
 ```
 
 首版应限制：
 
 - 最大编码尺寸。
-- `lines` 最大数量。
-- 所有字符串的最大 UTF-8 字节数。
+- Primary、Secondary 和 Footer 各槽位字符串的最大 UTF-8 字节数。
 - 枚举未知值的降级行为。
 - 固件端静态内存预算。
 
-Core 为目标 Device Model 决定文本、缩写、换行和顺序；Node 只把有限行位与强调级别映射为固定字体和像素布局。参见 [ADR-0009](adr/0009-core-formats-display-text.md)。
+OLED 128x32 的 DeviceView 固定为 Primary、Secondary 和 Footer 三个槽位，不接受任意数量的文本行。Core 为各槽位决定文本、缩写和有限强调语义；Node 只把槽位映射为固定字体、截断规则和像素布局。本文只固定槽位概念，不决定 Usage 字段到槽位的映射、具体文案或字节上限；这些内容在实现显示功能前单独设计。参见 [ADR-0009](adr/0009-core-formats-display-text.md)。
 
 ### 6.4 Command 与 CommandResult
 
-Command 使用 `oneof action` 形成能力白名单。M0 只实现无破坏性的测试能力；V1 的首个产品动作是 `RefreshUsage`，`OpenCodexSession` 后续再加入。
+Command 使用 `oneof action` 形成能力白名单。M0 只实现无破坏性的 `PingAgent` 测试能力；V1 不提供产品动作，首个真实动作 `OpenCodexSession` 在 Codex 集成阶段再加入。
 
 每个 Command 同时包含：
 
@@ -314,9 +314,9 @@ CommandResult 必须原样回显 Command 的 `intent_ref`。Core 不依赖内存
 
 ### 6.5 Intent
 
-Node 不直接决定主机命令参数，而是发送受限 Intent，例如“刷新当前 Usage 数据”。Core 根据发起者权限、当前 view revision 与投影上下文解析 Intent，并生成具体 Command。
+Node 不直接决定主机命令参数，而是发送受限 Intent。Core 根据发起者权限、当前 view revision 与投影上下文解析 Intent，并生成具体 Command。
 
-Intent 必须携带发起者生成且不可复用的 `intent_id`，以及触发时所见的 `view_revision`。Core 将发起者身份和 Intent ID 固化为 Command 的 `intent_ref`；当选择对象已经变化或过期时拒绝 Intent，避免按钮操作命中新的对象。Agent 的原始 CommandResult 只发给 Core；Core 将安全的 Command Feedback 投影进发起 Node 的 DeviceView，管理客户端只接收自己发起 Intent 的结果。V1 的 OLED Node 没有输入能力，RefreshUsage Intent 只由管理 CLI 发起。
+Intent 必须携带发起者生成且不可复用的 `intent_id`，以及触发时所见的 `view_revision`。Core 将发起者身份和 Intent ID 固化为 Command 的 `intent_ref`；当选择对象已经变化或过期时拒绝 Intent，避免按钮操作命中新的对象。Agent 的原始 CommandResult 只发给 Core；Core 将安全的 Command Feedback 投影进发起 Node 的 DeviceView，管理客户端只接收自己发起 Intent 的结果。V1 的 OLED Node 没有输入能力，Intent 与 Command 只在 M0 通过 `PingAgent` 验证协议闭环，不进入 V1 产品验收。
 
 ## 7. MQTT 设计
 
@@ -348,7 +348,7 @@ orbit/v1/cores/{core_id}/presence
 | Presence | 1 | 是 | 使用 LWT 发布离线状态 |
 | Intent | 1 | 否 | 必须带时效与 view revision |
 
-所有 payload 使用 `application/protobuf`。Core 和 Agent 使用有界的持久会话，以便短暂断线后继续接收尚未过期的消息；Node 使用 clean start，并通过 retained DeviceView 恢复最新画面。MQTT 5 Message Expiry 可作为传输优化，但不能替代 Protobuf 内的 `expires_at`。
+所有 payload 使用 `application/protobuf`。Agent、Core、Node 和管理客户端都使用 clean start（Session Expiry Interval 为 0），Broker 不为离线参与者排队 Observation、Intent、Command 或 Result。DeviceView、Agent state 和 Presence 通过 retained 消息恢复最新状态；其他消息允许在断线时丢失。MQTT 5 Message Expiry 只负责清理 Broker 中的 retained 或在途消息，不能替代 payload 内的业务时效字段。
 
 ### 7.3 ACL 原则
 
@@ -410,8 +410,9 @@ Agent 重启会清空去重表和未发布结果，Broker 重新投递的未过�
 
 - Node 重连后接收 retained DeviceView。
 - Node 比较修订号，拒绝状态回退。
-- 超过 `expires_at` 后继续显示最后内容，但呈现 stale 标识。
-- Agent 使用 MQTT LWT 标记意外离线，正常停机主动发布 offline。
+- DeviceView 携带绝对 `fresh_until`；Node 在启动联网后先通过 SNTP 同步时间，超过该时间后继续显示最后内容但呈现 stale 标识。
+- Node 时钟尚未可信时不得把 retained DeviceView 标为 fresh，而是保留内容并显示 stale。
+- Agent 使用 MQTT LWT 标记意外离线，正常停机主动发布 offline；所有参与者重连时建立全新会话。
 - Core 重启后若没有持久状态，可以等待新 Observation；不得把旧 retained view 当作新观测来源。
 
 ## 9. Core 数据存储
@@ -431,7 +432,7 @@ Agent 不持久化 Command 或 CommandResult。V1 的内存去重表有固定容
 
 建议使用 YAML 配置非敏感项，凭据通过独立文件或环境注入。配置至少包括：
 
-- 进程 identity、Agent ID、Host Label 和 Node ID。
+- 进程 identity、可选 Agent ID 覆盖值、Host Label 和 Node ID。
 - Node 的 `series_id`、`model_id`、`variant_id` 和 firmware version。
 - Broker 地址、`tls.enabled`、TLS CA 和客户端凭据引用；EMQX Cloud Serverless 使用 TLS，关闭开关时必须配置支持明文 MQTT 的其他 Broker。
 - PostgreSQL 与 Redis 连接引用及各自连接上限。
@@ -440,7 +441,9 @@ Agent 不持久化 Command 或 CommandResult。V1 的内存去重表有固定容
 - payload、字符串、队列和并发上限。
 - 日志级别，不包含协议正文的默认脱敏规则。
 
-Agent ID 代表物理机器而不是某次 OS 或 Agent 安装：系统重装和双系统应得到相同身份，更换主板后得到新身份。Host Label 是独立的可变显示字段，不参与路由或授权。虚拟机必须持久化独立覆盖值，不能直接采用可能随模板克隆的硬件标识。具体平台支持与派生算法仍需在实现前固定。参见 [ADR-0004](adr/0004-agent-id-represents-physical-machine.md)。
+Agent ID 标识 Agent 运行实例，通常因一台机器只运行一个 Agent 而与机器形成一对一关系，但这不是领域约束。部署时必须提供完整 MQTT 连接配置，并可显式填写 `agent_id`；该值存在时是权威身份。未填写时，macOS Agent 使用 `agt_` 加 SHA-256 前 128 位十六进制文本作为 ID，哈希输入为 `orbit.agent.v1` 命名空间与规范化 Platform UUID，原始 UUID 不得出现在线路、日志或 Broker 用户名中。手动与自动 ID 都必须匹配 `[a-z0-9][a-z0-9_-]{0,63}`，否则启动失败；同一机器运行多个 Agent 时必须为每个实例配置不同 ID。Host Label 是独立的可变显示字段，不参与路由或授权。参见 [ADR-0012](adr/0012-agent-id-identifies-agent-instance.md)。
+
+MQTT 用户名和密钥由部署配置显式提供，不从 `agent_id` 推导，也不要求用户名文本包含 Agent ID；但 Broker ACL 必须把该凭据限制在一个 Agent ID 的 Topic 子树。MQTT Client ID 从 Agent ID 稳定派生，同一 Agent ID 的第二个连接会替换旧连接。
 
 Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、目标 `agent_id` 和启用状态。Node Hello 中的自报值只用于兼容性校验和诊断，不得直接覆盖注册信息。参见 [ADR-0005](adr/0005-core-owns-node-registration.md)。
 
@@ -478,7 +481,7 @@ Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、�
 
 | 故障 | 预期行为 |
 | --- | --- |
-| Broker 暂时不可用 | 有界退避重连；内存队列有上限；不无限积压陈旧观测 |
+| Broker 暂时不可用 | 有界退避重连；不建立离线消息队列，断线期间的短生命周期消息允许丢失 |
 | Source 超时或失败 | 发布健康变化，保留最后成功值直至过期 |
 | 重复 Observation | 按逻辑对象与 revision 忽略，不重复投影 |
 | 重复 Command | 同一进程内合并或返回内存缓存结果；跨重启允许丢失或重复执行 |
@@ -486,7 +489,7 @@ Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、�
 | 未知 Protobuf 字段 | 兼容保留；未知 action 不执行 |
 | payload 超限或解码失败 | 拒绝、计数并记录不含敏感正文的日志 |
 | Agent 执行中崩溃 | 当前 Command 与未发布结果可以丢失；重连后收到的未过期重复消息可以再次执行 |
-| Node 时钟明显不准 | 显示连接/时效异常；不据此触发命令 |
+| Node 时钟未同步或明显不准 | 保留最后画面但按 stale 显示；不据此触发命令 |
 
 ## 14. 测试策略
 
@@ -496,7 +499,7 @@ Core 的 Node Registration 至少保存 `node_id`、Series、Model、Variant、�
 - Go 与固件端的黄金字节互操作测试。
 - 未知字段和未知枚举的前后兼容测试。
 - 代表性 DeviceView 的编码尺寸和静态内存预算测试。
-- 超长字符串、超多区块和畸形 payload 的拒绝测试。
+- 超长槽位字符串和畸形 payload 的拒绝测试。
 
 ### 14.2 Agent 测试
 
@@ -567,7 +570,7 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 3. 实现 Agent 的短生命周期 Command 执行与有界内存去重，完成丢失和重复故障注入测试。
 4. 实现 Core canonical state、隐私投影和 retained DeviceView。
 5. 接入 `display/oled-128x32` 真机，验证 stale、重连和尺寸预算。
-6. 接入真实 Usage Source 与 `RefreshUsage` Capability，完成首个可用版本。
+6. 在 Agent 中接入真实 Usage Source，完成首个可用版本。
 7. 接入 Codex Source 与 `OpenCodexSession` Capability。
 8. 在模型稳定后接入 TFT 交互。
 
@@ -576,8 +579,8 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 - Agent 能以 Protobuf 发布真实、脱敏的 UsageObservation，Core 能发布 retained DeviceView。
 - OLED 节点重连后立即渲染最新视图，并在过期后保留内容且标记 stale。
 - Node 能上报 `display` / `oled-128x32` / `yd-esp32-s3`，Core 能依据 Node Registration 隔离不匹配身份并拒绝不兼容投影。
-- 管理 CLI 能发送 RefreshUsage Intent，Core 能生成类型化命令，并返回关联状态和最终结果。
-- 同一 Agent 进程内的重复、过期、畸形、错目标、未授权和不支持命令被确定性处理；跨重启允许 Command 丢失或重复刷新。
+- M0 中管理 CLI 能发送 `PingAgent` Intent，Core 能生成类型化命令，并返回关联状态和最终结果；V1 不要求产品动作。
+- 同一 Agent 进程内的重复、过期、畸形、错目标、未授权和不支持命令被确定性处理；断线或跨重启允许 Command 丢失或重复。
 - 公网 MQTT 默认验证 TLS；显式关闭时不发生自动降级，且 Agent、Core、Node 的凭据与 ACL 相互隔离。
 - 固件和 DeviceView 中不存在 Codex、Sub2API 或主机登录凭据。
 - 协议兼容、payload 尺寸、Core 投影、Agent 去重和 MQTT 重连测试通过。
@@ -590,6 +593,7 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 | 决策 | 默认建议 | 决策时点 |
 | --- | --- | --- |
 | 设备凭据发放与轮换 | 每设备证书或独立凭据，禁止共享密钥 | 真机接入前 |
+| OLED 三槽内容与显示限制 | 单独确定字段映射、文案、字节上限、字体与截断规则 | OLED 显示实现前 |
 | 首个 TFT Model 与分辨率 | 归入 `display` Series，确定前不进入共享协议假设 | TFT 里程碑前 |
 | Codex 隐私策略 | 默认隐藏提示词、正文、路径；标题和仓库名需显式配置 | Codex 接入前 |
 
