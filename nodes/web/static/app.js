@@ -33,6 +33,10 @@ const statusLabels = {
 };
 
 const integerFormat = new Intl.NumberFormat("zh-CN");
+const compactFormat = new Intl.NumberFormat("zh-CN", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
 let latestSnapshot = null;
 
 function fullscreenElement() {
@@ -83,8 +87,22 @@ function formatCost(micros, currency) {
     style: "currency",
     currency: currency || "USD",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
+    maximumFractionDigits: 2,
   }).format(micros / 1000000);
+}
+
+function formatCompactMetric(value) {
+  const units = [
+    { threshold: 1000000000, suffix: "B" },
+    { threshold: 1000000, suffix: "M" },
+    { threshold: 1000, suffix: "K" },
+  ];
+  for (const unit of units) {
+    if (value >= unit.threshold) {
+      return `${compactFormat.format(value / unit.threshold)}${unit.suffix}`;
+    }
+  }
+  return integerFormat.format(value);
 }
 
 function formatDate(value) {
@@ -192,7 +210,7 @@ function render(snapshot) {
   const usage = snapshot.usage;
   elements.cost.textContent = usage ? formatCost(usage.actual_cost_micros, usage.currency_code) : "--";
   elements.currency.textContent = usage && usage.currency_code ? usage.currency_code : "USD";
-  elements.tokens.textContent = usage ? integerFormat.format(usage.token_count) : "--";
+  elements.tokens.textContent = usage ? formatCompactMetric(usage.token_count) : "--";
   elements.tpm.textContent = usage ? integerFormat.format(usage.tpm) : "--";
 
   const codex = snapshot.codex;
