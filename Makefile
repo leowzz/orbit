@@ -9,8 +9,9 @@ AGENT_CONFIG ?= configs/agent.local.yaml
 CORE_CONFIG ?= configs/core.local.yaml
 WEB_CONFIG ?= configs/web.local.yaml
 
-.PHONY: dev dev-agent dev-core dev-web build build-go build-node test test-go test-node \
-	lint fmt fmt-check proto-lint generate verify
+.PHONY: dev dev-agent dev-core dev-web kill kill-agent kill-core kill-web \
+	build build-go build-node test test-go test-node lint fmt fmt-check \
+	proto-lint generate verify
 
 dev:
 	$(MAKE) -j2 dev-agent dev-core
@@ -23,6 +24,17 @@ dev-core:
 
 dev-web:
 	$(GO) run ./cmd/orbit-web -config "$(WEB_CONFIG)"
+
+kill: kill-web kill-agent kill-core
+
+kill-agent:
+	@pkill -TERM -f '[/][o]rbit-agent([[:space:]]|$$)' 2>/dev/null || true
+
+kill-core:
+	@pkill -TERM -f '[/][o]rbit-core([[:space:]]|$$)' 2>/dev/null || true
+
+kill-web:
+	@pkill -TERM -f '[/][o]rbit-web([[:space:]]|$$)' 2>/dev/null || true
 
 build: build-go
 
