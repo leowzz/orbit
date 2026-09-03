@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +39,8 @@ func TestPollOncePublishesUsageAndHealthyState(t *testing.T) {
 	source := &stubSource{usage: sub2api.Usage{TodayActualCostMicros: 1_500_000, TodayTokens: 2_000, TPM: 30}}
 	publisher := &recordingPublisher{}
 	runner := newTestRunner(t, source, publisher)
+	var logs bytes.Buffer
+	runner.logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	now := time.Date(2026, 9, 3, 16, 30, 0, 0, time.UTC)
 	runner.now = func() time.Time { return now }
 
@@ -64,6 +68,11 @@ func TestPollOncePublishesUsageAndHealthyState(t *testing.T) {
 	}
 	if !publisher.messages[1].Retain || state.Sources[0].Health != orbitv1.SourceHealth_SOURCE_HEALTH_HEALTHY {
 		t.Fatalf("unexpected agent state: %+v", state.Sources[0])
+	}
+	for _, want := range []string{"sub2api usage fetched", "cost_micros=1500000", "usage observation published", "agent state published"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("debug log missing %q: %s", want, logs.String())
+		}
 	}
 }
 

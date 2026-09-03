@@ -54,6 +54,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 	}
+	r.logger.Debug("core subscriptions ready")
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -86,7 +87,16 @@ func (r *Runner) handleAgentState(_ context.Context, message mqtt.Message) error
 	if state.AgentId != agentID {
 		return errors.New("agent state topic identity does not match payload")
 	}
-	return r.engine.ApplyAgentState(&state)
+	if err := r.engine.ApplyAgentState(&state); err != nil {
+		return err
+	}
+	r.logger.Debug("agent state accepted",
+		"agent_id", state.AgentId,
+		"revision", state.Metadata.Revision,
+		"sources", len(state.Sources),
+		"retained", message.Retain,
+	)
+	return nil
 }
 
 func (r *Runner) handleNodeState(ctx context.Context, message mqtt.Message) error {
@@ -105,6 +115,12 @@ func (r *Runner) handleNodeState(ctx context.Context, message mqtt.Message) erro
 	if err != nil {
 		return err
 	}
+	r.logger.Debug("node state accepted",
+		"node_id", state.NodeId,
+		"revision", state.Metadata.Revision,
+		"views", len(views),
+		"retained", message.Retain,
+	)
 	return r.publishViews(ctx, views)
 }
 
@@ -124,6 +140,12 @@ func (r *Runner) handleObservation(ctx context.Context, message mqtt.Message) er
 	if err != nil {
 		return err
 	}
+	r.logger.Debug("usage observation accepted",
+		"agent_id", agentID,
+		"revision", observation.Metadata.Revision,
+		"views", len(views),
+		"retained", message.Retain,
+	)
 	return r.publishViews(ctx, views)
 }
 
@@ -143,6 +165,15 @@ func (r *Runner) publishViews(ctx context.Context, views []*orbitv1.DeviceView) 
 		}); err != nil {
 			return err
 		}
+		r.logger.Debug("device view published",
+			"node_id", view.NodeId,
+			"revision", view.GetMetadata().GetRevision(),
+			"freshness", view.Freshness.String(),
+			"primary", view.GetPrimary().GetText(),
+			"secondary", view.GetSecondary().GetText(),
+			"footer", view.GetFooter().GetText(),
+			"bytes", len(payload),
+		)
 	}
 	return nil
 }

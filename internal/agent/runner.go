@@ -92,8 +92,14 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 		publishErr := r.publishState(ctx, health, sourceErrorCode(err))
 		return errors.Join(err, publishErr)
 	}
+	r.logger.Debug("sub2api usage fetched",
+		"cost_micros", usage.TodayActualCostMicros,
+		"token_count", usage.TodayTokens,
+		"tpm", usage.TPM,
+	)
 
 	now := r.now().UTC()
+	expiresAt := now.Add(r.config.ObservationTTL)
 	r.observationRevision++
 	windowStart, windowEnd := localDayWindow(now, r.config.Location)
 	cost := usage.TodayActualCostMicros
@@ -105,7 +111,7 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 			ProducerId: r.config.AgentID,
 			Revision:   r.observationRevision,
 			ProducedAt: timestamppb.New(now),
-			ExpiresAt:  timestamppb.New(now.Add(r.config.ObservationTTL)),
+			ExpiresAt:  timestamppb.New(expiresAt),
 		},
 		AgentEpoch: r.config.AgentEpoch,
 		Payload: &orbitv1.Observation_Usage{Usage: &orbitv1.UsageObservation{
@@ -122,12 +128,19 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("marshal usage observation: %w", err)
 	}
+	topic := fmt.Sprintf("orbit/v1/agents/%s/observations/usage", r.config.AgentID)
 	if err := r.publisher.Publish(ctx, mqtt.Message{
-		Topic:   fmt.Sprintf("orbit/v1/agents/%s/observations/usage", r.config.AgentID),
+		Topic:   topic,
 		Payload: payload,
 	}); err != nil {
 		return fmt.Errorf("publish usage observation: %w", err)
 	}
+	r.logger.Debug("usage observation published",
+		"topic", topic,
+		"revision", r.observationRevision,
+		"bytes", len(payload),
+		"expires_at", expiresAt,
+	)
 	r.lastSuccess = now
 	if err := r.publishState(ctx, orbitv1.SourceHealth_SOURCE_HEALTH_HEALTHY, ""); err != nil {
 		return err
@@ -170,13 +183,21 @@ func (r *Runner) publishState(ctx context.Context, health orbitv1.SourceHealth, 
 	if err != nil {
 		return fmt.Errorf("marshal agent state: %w", err)
 	}
+	topic := fmt.Sprintf("orbit/v1/agents/%s/state", r.config.AgentID)
 	if err := r.publisher.Publish(ctx, mqtt.Message{
-		Topic:   fmt.Sprintf("orbit/v1/agents/%s/state", r.config.AgentID),
+		Topic:   topic,
 		Payload: payload,
 		Retain:  true,
 	}); err != nil {
 		return fmt.Errorf("publish agent state: %w", err)
 	}
+	r.logger.Debug("agent state published",
+		"topic", topic,
+		"revision", r.stateRevision,
+		"health", health.String(),
+		"error_code", errorCode,
+		"bytes", len(payload),
+	)
 	return nil
 }
 

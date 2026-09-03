@@ -66,6 +66,7 @@ func Connect(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, err
 	}
 
 	client := &Client{logger: logger}
+	logger.Debug("mqtt connecting", "client_id", cfg.ClientID, "broker", serverURL.Host, "tls", cfg.TLS.Enabled)
 	manager, err := autopaho.NewConnection(ctx, autopaho.ClientConfig{
 		ServerUrls:                    []*url.URL{serverURL},
 		TlsCfg:                        tlsConfig,
@@ -76,7 +77,12 @@ func Connect(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, err
 		ReconnectBackoff:              reconnectBackoff(),
 		ConnectUsername:               cfg.Username,
 		ConnectPassword:               []byte(cfg.Password),
-		OnConnectionUp: func(manager *autopaho.ConnectionManager, _ *paho.Connack) {
+		OnConnectionUp: func(manager *autopaho.ConnectionManager, connack *paho.Connack) {
+			logger.Debug("mqtt connection established",
+				"client_id", cfg.ClientID,
+				"broker", serverURL.Host,
+				"session_present", connack.SessionPresent,
+			)
 			client.resubscribe(manager)
 		},
 		OnConnectError: func(err error) {
@@ -117,6 +123,12 @@ func (c *Client) Publish(ctx context.Context, message Message) error {
 	if response != nil && response.ReasonCode >= 0x80 {
 		return fmt.Errorf("publish %q rejected with reason 0x%x", message.Topic, response.ReasonCode)
 	}
+	c.logger.Debug("mqtt message published",
+		"topic", message.Topic,
+		"qos", 1,
+		"retained", message.Retain,
+		"bytes", len(message.Payload),
+	)
 	return nil
 }
 
@@ -137,7 +149,11 @@ func (c *Client) Subscribe(ctx context.Context, filter string, handler Handler) 
 }
 
 func (c *Client) Disconnect(ctx context.Context) error {
-	return c.manager.Disconnect(ctx)
+	if err := c.manager.Disconnect(ctx); err != nil {
+		return err
+	}
+	c.logger.Debug("mqtt disconnected")
+	return nil
 }
 
 func (c *Client) subscribe(ctx context.Context, filter string) error {
@@ -154,6 +170,7 @@ func (c *Client) subscribe(ctx context.Context, filter string) error {
 			return fmt.Errorf("subscribe %q rejected with reason 0x%x", filter, reason)
 		}
 	}
+	c.logger.Debug("mqtt subscription active", "topic", filter, "qos", 1)
 	return nil
 }
 
@@ -174,16 +191,27 @@ func (c *Client) resubscribe(manager *autopaho.ConnectionManager) {
 				c.logger.Warn("mqtt resubscribe failed", "topic", filter, "error", err)
 				return
 			}
+			accepted := true
 			for _, reason := range response.Reasons {
 				if reason >= 0x80 {
+					accepted = false
 					c.logger.Warn("mqtt resubscribe rejected", "topic", filter, "reason", reason)
 				}
+			}
+			if accepted {
+				c.logger.Debug("mqtt subscription restored", "topic", filter, "qos", 1)
 			}
 		}()
 	}
 }
 
 func (c *Client) route(message paho.PublishReceived) (bool, error) {
+	c.logger.Debug("mqtt message received",
+		"topic", message.Packet.Topic,
+		"qos", message.Packet.QoS,
+		"retained", message.Packet.Retain,
+		"bytes", len(message.Packet.Payload),
+	)
 	c.mu.RLock()
 	subscriptions := append([]subscription(nil), c.subscriptions...)
 	c.mu.RUnlock()

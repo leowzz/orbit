@@ -1,8 +1,10 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +30,9 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
 	engine := newTestEngine(t)
 	transport := &fakeTransport{}
-	runner, err := NewRunner(engine, transport, slog.Default())
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	runner, err := NewRunner(engine, transport, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,6 +59,11 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 	}
 	if view.NodeId != "node-a" || view.Primary.Text != "$12.35" {
 		t.Fatalf("unexpected view: %+v", &view)
+	}
+	for _, want := range []string{"agent state accepted", "node state accepted", "usage observation accepted", "views=1", "device view published", "primary=$12.35"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("debug log missing %q: %s", want, logs.String())
+		}
 	}
 }
 
