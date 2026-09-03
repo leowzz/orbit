@@ -1,6 +1,9 @@
 package mqtt
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestTopicMatches(t *testing.T) {
 	t.Parallel()
@@ -52,5 +55,16 @@ func TestConnectionConfigAllowsExplicitPlaintext(t *testing.T) {
 	}
 	if serverURL.Scheme != "mqtt" || tlsConfig != nil {
 		t.Fatalf("unexpected connection config: url=%s tls=%v", serverURL, tlsConfig)
+	}
+}
+
+func TestReconnectBackoff(t *testing.T) {
+	t.Parallel()
+	backoff := reconnectBackoff()
+	if got := backoff(0); got != 0 {
+		t.Fatalf("initial backoff = %v, want 0", got)
+	}
+	if got := backoff(1); got < time.Second || got > 2*time.Second {
+		t.Fatalf("first retry backoff = %v, want 1s..2s", got)
 	}
 }

@@ -59,24 +59,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 
 ## 4. 总体结构
 
-```mermaid
-flowchart LR
-    Sources[Sub2API / Codex / OS]
-    Agent[Orbit Agent<br/>trusted host]
-    Core[Orbit Core<br/>policy + projection]
-    State[(in-memory<br/>canonical state)]
-    Node[Orbit Node<br/>OLED / TFT / Web]
-    Display[display + input]
-
-    Sources -->|source adapters| Agent
-    Agent -->|observations<br/>QoS 1| Core
-    Core -->|commands<br/>QoS 1| Agent
-    Agent -->|command results<br/>QoS 1| Core
-    Core -->|read / update| State
-    Core -->|projected views<br/>QoS 1 retained| Node
-    Node -->|intents<br/>QoS 1| Core
-    Node -->|local render and input| Display
-```
+![Orbit 系统架构：独立 Agent、Core、Node 与管理客户端通过 MQTT Broker 协作](assets/orbit-system-architecture.png)
 
 ### 4.1 模块划分
 

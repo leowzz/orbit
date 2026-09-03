@@ -32,7 +32,7 @@ type Config struct {
 	HTTPClient      *http.Client
 }
 
-// Usage is the current Sub2API usage reading. Cost is stored in millionths of
+// Usage is the current Sub2API usage reading. Cost is rounded to millionths of
 // the API's currency unit so callers never need floating-point arithmetic.
 type Usage struct {
 	TodayActualCostMicros int64
@@ -404,13 +404,17 @@ func costMicros(raw json.RawMessage) (int64, error) {
 		return 0, errors.New("must be non-negative")
 	}
 	value.Mul(value, big.NewRat(1_000_000, 1))
-	if !value.IsInt() {
-		return 0, errors.New("has precision smaller than one micro")
+	quotient := new(big.Int)
+	remainder := new(big.Int)
+	quotient.QuoRem(value.Num(), value.Denom(), remainder)
+	doubledRemainder := new(big.Int).Lsh(remainder, 1)
+	if doubledRemainder.Cmp(value.Denom()) >= 0 {
+		quotient.Add(quotient, big.NewInt(1))
 	}
-	if !value.Num().IsInt64() {
+	if !quotient.IsInt64() {
 		return 0, errors.New("is too large")
 	}
-	return value.Num().Int64(), nil
+	return quotient.Int64(), nil
 }
 
 func parseRetryAfter(value string, now time.Time) time.Duration {

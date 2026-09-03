@@ -73,7 +73,7 @@ func Connect(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, err
 		CleanStartOnInitialConnection: true,
 		SessionExpiryInterval:         0,
 		ConnectTimeout:                10 * time.Second,
-		ReconnectBackoff:              autopaho.NewExponentialBackoff(time.Second, 30*time.Second, 2*time.Second, 0.2),
+		ReconnectBackoff:              reconnectBackoff(),
 		ConnectUsername:               cfg.Username,
 		ConnectPassword:               []byte(cfg.Password),
 		OnConnectionUp: func(manager *autopaho.ConnectionManager, _ *paho.Connack) {
@@ -97,6 +97,10 @@ func Connect(ctx context.Context, cfg Config, logger *slog.Logger) (*Client, err
 		return nil, fmt.Errorf("connect mqtt: %w", err)
 	}
 	return client, nil
+}
+
+func reconnectBackoff() autopaho.Backoff {
+	return autopaho.NewExponentialBackoff(time.Second, 30*time.Second, 2*time.Second, 2)
 }
 
 func (c *Client) Publish(ctx context.Context, message Message) error {

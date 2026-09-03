@@ -236,8 +236,8 @@ func TestUsageValidation(t *testing.T) {
 	}{
 		{name: "missing cost", body: `{"code":0,"message":"ok","data":{"today_tokens":1,"tpm":2}}`},
 		{name: "negative cost", body: `{"code":0,"message":"ok","data":{"today_actual_cost":-1,"today_tokens":1,"tpm":2}}`},
-		{name: "sub-micro cost", body: `{"code":0,"message":"ok","data":{"today_actual_cost":0.0000001,"today_tokens":1,"tpm":2}}`},
 		{name: "string cost", body: `{"code":0,"message":"ok","data":{"today_actual_cost":"1","today_tokens":1,"tpm":2}}`},
+		{name: "overflow cost", body: `{"code":0,"message":"ok","data":{"today_actual_cost":9223372036854.775808,"today_tokens":1,"tpm":2}}`},
 		{name: "negative tokens", body: `{"code":0,"message":"ok","data":{"today_actual_cost":1,"today_tokens":-1,"tpm":2}}`},
 		{name: "fractional tokens", body: `{"code":0,"message":"ok","data":{"today_actual_cost":1,"today_tokens":1.0,"tpm":2}}`},
 		{name: "missing tpm", body: `{"code":0,"message":"ok","data":{"today_actual_cost":1,"today_tokens":1}}`},
@@ -261,6 +261,31 @@ func TestUsageCostAcceptsInteger(t *testing.T) {
 	}
 	if usage.TodayActualCostMicros != 1_000_000 {
 		t.Fatalf("TodayActualCostMicros = %d", usage.TodayActualCostMicros)
+	}
+}
+
+func TestUsageCostRoundsToNearestMicro(t *testing.T) {
+	tests := []struct {
+		name string
+		cost string
+		want int64
+	}{
+		{name: "below half", cost: "0.0000001", want: 0},
+		{name: "exactly half", cost: "0.0000005", want: 1},
+		{name: "fraction below half", cost: "1.2345674", want: 1_234_567},
+		{name: "fraction above half", cost: "1.2345675", want: 1_234_568},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := sourceServingUsage(t, fmt.Sprintf(`{"code":0,"message":"ok","data":{"today_actual_cost":%s,"today_tokens":2,"tpm":3}}`, test.cost))
+			usage, err := source.FetchUsage(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if usage.TodayActualCostMicros != test.want {
+				t.Fatalf("TodayActualCostMicros = %d, want %d", usage.TodayActualCostMicros, test.want)
+			}
+		})
 	}
 }
 
