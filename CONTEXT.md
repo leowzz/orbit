@@ -101,7 +101,7 @@ Core 根据最新有效 Observation 维护的规范领域状态，是 DeviceView
 _Avoid_: DeviceView, History
 
 **Projection Route**:
-Core 持有的投影规则，决定哪些 Canonical State 被组合并生成指定 Node 的 DeviceView；Node 不选择或感知数据来自哪个 Agent。
+Core 持有的显式投影规则，决定哪些 Agent 的 Canonical State 被组合并生成指定 Node 的 DeviceView；Node 不选择或感知数据来自哪个 Agent。
 _Avoid_: Target Agent, Node Binding
 
 **Freshness**:
