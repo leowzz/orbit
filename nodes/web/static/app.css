@@ -106,6 +106,19 @@ body {
   background: var(--green);
 }
 
+.topbar-time {
+  position: absolute;
+  left: 50%;
+  max-width: 40%;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
 .connection,
 .view-meta,
 footer {
@@ -272,9 +285,9 @@ h2 {
 }
 
 .session-row {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.6fr) minmax(120px, 0.7fr) minmax(130px, 0.8fr) minmax(120px, 0.7fr);
+  display: block;
   align-items: center;
+  width: 100%;
   min-height: 76px;
   padding: 14px 18px;
   border: 1px solid var(--line);
@@ -286,6 +299,14 @@ h2 {
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
+}
+
+.session-row-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.7fr) minmax(0, 0.8fr) minmax(0, 0.7fr);
+  align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 
 .session-row:hover {
@@ -318,7 +339,9 @@ h2 {
 }
 
 .session-main,
-.session-meta {
+.session-meta,
+.session-project,
+.session-model {
   display: block;
   min-width: 0;
 }
@@ -446,6 +469,10 @@ footer {
     padding: 0 18px;
   }
 
+  .topbar-time {
+    font-size: 10px;
+  }
+
   .brand {
     font-size: 14px;
   }
@@ -467,7 +494,7 @@ footer {
 
   main {
     display: grid;
-    grid-template-columns: 350px minmax(0, 1fr);
+    grid-template-columns: 300px minmax(0, 1fr);
     column-gap: 18px;
     width: calc(100% - 28px);
     max-width: none;
@@ -577,30 +604,12 @@ footer {
   }
 
   .session-row {
-    display: flex;
-    grid-template-columns: minmax(200px, 1.7fr) minmax(72px, 0.55fr) minmax(92px, 0.65fr) minmax(82px, 0.6fr);
     min-height: 48px;
     padding: 6px 10px;
   }
 
-  .session-main {
-    width: 44%;
-    flex: 0 0 44%;
-  }
-
-  .session-project {
-    width: 18%;
-    flex: 0 0 18%;
-  }
-
-  .session-model {
-    width: 20%;
-    flex: 0 0 20%;
-  }
-
-  .session-meta {
-    width: 18%;
-    flex: 0 0 18%;
+  .session-row-content {
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 0.65fr) minmax(0, 0.75fr) minmax(0, 0.7fr);
   }
 
   .session-name {
@@ -669,6 +678,11 @@ footer {
   }
 
   .session-row {
+    display: block;
+    gap: 12px 16px;
+  }
+
+  .session-row-content {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px 16px;
   }
@@ -716,6 +730,10 @@ footer {
   }
 
   .session-row {
+    display: block;
+  }
+
+  .session-row-content {
     grid-template-columns: minmax(0, 1fr);
   }
 

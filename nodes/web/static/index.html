@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>Orbit 实时状态</title>
-    <link rel="stylesheet" href="/app.css" />
+    <link rel="stylesheet" href="/app.css?v=20260903" />
   </head>
   <body>
     <header class="topbar">
@@ -13,6 +13,7 @@
         <span class="brand-mark" aria-hidden="true"><span></span></span>
         <span>Orbit</span>
       </button>
+      <time class="topbar-time" id="updated-at">--</time>
       <div class="connection" id="connection" data-state="connecting">
         <span class="connection-dot" aria-hidden="true"></span>
         <span id="connection-label">连接中</span>
@@ -25,10 +26,6 @@
           <div>
             <p class="eyebrow">实时状态</p>
             <h1 id="overview-title">今日概览</h1>
-          </div>
-          <div class="view-meta">
-            <span class="freshness" id="view-freshness" data-state="unknown">等待数据</span>
-            <time id="updated-at">--</time>
           </div>
         </div>
 
@@ -62,7 +59,6 @@
             <p class="eyebrow">Codex</p>
             <h2 id="sessions-title">最近任务</h2>
           </div>
-          <span class="freshness" id="codex-freshness" data-state="unknown">等待数据</span>
         </div>
         <div class="session-list" id="session-list" aria-live="polite">
           <div class="empty-state">
@@ -78,6 +74,6 @@
       <span id="node-id">Node --</span>
       <span id="revision">Revision --</span>
     </footer>
-    <script src="/app.js" defer></script>
+    <script src="/app.js?v=20260903" defer></script>
   </body>
 </html>

@@ -8,6 +8,9 @@ NODE_DIR := nodes/display/models/oled-128x32/variants/yd-esp32-s3
 AGENT_CONFIG ?= configs/agent.local.yaml
 CORE_CONFIG ?= configs/core.local.yaml
 WEB_CONFIG ?= configs/web.local.yaml
+AGENT_LAUNCHD_LABEL ?= com.leo.orbit.agent.dev
+CORE_LAUNCHD_LABEL ?= com.leo.orbit.core.dev
+WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
 
 .PHONY: dev dev-agent dev-core dev-web kill kill-agent kill-core kill-web \
 	build build-go build-node test test-go test-node lint fmt fmt-check \
@@ -28,12 +31,15 @@ dev-web:
 kill: kill-web kill-agent kill-core
 
 kill-agent:
+	@launchctl remove "$(AGENT_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-agent([[:space:]]|$$)' 2>/dev/null || true
 
 kill-core:
+	@launchctl remove "$(CORE_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-core([[:space:]]|$$)' 2>/dev/null || true
 
 kill-web:
+	@launchctl remove "$(WEB_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-web([[:space:]]|$$)' 2>/dev/null || true
 
 build: build-go

@@ -2,8 +2,6 @@ const elements = {
   fullscreenToggle: document.querySelector("#fullscreen-toggle"),
   connection: document.querySelector("#connection"),
   connectionLabel: document.querySelector("#connection-label"),
-  viewFreshness: document.querySelector("#view-freshness"),
-  codexFreshness: document.querySelector("#codex-freshness"),
   updatedAt: document.querySelector("#updated-at"),
   cost: document.querySelector("#cost"),
   currency: document.querySelector("#currency"),
@@ -15,13 +13,6 @@ const elements = {
   actionStatus: document.querySelector("#action-status"),
   nodeID: document.querySelector("#node-id"),
   revision: document.querySelector("#revision"),
-};
-
-const freshnessLabels = {
-  fresh: "数据新鲜",
-  stale: "数据已过期",
-  offline: "来源离线",
-  unknown: "等待数据",
 };
 
 const statusLabels = {
@@ -75,12 +66,6 @@ function toggleFullscreen() {
 function setConnection(state, label) {
   elements.connection.dataset.state = state;
   elements.connectionLabel.textContent = label;
-}
-
-function setFreshness(element, state) {
-  const normalized = freshnessLabels[state] ? state : "unknown";
-  element.dataset.state = normalized;
-  element.textContent = freshnessLabels[normalized];
 }
 
 function formatCost(micros, currency) {
@@ -194,13 +179,16 @@ function renderSessions(codex) {
     row.title = "在 Codex 中打开";
     row.addEventListener("click", () => openCodexSession(row, session));
 
+    const content = document.createElement("span");
+    content.className = "session-row-content";
+
     const main = document.createElement("span");
     main.className = "session-main";
     appendText(main, "session-name", session.display_name || `会话 ${session.id.slice(0, 8)}`);
     appendText(main, "session-id", session.id);
 
-    appendText(row, "session-project", session.project_name || "项目未公开");
-    appendText(row, "session-model", session.model || "模型未知");
+    appendText(content, "session-project", session.project_name || "项目未公开");
+    appendText(content, "session-model", session.model || "模型未知");
 
     const meta = document.createElement("span");
     meta.className = "session-meta";
@@ -210,8 +198,9 @@ function renderSessions(codex) {
     const updated = appendText(meta, "session-time", relativeTime(session.updated_at));
     updated.title = formatDate(session.updated_at);
 
-    row.prepend(main);
-    row.append(meta);
+    content.prepend(main);
+    content.append(meta);
+    row.append(content);
     elements.sessionList.append(row);
   }
 }
@@ -229,7 +218,6 @@ function render(snapshot) {
     }
   }
   latestSnapshot = snapshot;
-  setFreshness(elements.viewFreshness, snapshot.freshness);
   elements.updatedAt.textContent = formatDate(snapshot.produced_at || snapshot.received_at);
   elements.nodeID.textContent = `Node ${snapshot.node_id}`;
   elements.revision.textContent = `Revision ${snapshot.revision}`;
@@ -243,7 +231,6 @@ function render(snapshot) {
   const codex = snapshot.codex;
   elements.runningCount.textContent = codex ? integerFormat.format(codex.running_count) : "--";
   elements.totalCount.textContent = codex ? `共 ${integerFormat.format(codex.total_count)} 个` : "共 -- 个";
-  setFreshness(elements.codexFreshness, codex && codex.freshness ? codex.freshness : "unknown");
   renderSessions(codex);
   requestAnimationFrame(fitMetrics);
 }
