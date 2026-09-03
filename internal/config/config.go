@@ -1,0 +1,95 @@
+package config
+
+import "time"
+
+type Duration struct {
+	time.Duration
+}
+
+type MQTTConfig struct {
+	URL         string          `yaml:"url"`
+	TLS         MQTTTLSConfig   `yaml:"tls"`
+	Credentials MQTTCredentials `yaml:"credentials"`
+}
+
+type MQTTTLSConfig struct {
+	Enabled  bool   `yaml:"enabled"`
+	CAFile   string `yaml:"ca_file"`
+	CertFile string `yaml:"cert_file"`
+	KeyFile  string `yaml:"key_file"`
+}
+
+type MQTTCredentials struct {
+	UsernameFile string `yaml:"username_file"`
+	PasswordFile string `yaml:"password_file"`
+	Username     string `yaml:"-"`
+	Password     string `yaml:"-"`
+}
+
+type AgentConfig struct {
+	Agent   AgentIdentity `yaml:"agent"`
+	MQTT    MQTTConfig    `yaml:"mqtt"`
+	Sources AgentSources  `yaml:"sources"`
+	Logging LoggingConfig `yaml:"logging"`
+}
+
+type AgentIdentity struct {
+	ID        string `yaml:"id"`
+	HostLabel string `yaml:"host_label"`
+}
+
+type AgentSources struct {
+	Sub2API Sub2APIConfig `yaml:"sub2api"`
+}
+
+type Sub2APIConfig struct {
+	Enabled         bool               `yaml:"enabled"`
+	BaseURL         string             `yaml:"base_url"`
+	LoginEndpoint   string             `yaml:"login_endpoint"`
+	RefreshEndpoint string             `yaml:"refresh_endpoint"`
+	UsageEndpoint   string             `yaml:"usage_endpoint"`
+	Timezone        string             `yaml:"timezone"`
+	CurrencyCode    string             `yaml:"currency_code"`
+	Credentials     Sub2APICredentials `yaml:"credentials"`
+	PollInterval    Duration           `yaml:"poll_interval"`
+	Timeout         Duration           `yaml:"timeout"`
+	ObservationTTL  Duration           `yaml:"observation_ttl"`
+}
+
+type Sub2APICredentials struct {
+	EmailFile    string `yaml:"email_file"`
+	PasswordFile string `yaml:"password_file"`
+	Email        string `yaml:"-"`
+	Password     string `yaml:"-"`
+}
+
+type CoreConfig struct {
+	Core                CoreIdentity                 `yaml:"core"`
+	MQTT                MQTTConfig                   `yaml:"mqtt"`
+	ProjectionRoutes    map[string]ProjectionRoute   `yaml:"projection_routes"`
+	ObservationPolicies map[string]ObservationPolicy `yaml:"observation_policies"`
+	Logging             LoggingConfig                `yaml:"logging"`
+}
+
+type CoreIdentity struct {
+	ID string `yaml:"id"`
+}
+
+type ProjectionRoute struct {
+	Profile string            `yaml:"profile"`
+	Inputs  []ProjectionInput `yaml:"inputs"`
+}
+
+type ProjectionInput struct {
+	AgentID         string `yaml:"agent_id"`
+	ObservationType string `yaml:"observation_type"`
+}
+
+type ObservationPolicy struct {
+	MaxTTL        Duration `yaml:"max_ttl"`
+	MaxFutureSkew Duration `yaml:"max_future_skew"`
+}
+
+type LoggingConfig struct {
+	Level string `yaml:"level"`
+}

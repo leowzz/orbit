@@ -1,0 +1,7 @@
+.pio/
+.venv/
+src/generated-proto/
+config.local.yaml
+__pycache__/
+.pytest_cache/
+generated/

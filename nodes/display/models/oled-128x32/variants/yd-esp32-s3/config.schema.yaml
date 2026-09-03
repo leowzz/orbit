@@ -1,0 +1,80 @@
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Orbit OLED 128x32 YD-ESP32-S3 configuration
+type: object
+additionalProperties: false
+required:
+  - node
+  - wifi
+  - mqtt
+properties:
+  node:
+    type: object
+    additionalProperties: false
+    required:
+      - id
+      - firmware_version
+    properties:
+      id:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'
+      firmware_version:
+        type: string
+        minLength: 1
+  wifi:
+    type: object
+    additionalProperties: false
+    required:
+      - ssid
+      - password
+    properties:
+      ssid:
+        type: string
+        minLength: 1
+      password:
+        type: string
+        minLength: 1
+  mqtt:
+    type: object
+    additionalProperties: false
+    required:
+      - host
+      - port
+      - username
+      - password
+    properties:
+      host:
+        type: string
+        minLength: 1
+      port:
+        type: integer
+        minimum: 1
+        maximum: 65535
+      username:
+        type: string
+        minLength: 1
+      password:
+        type: string
+        minLength: 1
+      keep_alive_seconds:
+        type: integer
+        minimum: 10
+        maximum: 300
+      tls:
+        type: object
+        additionalProperties: false
+        properties:
+          enabled:
+            type: boolean
+            default: true
+          ca_file:
+            type: string
+  display:
+    type: object
+    additionalProperties: false
+    properties:
+      brightness_percent:
+        type: integer
+        minimum: 0
+        maximum: 100

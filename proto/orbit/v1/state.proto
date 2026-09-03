@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package orbit.v1;
+
+option go_package = "orbit/gen/go/orbit/v1;orbitv1";
+
+import "google/protobuf/timestamp.proto";
+import "orbit/v1/common.proto";
+import "orbit/v1/observation.proto";
+
+enum SourceHealth {
+  SOURCE_HEALTH_UNSPECIFIED = 0;
+  SOURCE_HEALTH_HEALTHY = 1;
+  SOURCE_HEALTH_DEGRADED = 2;
+  SOURCE_HEALTH_FAILED = 3;
+}
+
+message SourceStatus {
+  ObservationType observation_type = 1;
+  bool enabled = 2;
+  SourceHealth health = 3;
+  google.protobuf.Timestamp last_success_at = 4;
+  string error_code = 5;
+}
+
+message AgentState {
+  Metadata metadata = 1;
+  string agent_id = 2;
+  string agent_epoch = 3;
+  string agent_version = 4;
+  string host_label = 5;
+  repeated SourceStatus sources = 6;
+}
+
+message NodeState {
+  Metadata metadata = 1;
+  string node_id = 2;
+  string node_epoch = 3;
+  string series_id = 4;
+  string model_id = 5;
+  string variant_id = 6;
+  string firmware_version = 7;
+}

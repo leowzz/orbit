@@ -1,0 +1,33 @@
+agent:
+  id: agent-local
+  host_label: Local workstation
+
+mqtt:
+  url: mqtts://broker.example.com:8883
+  tls:
+    enabled: true
+    ca_file: secrets/mqtt-ca.pem
+    cert_file: secrets/agent-client.pem
+    key_file: secrets/agent-client.key
+  credentials:
+    username_file: secrets/agent-mqtt-username
+    password_file: secrets/agent-mqtt-password
+
+sources:
+  sub2api:
+    enabled: true
+    base_url: https://sub2api.example.com
+    login_endpoint: https://sub2api.example.com/api/v1/auth/login
+    refresh_endpoint: https://sub2api.example.com/api/v1/auth/refresh
+    usage_endpoint: https://sub2api.example.com/api/v1/usage/dashboard/stats
+    timezone: Asia/Shanghai
+    currency_code: USD
+    credentials:
+      email_file: secrets/sub2api-email
+      password_file: secrets/sub2api-password
+    poll_interval: 30s
+    timeout: 10s
+    observation_ttl: 2m
+
+logging:
+  level: info

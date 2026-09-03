@@ -1,21 +1,42 @@
+# Operating system and editors
 .DS_Store
 .idea/
 .vscode/
+*.swp
+*.swo
 
-# Build and test output
+# Go build and test output
 bin/
 build/
+dist/
 coverage.out
+coverage-*.out
+*.test
+*.prof
 
 # Python and PlatformIO tooling
 .venv/
 __pycache__/
+*.py[cod]
 .pytest_cache/
 .pio/
 
-# Local configuration and credentials
+# Repository-local tools
+.tools/
+
+# Local environment, configuration, and credentials
+.env
+.env.*
+!.env.example
 configs/*.local.yaml
+**/config.local.yaml
+secrets/
 certs/
 *.key
 *.pem
+*.p12
+*.pfx
 
+# Runtime output
+*.log
+*.tmp

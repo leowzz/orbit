@@ -1,0 +1,20 @@
+node:
+  id: desk-oled-01
+  firmware_version: 0.1.0
+
+wifi:
+  ssid: replace-with-wifi-ssid
+  password: replace-with-wifi-password
+
+mqtt:
+  host: broker.example.com
+  port: 8883
+  username: replace-with-node-mqtt-username
+  password: replace-with-node-mqtt-password
+  keep_alive_seconds: 60
+  tls:
+    enabled: true
+    ca_file: assets/DigiCertGlobalRootG2.crt
+
+display:
+  brightness_percent: 56

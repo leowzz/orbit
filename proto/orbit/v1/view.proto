@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package orbit.v1;
+
+option go_package = "orbit/gen/go/orbit/v1;orbitv1";
+
+import "google/protobuf/timestamp.proto";
+import "orbit/v1/common.proto";
+
+enum Freshness {
+  FRESHNESS_UNSPECIFIED = 0;
+  FRESHNESS_FRESH = 1;
+  FRESHNESS_STALE = 2;
+  FRESHNESS_OFFLINE = 3;
+}
+
+enum Emphasis {
+  EMPHASIS_UNSPECIFIED = 0;
+  EMPHASIS_NORMAL = 1;
+  EMPHASIS_STRONG = 2;
+  EMPHASIS_DIM = 3;
+}
+
+message DisplaySlot {
+  string text = 1;
+  Emphasis emphasis = 2;
+}
+
+message DeviceView {
+  Metadata metadata = 1;
+  string node_id = 2;
+  string core_epoch = 3;
+  Freshness freshness = 4;
+  google.protobuf.Timestamp fresh_until = 5;
+  google.protobuf.Timestamp retain_until = 6;
+  DisplaySlot primary = 7;
+  DisplaySlot secondary = 8;
+  DisplaySlot footer = 9;
+}

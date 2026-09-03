@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package orbit.v1;
+
+option go_package = "orbit/gen/go/orbit/v1;orbitv1";
+
+import "google/protobuf/timestamp.proto";
+
+message Metadata {
+  string message_id = 1;
+  string producer_id = 2;
+  uint64 revision = 3;
+  google.protobuf.Timestamp produced_at = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}

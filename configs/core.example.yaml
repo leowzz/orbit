@@ -1,0 +1,28 @@
+core:
+  id: core-local
+
+mqtt:
+  url: mqtts://broker.example.com:8883
+  tls:
+    enabled: true
+    ca_file: secrets/mqtt-ca.pem
+    cert_file: secrets/core-client.pem
+    key_file: secrets/core-client.key
+  credentials:
+    username_file: secrets/core-mqtt-username
+    password_file: secrets/core-mqtt-password
+
+projection_routes:
+  desk-oled-01:
+    profile: usage-oled-128x32
+    inputs:
+      - agent_id: agent-local
+        observation_type: usage
+
+observation_policies:
+  usage:
+    max_ttl: 5m
+    max_future_skew: 10s
+
+logging:
+  level: info

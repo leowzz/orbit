@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package orbit.v1;
+
+option go_package = "orbit/gen/go/orbit/v1;orbitv1";
+
+import "google/protobuf/timestamp.proto";
+import "orbit/v1/common.proto";
+
+enum ObservationType {
+  OBSERVATION_TYPE_UNSPECIFIED = 0;
+  OBSERVATION_TYPE_USAGE = 1;
+}
+
+message UsageObservation {
+  google.protobuf.Timestamp window_start = 1;
+  google.protobuf.Timestamp window_end = 2;
+  optional int64 actual_cost_micros = 3;
+  string currency_code = 4;
+  optional uint64 token_count = 5;
+  optional uint64 tpm = 6;
+  google.protobuf.Timestamp observed_at = 7;
+}
+
+message Observation {
+  Metadata metadata = 1;
+  string agent_epoch = 2;
+
+  oneof payload {
+    UsageObservation usage = 3;
+  }
+}

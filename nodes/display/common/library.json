@@ -1,0 +1,9 @@
+{
+  "name": "orbit-display-common",
+  "version": "0.1.0",
+  "description": "Portable Orbit display state and protocol boundaries",
+  "build": {
+    "includeDir": "include",
+    "srcDir": "src"
+  }
+}

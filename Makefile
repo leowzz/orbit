@@ -1,33 +1,62 @@
 .DEFAULT_GOAL := dev
 
 GO ?= go
-BUF ?= buf
+TOOLS_DIR := $(CURDIR)/.tools/bin
+BUF := $(TOOLS_DIR)/buf
+PROTOC_GEN_GO := $(TOOLS_DIR)/protoc-gen-go
+NODE_DIR := nodes/display/models/oled-128x32/variants/yd-esp32-s3
+AGENT_CONFIG ?= configs/agent.local.yaml
+CORE_CONFIG ?= configs/core.local.yaml
 
-.PHONY: dev dev-agent dev-core build test lint fmt proto-lint generate
+.PHONY: dev dev-agent dev-core build build-go build-node test test-go test-node \
+	lint fmt fmt-check proto-lint generate verify
 
-dev: dev-agent
+dev:
+	$(MAKE) -j2 dev-agent dev-core
 
 dev-agent:
-	$(GO) run ./cmd/orbit-agent
+	$(GO) run ./cmd/orbit-agent -config "$(AGENT_CONFIG)"
 
 dev-core:
-	$(GO) run ./cmd/orbit-core
+	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
 
-build:
+build: build-go
+
+build-go:
 	$(GO) build ./...
 
-test:
+build-node:
+	$(MAKE) -C "$(NODE_DIR)" build CONFIG=config.example.yaml
+
+test: test-go
+
+test-go:
 	$(GO) test ./...
+
+test-node:
+	$(MAKE) -C "$(NODE_DIR)" check
 
 lint:
 	$(GO) vet ./...
 
 fmt:
-	gofmt -w $$(find cmd internal -name '*.go' -type f)
+	gofmt -w $$(find cmd internal proto -name '*.go' -type f)
 
-proto-lint:
+fmt-check:
+	@test -z "$$(gofmt -l $$(find cmd internal proto -name '*.go' -type f))"
+
+proto-lint: $(BUF)
 	$(BUF) lint
 
-generate:
-	$(BUF) generate
+generate: $(BUF) $(PROTOC_GEN_GO)
+	PATH="$(TOOLS_DIR):$$PATH" $(BUF) generate
 
+verify: fmt-check lint test-go proto-lint test-node build-go build-node
+
+$(BUF):
+	@mkdir -p "$(TOOLS_DIR)"
+	GOBIN="$(TOOLS_DIR)" $(GO) install github.com/bufbuild/buf/cmd/buf@v1.72.0
+
+$(PROTOC_GEN_GO):
+	@mkdir -p "$(TOOLS_DIR)"
+	GOBIN="$(TOOLS_DIR)" $(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
