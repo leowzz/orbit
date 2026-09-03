@@ -52,8 +52,12 @@ _Avoid_: Device Type, Firmware
 拥有唯一 `node_id` 和凭据、实际接入 Orbit 的一个物理或软件 Node。物理 Node 还关联 Device Series、Device Model 和 Hardware Variant。
 _Avoid_: Device Instance, Client
 
+**Node Epoch**:
+一次 Node 进程或固件启动周期的随机身份，用于区分同一 Node ID 重启前后的 Node State 修订序列。
+_Avoid_: Node ID, MQTT Session
+
 **Node State**:
-Node 对产品身份、固件版本和唯一目标 Agent 的 retained 自描述，是 Core 通过 MQTT 发现 Node 的依据。
+Node 对当前 Epoch、产品身份、固件版本和唯一目标 Agent 的 retained 自描述，是 Core 通过 MQTT 发现 Node 的依据。
 _Avoid_: Node Registration, Hello
 
 **Device Series**:

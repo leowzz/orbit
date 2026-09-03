@@ -114,7 +114,7 @@ Node 是设备接入 Orbit 网络后承担的运行时角色，不是硬件产�
 职责：
 
 - 使用设备独立凭据连接 MQTT。
-- 发布 retained NodeState，报告 `node_id`、产品身份、固件版本和唯一 `target_agent_id`，不依赖 Core 中的预注册记录。
+- 每次启动生成随机 `node_epoch`，发布 retained NodeState，报告该 Epoch、`node_id`、产品身份、固件版本和唯一 `target_agent_id`，不依赖 Core 中的预注册记录。
 - 订阅自己的 retained view，并把 Core 生成的文本行映射到本地字体与像素位置。
 - 数据过期时保留最后可用内容，同时呈现 stale 状态。
 - 可选地将按钮、触摸等输入发布为有限的 Intent。
@@ -347,7 +347,7 @@ orbit/v1/cores/{core_id}/presence
 | Observation | 1 | 否 | Core 自行维护最新状态 |
 | AgentState | 1 | 是 | 当前 Agent Epoch、版本、Host Label、功能声明和各 Source 状态，不包含 Observation 值 |
 | CoreState | 1 | 是 | 当前 Core Epoch 和版本，不包含 canonical state |
-| NodeState | 1 | 是 | Node ID、Series、Model、Variant、固件版本和唯一目标 Agent |
+| NodeState | 1 | 是 | Node Epoch、Node ID、Series、Model、Variant、固件版本和唯一目标 Agent |
 | DeviceView | 1 | 是 | Node 重连后立即获得最新视图 |
 | Command | 1 | 否 | 应用层时效与去重 |
 | CommandResult | 1 | 否 | 尽力发布最终结果，不保证跨重启恢复 |
@@ -367,7 +367,9 @@ Retained payload 同时携带业务时效 `fresh_until` 和更长的保存边界
 | Node `{node_id}` | 自己的 view、Core state | 自己的 state、intents、presence |
 | 管理客户端 `{client_id}` | 明确授权的 view、自己的 intent results | 自己的 intents |
 
-Core 使用单个 `orbit/#` 通配订阅接收 Orbit Network 内的消息。Broker 负责凭据认证和 Topic ACL；普通 MQTT payload 不携带发布者用户名，因此 Core 核验 Topic 与 payload 中的 producer、target 和 identity 是否一致，并拒绝未知消息类型或不支持的产品身份。
+Core 使用单个 `orbit/#` 通配订阅接收 Orbit Network 内的消息，并启用 MQTT 5 `No Local` 避免接收自己发布的消息；Topic Router 仍显式忽略 Core 自产消息，防止错误配置形成反馈循环。Broker 负责凭据认证和 Topic ACL；普通 MQTT payload 不携带发布者用户名，因此 Core 核验 Topic 与 payload 中的 producer、target 和 identity 是否一致。
+
+Topic Router 只识别已定义的 `orbit/v1/...` 模板，并在解码前实施 Topic 与 payload 大小限制。未知 Topic 或协议版本只计数后忽略；已知 Topic 上的超限、身份不一致或畸形 payload 记录脱敏错误并丢弃，不发布错误响应。
 
 ## 8. 关键运行时流程
 
@@ -404,7 +406,13 @@ Agent 启动 Source 后，V1 Usage Source 必须先产生当前快照，再按�
 
 Agent 每次进程启动生成新的 `agent_epoch`。连接 MQTT 后，它必须先发布 retained AgentState 并收到 PUBACK，随后才启动 Source；每种 Observation 类型的 revision 在该 Epoch 内从 1 开始递增。Core 忽略不属于 AgentState 当前 Epoch 的 Observation，因此无需持久化 revision 计数器。参见 [ADR-0013](adr/0013-use-agent-epochs-for-observation-ordering.md)。
 
-### 8.2 命令执行与去重
+### 8.2 Node 发现与投影
+
+Node 每次启动生成新的 `node_epoch`，并在同一 Epoch 内递增 NodeState revision。Core 以每个 Node ID 最新 retained NodeState 的 Epoch 为准，拒绝旧 Epoch 或当前 Epoch 内较低 revision 的状态。NodeState 可以把唯一 `target_agent_id` 改为 Orbit Network 内任意 Agent；Core 接受这一声明并仅投影经过隐私裁剪的 DeviceView。V1 Node 不具备产品 Intent，此信任不延伸到未来 Command 授权。参见 [ADR-0014](adr/0014-discover-v1-nodes-over-mqtt.md) 和 [ADR-0016](adr/0016-let-v1-nodes-select-their-agent.md)。
+
+只要 NodeState 尚未超过 `retain_until`，Core 就持续使用它生成 retained DeviceView，即使 Node Presence 为 offline。Presence 只表达连接状态，不控制投影；NodeState 过期或被 tombstone 清除后，Core 才停止为该 Node 生成新 View。
+
+### 8.3 命令执行与去重
 
 Agent 收到命令后依次执行：
 
@@ -416,7 +424,7 @@ Agent 收到命令后依次执行：
 
 Agent 重启会清空去重表和未发布结果，Broker 重新投递的未过期 Command 可能再次执行，也可能已经丢失。V1 明确接受这一边界，并且只提供重复执行不会产生额外副作用的 Capability。
 
-### 8.3 重连与陈旧数据
+### 8.4 重连与陈旧数据
 
 - Node 重连后接收 retained DeviceView。
 - Node 比较修订号，拒绝状态回退。
@@ -458,6 +466,7 @@ MQTT 用户名和密钥由部署配置显式提供，不从 `agent_id` 推导，
 - 每个身份单独签发与轮换凭据，禁止固件共享全局凭据。
 - V1 凭据由操作者在 Broker 中手动创建；每个 Agent、Core 和 Node 使用独立用户名、密码与最小权限 ACL，不提供自助注册。
 - V1 使用专用 Broker 部署作为网络和准入边界，不与其他 Orbit Network 共用同一 Topic 空间。
+- 合法 Node 可以通过 NodeState 选择网络内任意 Agent 的脱敏视图；此权限不代表它有权向该 Agent 发起 Command。
 - 轮换时创建新凭据、更新部署并重启参与者，确认新连接正常后撤销旧凭据。
 - Capability 由编译时或配置白名单注册；参数在执行前转换为内部类型。
 - `OpenUrl` 只允许受控 scheme 和可选 host allowlist。
@@ -520,6 +529,7 @@ MQTT 用户名和密钥由部署配置显式提供，不从 `agent_id` 推导，
 ### 14.3 Core 测试
 
 - Observation 乱序、重复、过期和生产者重启场景。
+- NodeState 的 Epoch、乱序、目标 Agent 切换、过期和 tombstone 场景。
 - 隐私字段永远不进入 DeviceView 的契约测试。
 - 不同设备自描述和投影策略生成受尺寸约束的视图。
 - stale 传播和 Intent 的 view revision 校验。
@@ -527,6 +537,7 @@ MQTT 用户名和密钥由部署配置显式提供，不从 `agent_id` 推导，
 ### 14.4 集成与硬件验收
 
 - 使用本地 MQTT broker 完成 retained view、LWT、重复 QoS 1 投递和断网重连测试。
+- 验证 Core 的 `orbit/#` No Local 订阅、严格 Topic Router、未知版本忽略和自产消息防循环行为。
 - 使用公网测试 Broker 完成 TLS 证书校验失败、凭据隔离与 ACL 拒绝测试。
 - OLED 真机验证首帧、陈旧标识、长文本和重连后的显示。
 - 命令从测试客户端到 Agent 再到结果订阅端闭环，注入进程崩溃验证已声明的丢失与重复边界。
@@ -585,7 +596,7 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 
 - Agent 能以 Protobuf 发布真实、脱敏的 UsageObservation，Core 能发布 retained DeviceView。
 - OLED 节点重连后立即渲染最新视图，并在过期后保留内容且标记 stale。
-- Node 能通过 retained NodeState 上报 `display` / `oled-128x32` / `yd-esp32-s3` 和目标 Agent，Core 通过 `orbit/#` 发现它、拒绝不支持的产品身份并在无需预注册记录的情况下生成视图。
+- Node 能通过带 Epoch 的 retained NodeState 上报 `display` / `oled-128x32` / `yd-esp32-s3` 和目标 Agent，Core 通过 `orbit/#` 发现它、拒绝不支持的产品身份，并在 Node 离线期间继续生成 retained View。
 - M0 中管理 CLI 能发送 `PingAgent` Intent，Core 能生成类型化命令，并返回关联状态和最终结果；V1 不要求产品动作。
 - 同一 Agent 进程内的重复、过期、畸形、错目标、未授权和不支持命令被确定性处理；断线或跨重启允许 Command 丢失或重复。
 - 公网 MQTT 默认验证 TLS；显式关闭时不发生自动降级，且 Agent、Core、Node 的凭据与 ACL 相互隔离。
