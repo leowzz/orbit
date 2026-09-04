@@ -1,6 +1,5 @@
 x-orbit-service: &orbit-service
   restart: unless-stopped
-  network_mode: host
   volumes:
     - ../configs:/app/configs:ro
 
@@ -16,3 +15,5 @@ services:
   orbit-web:
     <<: *orbit-service
     image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-web:${version:?set version in .env}
+    ports:
+      - "7621:7621"

@@ -196,12 +196,13 @@ command requires a clean Git worktree and does not build or push images.
 Deploy the published images on a Linux host with the local configuration files:
 
 ~~~shell
-docker compose --env-file .env -f docker/docker-compose.yml pull
-docker compose --env-file .env -f docker/docker-compose.yml up -d
+docker compose --env-file .env -f deploy/docker-compose.yml pull
+docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ~~~
 
-The deployment uses host networking so `web.listen` may bind a host address.
-Files under `configs/` are mounted read-only and must be readable by UID 65532.
+The deployment publishes Web on port 7621, so its `web.listen` value must be
+`0.0.0.0:7621`. Files under `configs/` are mounted read-only and must be readable
+by UID 65532.
 
 make test-go uses an in-memory MQTT broker, an httptest Sub2API server, and
 Codex fixtures. It proves source selection, initial AgentState ordering,
