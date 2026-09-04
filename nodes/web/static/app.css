@@ -585,7 +585,7 @@ footer {
 
   main {
     display: grid;
-    grid-template-columns: 270px minmax(0, 1fr);
+    grid-template-columns: 180px minmax(0, 1fr);
     column-gap: 14px;
     width: calc(100% - 28px);
     max-width: none;

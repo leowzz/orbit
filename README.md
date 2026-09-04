@@ -261,6 +261,20 @@ in local storage and one SSE connection open. It updates whenever a new retained
 DeviceView is accepted. Its MQTT credential needs publish access to its own
 NodeState topic and subscribe access to its own DeviceView topic only.
 
+### Simulate the target landscape display
+
+Use the following browser settings to compare the Web node with the current
+device in landscape orientation:
+
+| Setting | Value |
+| --- | --- |
+| Responsive viewport | 1000 x 450 px |
+| Browser zoom | 125% |
+| Android system minimum width | 320 dp |
+
+Compare the layout with the device browser in fullscreen mode so browser chrome
+does not reduce the available page height.
+
 Each service exits non-zero on a configuration, TLS, authentication, ACL, or
 initial MQTT connection error. A successful startup emits an "orbit core
 started" or "orbit agent started" log message after the MQTT connection is
