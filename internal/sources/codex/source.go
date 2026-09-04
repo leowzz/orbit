@@ -1,11 +1,13 @@
 package codex
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,6 +26,7 @@ const (
 	pendingTurnGrace        = 5 * time.Minute
 	pendingTurnMinimumDelta = 2 * time.Second
 	readBusyTimeout         = 2 * time.Second
+	rolloutTailBytes        = int64(1 << 20)
 )
 
 // Config controls which Codex projection files are read and how sessions are filtered.
@@ -184,6 +187,20 @@ func (s *Source) Fetch(ctx context.Context) (Snapshot, error) {
 		}
 		return left.After(right)
 	})
+	for index := range visible {
+		session := &visible[index]
+		if index >= s.limit && session.Status != "running" {
+			continue
+		}
+		turn, ok := turns[session.ID]
+		if !ok || !projectionMayBeStale(*session, turn) {
+			continue
+		}
+		rolloutTurn, found := readLatestRolloutTurn(sessions[session.ID].rolloutPath)
+		if found && isNewerTurn(rolloutTurn, turn) {
+			session.Status = rolloutTurn.code()
+		}
+	}
 
 	runningCount := 0
 	for _, session := range visible {
@@ -204,6 +221,7 @@ func (s *Source) Fetch(ctx context.Context) (Snapshot, error) {
 }
 
 type turnStatus struct {
+	id          string
 	rawStatus   string
 	startedAt   *time.Time
 	completedAt *time.Time
@@ -211,8 +229,9 @@ type turnStatus struct {
 
 type sessionRecord struct {
 	Session
-	cwd    string
-	source string
+	cwd         string
+	source      string
+	rolloutPath string
 }
 
 func (turn turnStatus) code() string {
@@ -243,6 +262,29 @@ func isPendingRunning(updatedAt time.Time, turn turnStatus, now time.Time) bool 
 	age := now.Sub(updatedAt)
 	delta := updatedAt.Sub(*turn.completedAt)
 	return age >= 0 && age <= pendingTurnGrace && delta >= pendingTurnMinimumDelta
+}
+
+func projectionMayBeStale(session Session, turn turnStatus) bool {
+	if session.UpdatedAt.IsZero() {
+		return false
+	}
+	if turn.completedAt == nil {
+		return turn.code() == "running" && !session.ProcessAlive
+	}
+	return session.UpdatedAt.Sub(*turn.completedAt) >= pendingTurnMinimumDelta
+}
+
+func isNewerTurn(candidate, current turnStatus) bool {
+	if candidate.startedAt == nil {
+		return false
+	}
+	if current.startedAt == nil || candidate.startedAt.After(*current.startedAt) {
+		return true
+	}
+	if candidate.startedAt.Before(*current.startedAt) {
+		return false
+	}
+	return candidate.id != "" && (candidate.id != current.id || candidate.code() != current.code())
 }
 
 func resolveHome(configured string) (string, error) {
@@ -311,6 +353,10 @@ func readSessions(ctx context.Context, path string, includeArchived bool) (map[s
 	if columns["name"] {
 		threadName = "threads.name"
 	}
+	rolloutPath := "NULL"
+	if columns["rollout_path"] {
+		rolloutPath = "threads.rollout_path"
+	}
 	spawnJoin := ""
 	spawnedSubagent := "0"
 	hasSpawnEdges, err := tableExists(ctx, db, "thread_spawn_edges")
@@ -325,11 +371,11 @@ func readSessions(ctx context.Context, path string, includeArchived bool) (map[s
 		SELECT threads.id, %s AS thread_name, threads.title, threads.source,
 		       threads.cwd, threads.model, threads.updated_at_ms,
 		       threads.first_user_message, threads.archived,
-		       %s AS spawned_subagent
+		       %s AS spawned_subagent, %s AS rollout_path
 		FROM threads
 		%s
 		%s
-		ORDER BY threads.updated_at_ms DESC`, threadName, spawnedSubagent, spawnJoin, archivedClause(includeArchived))
+		ORDER BY threads.updated_at_ms DESC`, threadName, spawnedSubagent, rolloutPath, spawnJoin, archivedClause(includeArchived))
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -339,11 +385,11 @@ func readSessions(ctx context.Context, path string, includeArchived bool) (map[s
 	sessions := make(map[string]sessionRecord)
 	for rows.Next() {
 		var (
-			id, name, title, source, cwd, model, firstMessage sql.NullString
-			updatedAtMs, archived                             sql.NullInt64
-			spawned                                           int
+			id, name, title, source, cwd, model, firstMessage, rolloutPath sql.NullString
+			updatedAtMs, archived                                          sql.NullInt64
+			spawned                                                        int
 		)
-		if err := rows.Scan(&id, &name, &title, &source, &cwd, &model, &updatedAtMs, &firstMessage, &archived, &spawned); err != nil {
+		if err := rows.Scan(&id, &name, &title, &source, &cwd, &model, &updatedAtMs, &firstMessage, &archived, &spawned, &rolloutPath); err != nil {
 			return nil, err
 		}
 		if !id.Valid || strings.TrimSpace(id.String) == "" {
@@ -377,8 +423,9 @@ func readSessions(ctx context.Context, path string, includeArchived bool) (map[s
 				Status:      "unknown",
 				UpdatedAt:   updatedAt,
 			},
-			cwd:    cwd.String,
-			source: source.String,
+			cwd:         cwd.String,
+			source:      source.String,
+			rolloutPath: rolloutPath.String,
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -430,6 +477,7 @@ func readLatestTurns(ctx context.Context, path string) (map[string]turnStatus, e
 			return nil, errors.New("thread_turns row has no thread_id")
 		}
 		turns[threadID.String] = turnStatus{
+			id:          turnID.String,
 			rawStatus:   status.String,
 			startedAt:   unixSeconds(startedAt),
 			completedAt: unixSeconds(completedAt),
@@ -439,6 +487,85 @@ func readLatestTurns(ctx context.Context, path string) (map[string]turnStatus, e
 		return nil, err
 	}
 	return turns, nil
+}
+
+func readLatestRolloutTurn(path string) (turnStatus, bool) {
+	if strings.TrimSpace(path) == "" {
+		return turnStatus{}, false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return turnStatus{}, false
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return turnStatus{}, false
+	}
+	start := info.Size() - rolloutTailBytes
+	if start < 0 {
+		start = 0
+	}
+	discardPartialLine := false
+	seekOffset := start
+	if start > 0 {
+		seekOffset--
+	}
+	if _, err := file.Seek(seekOffset, io.SeekStart); err != nil {
+		return turnStatus{}, false
+	}
+	if start > 0 {
+		var previous [1]byte
+		if _, err := io.ReadFull(file, previous[:]); err != nil {
+			return turnStatus{}, false
+		}
+		discardPartialLine = previous[0] != '\n'
+	}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), int(rolloutTailBytes)+64*1024)
+	if discardPartialLine {
+		scanner.Scan()
+	}
+
+	var latest turnStatus
+	found := false
+	for scanner.Scan() {
+		var event struct {
+			Type    string `json:"type"`
+			Payload struct {
+				Type        string `json:"type"`
+				TurnID      string `json:"turn_id"`
+				Reason      string `json:"reason"`
+				StartedAt   *int64 `json:"started_at"`
+				CompletedAt *int64 `json:"completed_at"`
+			} `json:"payload"`
+		}
+		if json.Unmarshal(scanner.Bytes(), &event) != nil || event.Type != "event_msg" {
+			continue
+		}
+		status := ""
+		switch event.Payload.Type {
+		case "task_started":
+			status = "running"
+		case "task_complete":
+			status = "completed"
+		case "turn_aborted":
+			status = event.Payload.Reason
+			if status == "" {
+				status = "interrupted"
+			}
+		default:
+			continue
+		}
+		latest = turnStatus{
+			id:          event.Payload.TurnID,
+			rawStatus:   status,
+			startedAt:   unixTimestamp(event.Payload.StartedAt),
+			completedAt: unixTimestamp(event.Payload.CompletedAt),
+		}
+		found = true
+	}
+	return latest, found
 }
 
 func tableColumns(ctx context.Context, db *sql.DB, table string) (map[string]bool, error) {
@@ -551,6 +678,14 @@ func unixSeconds(value sql.NullInt64) *time.Time {
 		return nil
 	}
 	parsed := time.Unix(value.Int64, 0).In(time.Local)
+	return &parsed
+}
+
+func unixTimestamp(value *int64) *time.Time {
+	if value == nil {
+		return nil
+	}
+	parsed := time.Unix(*value, 0).In(time.Local)
 	return &parsed
 }
 

@@ -126,6 +126,104 @@ func TestPendingRunningHonorsGraceAndDelta(t *testing.T) {
 	}
 }
 
+func TestFetchReconcilesStaleHistoryFromRollout(t *testing.T) {
+	home := t.TempDir()
+	now := time.Date(2026, 9, 4, 16, 4, 21, 0, time.Local)
+	rolloutPath := filepath.Join(home, "rollout.jsonl")
+	writeRolloutEvents(t, rolloutPath, []map[string]any{
+		{
+			"type": "event_msg",
+			"payload": map[string]any{
+				"type":       "task_started",
+				"turn_id":    "current-turn",
+				"started_at": now.Add(-14 * time.Minute).Unix(),
+			},
+		},
+		{
+			"type": "response_item",
+			"payload": map[string]any{
+				"type":   "custom_tool_call_output",
+				"output": strings.Repeat("x", int(rolloutTailBytes)),
+			},
+		},
+		{
+			"type": "event_msg",
+			"payload": map[string]any{
+				"type":         "task_complete",
+				"turn_id":      "current-turn",
+				"started_at":   now.Add(-14 * time.Minute).Unix(),
+				"completed_at": now.Unix(),
+			},
+		},
+	})
+	createStateDB(t, filepath.Join(home, "state_1.sqlite"), true, []stateFixture{{
+		id: "stale", title: "Stale projection", source: "vscode", cwd: "/tmp/project", model: "gpt",
+		updatedAt: now, rolloutPath: rolloutPath,
+	}})
+	createHistoryDB(t, filepath.Join(home, "thread_history_1.sqlite"), []turnFixture{{
+		threadID: "stale", turnID: "old-turn", status: "interrupted",
+		startedAt: now.Add(-15 * time.Minute), completedAt: now.Add(-14*time.Minute - 30*time.Second),
+	}})
+
+	source, err := New(Config{Home: home, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source.now = func() time.Time { return now }
+	snapshot, err := source.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.RunningCount != 0 || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != "completed" {
+		t.Fatalf("snapshot with stale history projection = %+v", snapshot)
+	}
+}
+
+func TestFetchKeepsCurrentRolloutTurnRunning(t *testing.T) {
+	home := t.TempDir()
+	now := time.Date(2026, 9, 4, 16, 4, 21, 0, time.Local)
+	rolloutPath := filepath.Join(home, "rollout.jsonl")
+	writeRolloutEvents(t, rolloutPath, []map[string]any{
+		{
+			"type": "event_msg",
+			"payload": map[string]any{
+				"type":         "task_complete",
+				"turn_id":      "old-turn",
+				"started_at":   now.Add(-2 * time.Minute).Unix(),
+				"completed_at": now.Add(-time.Minute).Unix(),
+			},
+		},
+		{
+			"type": "event_msg",
+			"payload": map[string]any{
+				"type":       "task_started",
+				"turn_id":    "current-turn",
+				"started_at": now.Unix(),
+			},
+		},
+	})
+	createStateDB(t, filepath.Join(home, "state_1.sqlite"), true, []stateFixture{{
+		id: "running", title: "Running", source: "vscode", cwd: "/tmp/project", model: "gpt",
+		updatedAt: now, rolloutPath: rolloutPath,
+	}})
+	createHistoryDB(t, filepath.Join(home, "thread_history_1.sqlite"), []turnFixture{{
+		threadID: "running", turnID: "current-turn", status: "inProgress", startedAt: now,
+	}})
+
+	source, err := New(Config{Home: home, Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source.now = func() time.Time { return now }
+	snapshot, err := source.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.RunningCount != 1 || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != "running" {
+		t.Fatalf("snapshot with current rollout turn = %+v", snapshot)
+	}
+}
+
 func TestFetchAppliesFiltersAndArchivedOptionBeforeLimit(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now().Truncate(time.Second)
@@ -321,6 +419,7 @@ type stateFixture struct {
 	firstMessage string
 	updatedAt    time.Time
 	archived     bool
+	rolloutPath  string
 }
 
 type turnFixture struct {
@@ -342,7 +441,7 @@ func createStateDB(t *testing.T, path string, withName bool, fixtures []stateFix
 	if withName {
 		nameColumn = ", name TEXT"
 	}
-	if _, err := db.Exec("CREATE TABLE threads (id TEXT, title TEXT" + nameColumn + ", source TEXT, cwd TEXT, model TEXT, updated_at_ms INTEGER, first_user_message TEXT, archived INTEGER)"); err != nil {
+	if _, err := db.Exec("CREATE TABLE threads (id TEXT, title TEXT" + nameColumn + ", source TEXT, cwd TEXT, model TEXT, updated_at_ms INTEGER, first_user_message TEXT, archived INTEGER, rollout_path TEXT)"); err != nil {
 		t.Fatal(err)
 	}
 	for _, fixture := range fixtures {
@@ -350,16 +449,32 @@ func createStateDB(t *testing.T, path string, withName bool, fixtures []stateFix
 		if withName {
 			args = append(args, fixture.name)
 		}
-		args = append(args, fixture.source, fixture.cwd, fixture.model, fixture.updatedAt.UnixMilli(), fixture.firstMessage, fixture.archived)
+		args = append(args, fixture.source, fixture.cwd, fixture.model, fixture.updatedAt.UnixMilli(), fixture.firstMessage, fixture.archived, fixture.rolloutPath)
 		query := "INSERT INTO threads (id, title"
 		if withName {
 			query += ", name"
 		}
-		query += ", source, cwd, model, updated_at_ms, first_user_message, archived) VALUES ("
+		query += ", source, cwd, model, updated_at_ms, first_user_message, archived, rollout_path) VALUES ("
 		query += strings.TrimRight(strings.Repeat("?,", len(args)), ",") + ")"
 		if _, err := db.Exec(query, args...); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func writeRolloutEvents(t *testing.T, path string, events []map[string]any) {
+	t.Helper()
+	var contents []byte
+	for _, event := range events {
+		line, err := json.Marshal(event)
+		if err != nil {
+			t.Fatal(err)
+		}
+		contents = append(contents, line...)
+		contents = append(contents, '\n')
+	}
+	if err := os.WriteFile(path, contents, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 
