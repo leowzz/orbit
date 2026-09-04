@@ -257,8 +257,8 @@ body {
   outline-offset: 4px;
 }
 
-.brand[aria-pressed="true"] .brand-mark {
-  border-color: var(--green);
+.brand[aria-pressed="true"] .brand-mark-orbit {
+  stroke: var(--green);
 }
 
 @media (hover: none) {
@@ -269,7 +269,6 @@ body {
   }
 }
 
-.brand-mark,
 .empty-orbit {
   display: grid;
   place-items: center;
@@ -280,14 +279,37 @@ body {
 }
 
 .brand-mark {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
   margin-right: 10px;
+  overflow: visible;
 }
 
-.brand-mark span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--green);
+.brand-mark-orbit,
+.brand-mark-route {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.brand-mark-orbit {
+  stroke: var(--ink);
+  stroke-width: 8;
+}
+
+.brand-mark-route {
+  stroke: var(--green);
+  stroke-width: 6;
+}
+
+.brand-mark-core {
+  fill: var(--green);
+}
+
+.brand-mark-node {
+  fill: var(--blue);
+  stroke: var(--surface);
+  stroke-width: 4;
 }
 
 .topbar-time {
@@ -736,12 +758,8 @@ footer {
   .brand-mark {
     width: 20px;
     height: 20px;
+    flex-basis: 20px;
     margin-right: 8px;
-  }
-
-  .brand-mark span {
-    width: 6px;
-    height: 6px;
   }
 
   .connection {

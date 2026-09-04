@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title desc">
+  <title id="title">Orbit</title>
+  <desc id="desc">A central core connected to a node on an open orbital ring.</desc>
+  <style>
+    .orbit-ring { stroke: #1f2328; }
+    .orbit-cutout { stroke: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      .orbit-ring { stroke: #e6ebe8; }
+      .orbit-cutout { stroke: #151917; }
+    }
+  </style>
+  <path class="orbit-ring" d="M73.6 28.8A32 32 0 1 0 80 48" fill="none" stroke-linecap="round" stroke-width="8"/>
+  <path d="M48 48 70.5 27.5" fill="none" stroke="#087f5b" stroke-linecap="round" stroke-width="6"/>
+  <circle cx="48" cy="48" r="10" fill="#087f5b"/>
+  <circle class="orbit-cutout" cx="73" cy="25" r="8" fill="#1769aa" stroke-width="4"/>
+</svg>
