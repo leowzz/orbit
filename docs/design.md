@@ -1,7 +1,7 @@
 # Orbit 总体设计
 
 > 状态：Draft  
-> 更新时间：2026-09-03  
+> 更新时间：2026-09-04<br>
 > 依据：[项目交接说明](../HANDOFF.md)
 
 ## 1. 文档目的
@@ -50,7 +50,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 | V1 Agent 平台 | macOS；Windows 和 Linux 不在 V1 支持范围 |
 | V1 Core 平台 | 长期在线的 Linux 主机；开发时允许在 macOS 本地运行 |
 | 结构化协议 | Protocol Buffers，包名从 `orbit.v1` 开始 |
-| 消息传输 | EMQX Cloud Serverless 上的公网 MQTT 5；默认 TLS，允许配置显式关闭，禁止自动降级 |
+| 消息传输 | EMQX Cloud Serverless 公网 Broker；Go Agent/Core/Web 使用 MQTT 5，当前 OLED 固件使用 MQTT 3.1.1 兼容接入；默认 TLS，允许配置显式关闭，禁止自动降级 |
 | 网络边界 | 一个专用 Broker 部署对应一个 Orbit Network；V1 不增加 `tenant_id` 或 `network_id` |
 | 命令模型 | `oneof` 类型化动作，禁止 `google.protobuf.Any` 和任意命令字符串 |
 | 设备数据 | 只发送语义视图，不发送提示词、正文、终端输出、凭据或任意本地路径 |
@@ -59,7 +59,89 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 
 ## 4. 总体结构
 
-![Orbit 系统架构：独立 Agent、Core、Node 与管理客户端通过 MQTT Broker 协作](assets/orbit-system-architecture.png)
+总览拆成两条单向主链，避免状态投影与命令执行的回边互相穿插。蓝色是可信
+主机，橙色是 MQTT Topic，绿色是 Core 内部状态与策略，紫色是 Node。
+
+**状态数据流：Observation → DeviceView**
+
+```mermaid
+flowchart TB
+    Usage["Usage Source"] -->|"typed payload"| Agent["Orbit Agent<br/>metadata · revision · expiry"]
+    Codex["Codex Source"] -->|"typed payload"| Agent
+    Agent -->|"QoS 1 · non-retained"| Observation["MQTT Observation<br/>agents/{agent_id}/observations/{type}"]
+    Observation --> Ingress["Core ingress<br/>identity · epoch · revision · TTL"]
+    AgentState["MQTT AgentState<br/>retained · current agent_epoch"] -->|"epoch prerequisite"| Ingress
+    Ingress --> Canonical[("Canonical state<br/>latest snapshot per agent/type")]
+    Canonical --> Projector["Projection<br/>route · privacy · profile"]
+    Route["Projection Route<br/>node_id → profile + inputs"] -->|"routing policy"| Projector
+    NodeState["MQTT NodeState<br/>retained · epoch + product"] -->|"node prerequisite"| Projector
+    Projector -->|"QoS 1 · retained"| View["MQTT DeviceView<br/>nodes/{node_id}/view"]
+    View -->|"usage-oled-128x32"| OLED["OLED Node<br/>local pixel rendering"]
+    View -->|"overview-web"| Web["Web Node<br/>cached view + HTTP/SSE"]
+
+    classDef host fill:#eaf2ff,stroke:#2563eb,color:#172033
+    classDef topic fill:#fff4e8,stroke:#c2410c,color:#172033
+    classDef core fill:#eaf8ef,stroke:#15803d,color:#172033
+    classDef node fill:#f3efff,stroke:#7c3aed,color:#172033
+    class Usage,Codex,Agent host
+    class Observation,AgentState,NodeState,View topic
+    class Ingress,Canonical,Projector,Route core
+    class OLED,Web node
+```
+
+Usage 与 Codex 只在 canonical state 汇合。Projection Route 和 NodeState 是生成
+View 的前置输入，不进入 DeviceView。OLED 只选 Usage；Web 可同时选择 Usage 与
+Codex。
+
+**命令数据流：Intent → CommandResult**
+
+```mermaid
+flowchart TB
+    subgraph Request["1 · Request and route"]
+        direction LR
+        Web["Web Node<br/>fresh cached view"] -->|"TTL 20s"| Intent["MQTT Intent<br/>nodes/{node_id}/intents"]
+        Intent --> Router["Core validation + routing<br/>epoch · revision · session"]
+        Context["Current Core context<br/>Route + Codex state"] --> Router
+        Router -->|"typed · TTL ≤ 30s"| Command["MQTT Command<br/>agents/{agent_id}/commands"]
+    end
+
+    subgraph Execute["2 · Validate and execute"]
+        direction LR
+        Agent["Orbit Agent<br/>target · TTL · UUID · dedup"] --> Capability["OpenCodexSession<br/>typed Capability"]
+        Capability --> Result["Build final result<br/>intent_ref + status"]
+    end
+
+    subgraph Observe["3 · Observe result"]
+        direction LR
+        ResultTopic["MQTT CommandResult<br/>agents/{agent_id}/results"] --> Observer["Test/admin subscriber<br/>current endpoint"]
+        ResultTopic -. "planned" .-> Feedback["Core → Web feedback<br/>not implemented"]
+    end
+
+    Command --> Agent
+    Result --> ResultTopic
+
+    classDef host fill:#eaf2ff,stroke:#2563eb,color:#172033
+    classDef topic fill:#fff4e8,stroke:#c2410c,color:#172033
+    classDef core fill:#eaf8ef,stroke:#15803d,color:#172033
+    classDef node fill:#f3efff,stroke:#7c3aed,color:#172033
+    classDef planned fill:#f7f7f8,stroke:#64748b,stroke-dasharray:5 4,color:#475569
+    class Agent,Capability,Result host
+    class Intent,Command,ResultTopic topic
+    class Router,Context core
+    class Web,Observer node
+    class Feedback planned
+    style Request fill:#ffffff,stroke:#cbd5e1,color:#475569
+    style Execute fill:#ffffff,stroke:#cbd5e1,color:#475569
+    style Observe fill:#ffffff,stroke:#cbd5e1,color:#475569
+```
+
+当前命令闭环止于 Agent 发布可关联的 CommandResult；Core → Web 最终反馈仍未
+实现。Node 始终只收到自己的 DeviceView，不收到 Projection Route、上游
+`agent_id`、Source 原始响应或主机路径。
+
+MQTT 协议版本差异只存在于传输层：Go Agent/Core/Web 使用 MQTT 5，OLED 当前
+使用 MQTT 3.1.1；两者消费同一 Protobuf、QoS 1 和 retained DeviceView。OLED
+当前不能使用 MQTT 5 CONNECT、No Local 或 Message Expiry 属性。
 
 ### 4.1 模块划分
 
@@ -70,7 +152,7 @@ Agent 是运行在可信主机上的深模块实例，通常一台机器只运�
 职责：
 
 - 启动并管理多个已注册 Source；各 Source 自行封装本机读取、远端 API 或事件订阅方式。
-- 发布 Observation、retained AgentState 和 Agent presence。
+- 发布 Observation 和 retained AgentState；目标协议还要求 Agent Presence。
 - 接收只发往自身 `agent_id` 的命令。
 - 在执行前完成解码、版本、目标、时效、授权上下文和参数校验。
 - 使用有界内存记录抑制同一进程生命周期内的重复 Command；不承诺跨重启恢复。
@@ -271,7 +353,6 @@ flowchart TD
     Primary[primary slot]
     Secondary[secondary slot]
     Footer[footer slot]
-    Feedback[command_feedback]
 
     View --> Metadata
     View --> NodeID
@@ -280,7 +361,6 @@ flowchart TD
     View --> Primary
     View --> Secondary
     View --> Footer
-    View --> Feedback
 ```
 
 首版应限制：
@@ -332,31 +412,42 @@ stateDiagram-v2
 
 `REJECTED` 表示命令没有执行资格；`FAILED` 表示本次尝试已执行但失败。V1 不持久化中间状态，也不报告 `ACCEPTED`、`RUNNING` 或 `UNKNOWN_OUTCOME`。Command 可以在重启边界丢失或重复，因此 V1 Capability 必须可重复执行或合并；参见 [ADR-0008](adr/0008-use-ephemeral-idempotent-v1-commands.md)。
 
-CommandResult 必须原样回显 Command 的 `intent_ref`。Core 不依赖内存中的临时映射即可把结果投影为发起者专属的 Command Feedback。
+CommandResult 必须原样回显 Command 的 `intent_ref`，使 Core 后续无需依赖
+内存中的临时映射即可把结果投影为发起者专属的 Command Feedback。当前实现的
+Core Runner 尚未订阅 Result Topic，`DeviceView` 也没有 Command Feedback 字段；
+因此当前闭环只验收到 Agent 发布可关联的最终 CommandResult，反馈回投属于后续
+协议与实现工作。
 
 ### 6.5 Intent
 
 Node 不直接决定主机命令参数，而是发送受限 Intent。Core 根据发起者权限、当前 view revision 与投影上下文解析 Intent，并生成具体 Command。
 
-Intent 必须携带发起者生成且不可复用的 `intent_id`，以及触发时所见的 `view_revision`。Core 将发起者身份和 Intent ID 固化为 Command 的 `intent_ref`；当选择对象已经变化或过期时拒绝 Intent，避免按钮操作命中新的对象。Agent 的原始 CommandResult 只发给 Core；Core 将安全的 Command Feedback 投影进发起 Node 的 DeviceView，管理客户端只接收自己发起 Intent 的结果。V1 的 OLED Node 没有输入能力，Intent 与 Command 只在 M0 通过 `PingAgent` 验证协议闭环，不进入 V1 产品验收。
+Intent 必须携带发起者生成且不可复用的 `intent_id`，以及触发时所见的 `view_revision`。Core 将发起者身份和 Intent ID 固化为 Command 的 `intent_ref`；当选择对象已经变化或过期时拒绝 Intent，避免按钮操作命中新的对象。当前 Web Node 已实现 `OpenCodexSessionIntent`，但 HTTP `202 Accepted` 只表示 Intent 已成功发布，不表示 Capability 已执行成功；最终结果必须以 Agent Result Topic 上具有相同 `intent_ref` 的 CommandResult 为准。V1 的 OLED Node 没有输入能力，也不参与命令链路。
 
 ### 6.6 协议演进
 
-`orbit.v1` 内只允许向后兼容演进：增加可选字段或新枚举值时，旧消费者必须能够忽略或安全降级。删除字段、改变既有字段含义或改变 Topic 路由语义属于破坏性变更，必须建立新的 `orbit.v2` Protobuf package 和 `orbit/v2/...` Topic。Core 的 `orbit/#` Router 对尚未实现的版本只计数并忽略。参见 [ADR-0017](adr/0017-version-breaking-protocol-changes.md)。
+`orbit.v1` 内只允许向后兼容演进：增加可选字段或新枚举值时，旧消费者必须能够忽略或安全降级。删除字段、改变既有字段含义或改变 Topic 路由语义属于破坏性变更，必须建立新的 `orbit.v2` Protobuf package 和 `orbit/v2/...` Topic。目标 `orbit/#` Router 对尚未实现的版本只计数并忽略；当前显式 Filter 不会订阅未知版本。参见 [ADR-0017](adr/0017-version-breaking-protocol-changes.md)。
 
 ## 7. MQTT 设计
 
 ### 7.1 Topic
 
+当前 Runner 实际发布或订阅的 Topic：
+
 ```text
-orbit/v1/agents/{agent_id}/observations
+orbit/v1/agents/{agent_id}/observations/{usage|codex}
 orbit/v1/agents/{agent_id}/state
 orbit/v1/agents/{agent_id}/commands
 orbit/v1/agents/{agent_id}/results
-orbit/v1/agents/{agent_id}/presence
 orbit/v1/nodes/{node_id}/state
 orbit/v1/nodes/{node_id}/view
 orbit/v1/nodes/{node_id}/intents
+```
+
+以下 Topic 属于目标协议，当前没有对应 Protobuf 或 Runner 路径：
+
+```text
+orbit/v1/agents/{agent_id}/presence
 orbit/v1/nodes/{node_id}/presence
 orbit/v1/clients/{client_id}/intents
 orbit/v1/clients/{client_id}/intent-results
@@ -366,67 +457,119 @@ orbit/v1/cores/{core_id}/presence
 
 ### 7.2 投递属性
 
-| 消息 | QoS | Retained | 说明 |
+| 消息 | QoS | Retained | 实现状态与说明 |
 | --- | --- | --- | --- |
-| Observation | 1 | 否 | Core 自行维护最新状态 |
-| AgentState | 1 | 是 | 当前 Agent Epoch、版本、Host Label、功能声明和各 Source 状态，不包含 Observation 值 |
-| CoreState | 1 | 是 | 当前 Core Epoch 和版本，不包含 canonical state |
-| NodeState | 1 | 是 | Node Epoch、Node ID、Series、Model、Variant 和固件版本，不包含上游 Agent |
-| DeviceView | 1 | 是 | Node 重连后立即获得最新视图 |
-| Command | 1 | 否 | 应用层时效与去重 |
-| CommandResult | 1 | 否 | 尽力发布最终结果，不保证跨重启恢复 |
-| Presence | 1 | 是 | 使用 LWT 发布离线状态 |
-| Intent | 1 | 否 | 必须带时效与 view revision |
+| Observation | 1 | 否 | 已实现；Core 自行维护最新状态 |
+| AgentState | 1 | 是 | 已实现；包含当前 Agent Epoch、版本、Host Label、功能声明和各 Source 状态，不包含 Observation 值 |
+| CoreState | 1 | 是 | 未实现；目标只包含当前 Core Epoch 和版本，不包含 canonical state |
+| NodeState | 1 | 是 | 已实现；包含 Node Epoch、Node ID、Series、Model、Variant 和固件版本，不包含上游 Agent |
+| DeviceView | 1 | 是 | 已实现；Node 重连后获得 Broker 中的最新 retained View |
+| Command | 1 | 否 | 已实现；应用层时效与进程内去重 |
+| CommandResult | 1 | 否 | 已实现发布，Core/Web 尚未消费；不保证跨重启恢复 |
+| Presence | 1 | 是 | 未实现；目标使用 LWT 发布离线状态 |
+| Intent | 1 | 否 | Web Node 已实现；必须带时效与 view revision |
 
-所有 payload 使用 `application/protobuf`。Agent、Core、Node 和管理客户端都使用 clean start（Session Expiry Interval 为 0），Broker 不为离线参与者排队 Observation、Intent、Command 或 Result。DeviceView、AgentState、CoreState、NodeState 和 Presence 使用 retained，但这不表示 Core 会恢复 canonical state；其他消息允许在断线时丢失。
+所有线协议 payload 都是 Protobuf。Go MQTT 5 客户端额外设置
+`application/protobuf` Content Type；OLED 的 MQTT 3.1.1 PUBLISH 不携带该 MQTT 5
+属性。Go 客户端使用 clean start（Session Expiry Interval 为 0），Broker 不为其
+离线排队 Observation、Intent、Command 或 Result。当前 retained 消息只有
+DeviceView、AgentState 和 NodeState；这不表示 Core 会恢复 canonical state。
 
-DeviceView 同时携带业务时效 `fresh_until` 和更长的保存边界 `retain_until`。过了 freshness 仍可作为 stale 状态或最后画面，过了 retention 则由对应的 MQTT 5 Message Expiry 清理；具体时长在部署配置阶段决定。AgentState、CoreState、NodeState 和 Presence 不携带 `retain_until`，也不设置 MQTT Message Expiry，而是保留到同 Topic 的新状态覆盖或操作者发布零字节 tombstone。删除参与者时必须撤销凭据并清理其 retained Topics；这种显式清理是无应用层心跳设计的一部分。参见 [ADR-0019](adr/0019-retain-participant-state-until-tombstone.md)。
+DeviceView 同时携带业务时效 `fresh_until` 和更长的应用层保存边界
+`retain_until`。当前传输层没有设置 MQTT Message Expiry，因此 `retain_until`
+到期不会让 Broker 自动删除 retained View，只能由新 View 覆盖或由操作者发布
+零字节 tombstone。为 DeviceView 接入 MQTT 5 Message Expiry 后，Broker 才能在
+保存边界自动清理。目标态的 AgentState、CoreState、NodeState 和 Presence 不设置
+Message Expiry，删除参与者时需撤销凭据并清理 retained Topics。参见
+[ADR-0019](adr/0019-retain-participant-state-until-tombstone.md)。
 
 ### 7.3 ACL 原则
 
-| 身份 | 可订阅 | 可发布 |
+| 身份 | 当前可订阅 | 当前可发布 |
 | --- | --- | --- |
-| Agent `{agent_id}` | 自己的 commands | 自己的 observations、state、results、presence |
-| Core | `orbit/#` | views、commands、requester-scoped intent results、自己的 state 与 presence |
-| Node `{node_id}` | 自己的 view | 自己的 state、intents、presence |
-| 管理客户端 `{client_id}` | 明确授权的 view、自己的 intent results | 自己的 intents |
+| Agent `{agent_id}` | 自己的 commands | 自己的 observations、state、results |
+| Core | Agent state、Node state、Usage/Codex observations、Node intents | Node views、Agent commands |
+| Node `{node_id}` | 自己的 view | 自己的 state、intents |
+| 验收订阅端 | 仅使用临时管理员或 test-only 凭据订阅 Result；不是生产角色 | 无 |
 
-Core 使用单个 `orbit/#` 通配订阅接收 Orbit Network 内的消息，并启用 MQTT 5 `No Local` 避免接收自己发布的消息；Topic Router 仍显式忽略 Core 自产消息，防止错误配置形成反馈循环。Broker 负责凭据认证和 Topic ACL；普通 MQTT payload 不携带发布者用户名，因此 Core 核验 Topic 与 payload 中的 producer、target 和 identity 是否一致。
+当前 Core Runner 使用显式 Topic Filter，不订阅 `orbit/#`，也未启用 MQTT 5
+`No Local`。目标 Router 在扩展到 Presence、CoreState 与 requester-scoped feedback
+时可以改用 `orbit/#`，但必须先实现严格路由和自产消息防循环。Broker 负责凭据
+认证和 Topic ACL；普通 MQTT payload 不携带发布者用户名，因此 Core 仍需核验
+Topic 与 payload 中的 producer、target 和 identity 是否一致。
 
 Topic Router 只识别已定义的 `orbit/v1/...` 模板，并在解码前实施 Topic 与 payload 大小限制。未知 Topic 或协议版本只计数后忽略；已知 Topic 上的超限、身份不一致或畸形 payload 记录脱敏错误并丢弃，不发布错误响应。
 
-Presence 不使用应用层心跳。参与者连接成功后发布 retained ONLINE，异常断线由 MQTT Keep Alive 和 LWT 发布 OFFLINE，正常退出主动发布 OFFLINE；Presence 只表达参与者 ID、当前 Epoch 和连接状态，不携带业务健康或 freshness。`changed_at` 是可选字段：ONLINE 和正常退出的 OFFLINE 使用真实发送时间；连接建立前预置的 LWT OFFLINE 必须省略它，因为异常断线时间在预置 payload 时尚不可知。消费者收到无 `changed_at` 的 LWT 时只记录本地接收时间，不把它解释为精确断线时间。
+Presence 是尚未实现的目标协议，不使用应用层心跳。目标行为是：参与者连接成功
+后发布 retained ONLINE，异常断线由 MQTT Keep Alive 和 LWT 发布 OFFLINE，正常
+退出主动发布 OFFLINE。Presence 只表达参与者 ID、当前 Epoch 和连接状态，不携带
+业务健康或 freshness。`changed_at` 是可选字段：ONLINE 和正常退出的 OFFLINE
+使用真实发送时间；连接建立前预置的 LWT OFFLINE 必须省略它。该消息、LWT 配置
+和消费路径完成之前，不得把断线检测列为当前实现能力。
 
 ## 8. 关键运行时流程
 
-所有 Agent、Core 和 Node 在首次连接和每次重连时使用相同的连接屏障：先加载并完整校验配置、生成或复用本次进程 Epoch、配置 retained OFFLINE LWT，再发送 CONNECT；收到 CONNACK 后完成所需订阅并等待 SUBACK，然后发布 retained State 并等待 PUBACK，再发布 retained ONLINE 并等待 PUBACK，最后才开始或恢复业务发布与处理。首次启动生成新 Epoch，同一进程内的 MQTT 重连必须复用它。正常退出时，参与者发布带真实 `changed_at` 的 retained OFFLINE，并在有界等待 PUBACK 后发送 DISCONNECT。
+目标连接屏障是：加载并校验配置、生成或复用本次进程 Epoch、配置 retained
+OFFLINE LWT、CONNECT、等待 SUBACK、发布 State 并等待 PUBACK、发布 ONLINE 并
+等待 PUBACK，最后开始业务处理。当前实现只完成了首次连接时“订阅先于 State、
+AgentState 先于 Source”的关键顺序；Go transport 会在重连后恢复订阅，但 Runner
+不会执行完整的 State/Presence 重放屏障，LWT 和 Presence 也尚未实现。下图因此
+只描述当前首次启动和业务消息顺序，不表示完整连接生命周期已经验收。
 
 ### 8.1 状态发布
 
 ```mermaid
 sequenceDiagram
-    participant Source
-    participant Agent as Agent Scheduler
+    autonumber
+    participant Source as Usage / Codex Source
+    participant Agent as Orbit Agent
     participant MQTT as MQTT Broker
-    participant Core
-    participant Node
+    participant Core as Orbit Core
+    participant Node as OLED / Web Node
 
-    Agent->>Source: Run
-    alt Source 产生初始快照或后续更新
-        Source-->>Agent: emit ObservationPayload
-        Agent->>MQTT: Observation (QoS 1)
-        MQTT->>Core: Observation
-        Core->>Core: validate / order / expire
-        Core->>Core: update canonical state
-        Core->>Core: privacy projection
-        Core->>MQTT: retained DeviceView (QoS 1)
-        MQTT->>Node: DeviceView
-        Node->>Node: local render
-    else Source 状态变化
-        Source-->>Agent: health / last success / error code
-        Agent->>MQTT: retained AgentState (QoS 1)
-        MQTT->>Core: AgentState
-        Core->>Core: retain last value and mark stale when expired
+    Core->>MQTT: SUBSCRIBE AgentState / NodeState / Observations / Intents
+    MQTT-->>Core: SUBACK
+    par Agent 首次启动顺序
+        Agent->>MQTT: retained AgentState(agent_epoch, sources=UNSPECIFIED)
+        MQTT-->>Agent: PUBACK
+        MQTT-->>Core: AgentState
+        Core->>Core: 接受当前 Agent Epoch
+    and Node 首次启动顺序
+        Node->>MQTT: SUBSCRIBE own DeviceView
+        MQTT-->>Node: SUBACK
+        Node->>MQTT: retained NodeState(node_epoch, product identity)
+        MQTT-->>Node: PUBACK
+        MQTT-->>Core: NodeState
+        Core->>Core: 校验 Epoch、产品身份与 Projection Route
+    end
+
+    Agent->>Source: 立即 Fetch，之后按 Source 独立 ticker
+    alt 采集成功
+        Source-->>Agent: typed ObservationPayload + observed_at
+        Agent->>Agent: 添加 agent_epoch、type-local revision、expires_at
+        Agent->>MQTT: non-retained Observation (QoS 1)
+        MQTT-->>Core: Observation
+        Core->>Core: 校验 Topic/producer、Epoch、revision、payload、TTL
+        alt Observation 被接受
+            Core->>Core: 替换 (agent_id, observation_type) 最新快照
+            Core->>Core: 选择 Route inputs，隐私裁剪并按 Profile 格式化
+            alt NodeState 已知且 Route 输入完整
+                Core->>MQTT: retained DeviceView (QoS 1)
+                MQTT-->>Core: PUBACK
+                MQTT-->>Node: DeviceView
+                Node->>Node: 校验 node_id、core_epoch、revision
+                Node->>Node: 可信本地时钟评估 fresh_until，渲染 fresh / stale
+            else 尚无匹配 Node 或输入
+                Core->>Core: 保留 canonical state，不发布 View
+            end
+        else Observation 被拒绝
+            Core->>Core: 丢弃并记录稳定错误；不覆盖旧 canonical state
+        end
+    else 采集失败
+        Source-->>Agent: typed error code
+        Agent->>MQTT: retained AgentState(FAILED / DEGRADED)
+        MQTT-->>Core: AgentState
+        Core->>Core: 保留最后成功快照，过期后投影 stale
     end
 ```
 
@@ -438,15 +581,58 @@ success 和稳定错误码，不发布空 observation 或用空值覆盖最后�
 首次失败为 `FAILED`，成功后再次失败为 `DEGRADED`。Core 根据最后成功时间
 和 `expires_at` 将相关视图区块标记为 stale。
 
-Agent 每次进程启动生成新的 `agent_epoch`。它按统一启动屏障发布 retained AgentState 和 ONLINE，随后才启动 Source；每种 Observation 类型的 revision 在该 Epoch 内从 1 开始递增。Core 忽略不属于 AgentState 当前 Epoch 的 Observation，因此无需持久化 revision 计数器。参见 [ADR-0013](adr/0013-use-agent-epochs-for-observation-ordering.md)。
+Agent 每次进程启动生成新的 `agent_epoch`。当前实现先发布 retained AgentState，随后才启动 Source；每种 Observation 类型的 revision 在该 Epoch 内从 1 开始递增。目标连接屏障还会在 Source 前发布 ONLINE。Core 忽略不属于 AgentState 当前 Epoch 的 Observation，因此无需持久化 revision 计数器。参见 [ADR-0013](adr/0013-use-agent-epochs-for-observation-ordering.md)。
 
 ### 8.2 Node 发现与投影
 
 Node 每次启动生成新的 `node_epoch`，并在同一 Epoch 内递增 NodeState revision。Core 以每个 Node ID 最新 retained NodeState 的 Epoch 为准，拒绝旧 Epoch 或当前 Epoch 内较低 revision 的状态。NodeState 只自描述 Node 与产品能力，不声明数据来自哪个 Agent。Core 独占 Projection Route，根据自己的 canonical state 和路由规则为每个 Node 生成隐私裁剪后的 DeviceView；Node 始终只消费自己的 View。参见 [ADR-0014](adr/0014-discover-v1-nodes-over-mqtt.md) 和 [ADR-0018](adr/0018-core-owns-node-data-routing.md)。
 
-只要 NodeState 仍存在且未被 tombstone 清除，Core 就持续使用它生成 retained DeviceView，即使 Node Presence 为 offline。Presence 只表达连接状态，不控制投影；撤销凭据并清理 NodeState 后，Core 才停止为该 Node 生成新 View。
+只要 retained NodeState 仍存在且未被 tombstone 清除，当前 Core 就持续使用它生成 DeviceView，不依赖 Node 是否保持连接。目标 Presence 实现后也只表达连接状态，不控制投影；撤销凭据并清理 NodeState 后，Core 才停止为该 Node 生成新 View。
 
 ### 8.3 命令执行与去重
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Browser user
+    participant Web as Web Node
+    participant MQTT as MQTT Broker
+    participant Core as Orbit Core
+    participant Agent as Orbit Agent
+    participant Capability as OpenCodexSession
+    participant Observer as Acceptance subscriber
+
+    User->>Web: POST /api/sessions/{id}/open(view_revision)
+    Web->>Web: 校验缓存 View fresh、revision、session membership
+    alt Web 本地校验失败
+        Web-->>User: HTTP 409
+    else Intent 已发布
+        Web->>MQTT: non-retained Intent (QoS 1, TTL 20s)
+        Web-->>User: HTTP 202 + intent_id
+        MQTT-->>Core: Intent
+        Core->>Core: 校验 Topic/producer、Node Epoch、TTL、View revision、Route、session
+        alt Intent 被拒绝
+            Core->>Core: 不发布 Command；记录拒绝
+        else Intent 被接受
+            Core->>MQTT: non-retained typed Command (TTL <= 30s)
+            MQTT-->>Agent: Command
+            Agent->>Agent: 校验 Topic/target/TTL/action/UUID 并查 bounded dedup
+            alt 无执行资格或已过期
+                Agent->>Agent: 生成 REJECTED / EXPIRED
+            else 同 ID、同 payload 已完成
+                Agent->>Agent: 返回内存缓存结果，不重复执行
+            else 首次有效命令
+                Agent->>Capability: Open(session_id)，timeout 5s
+                Capability-->>Agent: success / error
+                Agent->>Agent: 生成 SUCCEEDED / FAILED 并缓存
+            end
+            Agent->>MQTT: non-retained CommandResult(intent_ref)
+            MQTT-->>Observer: correlated final result
+        end
+    end
+
+    Note over Core,Web: 当前 Core 不订阅 Result，Web 不展示最终反馈；HTTP 202 不是执行成功信号
+```
 
 Agent 收到命令后依次执行：
 
@@ -462,17 +648,17 @@ Agent 重启会清空去重表和未发布结果，Broker 重新投递的未过�
 
 - Node 重连后接收 retained DeviceView。
 - Node 比较修订号，拒绝状态回退。
-- Node 不订阅或识别 CoreState，也不配置 `core_id`；它只发布自身 NodeState、Presence 或 Intent，并订阅自己的 DeviceView。Core 通过 `orbit/#` 自行监听这些上行 Topic。
+- Node 不订阅或识别 CoreState，也不配置 `core_id`；当前只发布自身 NodeState 或 Intent，并订阅自己的 DeviceView。Core 使用显式 Filter 监听所需上行 Topic。
 - DeviceView 自身携带 `core_epoch`。Node 从自己的 View Topic 收到新 Epoch 的首个 View 时切换序列，随后拒绝该 Epoch 内较低的 revision。
 - DeviceView 携带绝对 `fresh_until`；Node 在启动联网后先通过 SNTP 同步时间，超过该时间后继续显示最后内容但呈现 stale 标识。
 - Node 时钟尚未可信时不得把 retained DeviceView 标为 fresh，而是保留内容并显示 stale。
-- Agent 使用 MQTT LWT 标记意外离线，正常停机主动发布 offline；所有参与者重连时建立全新 MQTT 会话，但同一进程复用当前 Epoch。
-- Agent 在断线期间可以继续运行 Source，但每种 Observation 类型只保留最新待发布值；连接屏障恢复后再发布。Core 在同一进程重连时保留内存 canonical state，并在连接屏障恢复后重新发布仍有效的 retained DeviceView。
-- Core 每次启动发布 retained CoreState 中的新 `core_epoch`，清空内存状态，只处理启动后抵达的新 Observation；不请求 Agent 重发旧值，也不把旧 retained view 当作新观测来源。
+- 当前 Go transport 在重连后自动恢复订阅，同一进程继续复用内存中的 Epoch；尚未实现 LWT、Presence 和正常停机 OFFLINE。
+- Agent 在断线期间可以继续运行 Source；连接恢复后的后续采集可继续发布，但当前没有显式的“只补发最新 Observation”重连屏障。Core 保留同一进程内的 canonical state，也没有专门在重连后重发 View 的屏障；Node 依靠 Broker retained View 恢复画面。
+- Core 每次启动生成新的 `core_epoch` 并放入 DeviceView，清空内存状态，只处理启动后抵达的新 Observation；当前不发布 CoreState，也不请求 Agent 重发旧值或把旧 retained View 当作输入。
 
 ## 9. V1 状态保存
 
-MQTT 是 V1 唯一引入的运行时基础设施；不引入 PostgreSQL 或 Redis 客户端、连接配置、数据表或缓存。Core 从 YAML 加载只读的投影策略和其他本地配置，canonical state 只保存在内存中。Retained AgentState、CoreState、NodeState、DeviceView 和 Presence 只表达有限的当前状态或最后画面，不充当历史数据库，也不用于恢复 Core 的 canonical state。参见 [ADR-0010](adr/0010-keep-mqtt-as-core-transport.md)。
+MQTT 是 V1 唯一引入的运行时基础设施；不引入 PostgreSQL 或 Redis 客户端、连接配置、数据表或缓存。Core 从 YAML 加载只读的投影策略和其他本地配置，canonical state 只保存在内存中。当前 retained AgentState、NodeState 和 DeviceView 只表达有限的当前状态或最后画面，不充当历史数据库，也不用于恢复 Core 的 canonical state；CoreState 与 Presence 仍是目标协议。参见 [ADR-0010](adr/0010-keep-mqtt-as-core-transport.md)。
 
 Agent 不持久化 Observation revision、Command 或 CommandResult。V1 的内存状态和去重表在进程退出后直接丢弃。
 
@@ -590,10 +776,11 @@ Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文�
 ### 14.4 集成与硬件验收
 
 - 使用 in-memory MQTT 验证 Agent 首条 retained AgentState、Codex 非 retained observation、metadata/expiry、独立健康与 revision，以及默认隐私裁剪。
-- 使用本地 MQTT broker 完成 retained view、无 Message Expiry 的参与者 State/Presence、LWT、重复 QoS 1 投递和断网重连测试。
-- 验证 CONNECT 前已配置 LWT、SUBACK/State PUBACK/ONLINE PUBACK 启动屏障，以及 LWT OFFLINE 不携带伪造的 `changed_at`。
-- 验证同一进程重连复用 Epoch、Agent 只补发最新 Observation、Core 重新发布仍有效 View，且 Node 无需订阅 CoreState。
-- 验证 Core 的 `orbit/#` No Local 订阅、严格 Topic Router、未知版本忽略和自产消息防循环行为。
+- 使用本地 MQTT Broker 验证当前 AgentState、NodeState、DeviceView 的 retained 行为、重复 QoS 1 投递和基础断网重连。
+- Presence 实现后，验证 CONNECT 前配置 LWT、State/ONLINE PUBACK 屏障，以及异常 OFFLINE 不伪造 `changed_at`；该项当前不能执行。
+- 显式重连屏障实现后，验证同一进程复用 Epoch、Agent 只补发最新 Observation、Core 重发仍有效 View；该项当前不能执行。
+- `orbit/#` Router 实现后，验证 No Local、未知版本忽略和自产消息防循环；当前显式 Filter 只验证已注册 Topic 的身份与 payload。
+- Message Expiry 接入后，验证 Broker 在 `retain_until` 删除 DeviceView；当前只能验证应用层 freshness 与覆盖/tombstone。
 - 使用公网测试 Broker 完成 TLS 证书校验失败、凭据隔离与 ACL 拒绝测试。
 - OLED 真机验证首帧、陈旧标识、长文本和重连后的显示。
 - 命令从测试客户端到 Agent 再到结果订阅端闭环，注入进程崩溃验证已声明的丢失与重复边界。
@@ -650,15 +837,28 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 
 ## 17. 首版验收标准
 
-- Agent 能以 Protobuf 发布真实、脱敏的 UsageObservation，Core 能发布 retained DeviceView。
-- OLED 节点重连后立即渲染最新视图，并在过期后保留内容且标记 stale。
-- Node 能通过带 Epoch 的 retained NodeState 上报 `display` / `oled-128x32` / `yd-esp32-s3`，Core 通过 `orbit/#` 发现它、拒绝不支持的产品身份，并按自身 Projection Route 在 Node 离线期间继续生成 retained View；Node 协议不包含上游 Agent 身份。
-- M0 中管理 CLI 能发送 `PingAgent` Intent，Core 能生成类型化命令，并返回关联状态和最终结果；V1 不要求产品动作。
-- 同一 Agent 进程内的重复、过期、畸形、错目标、未授权和不支持命令被确定性处理；断线或跨重启允许 Command 丢失或重复。
-- 公网 MQTT 默认验证 TLS；显式关闭时不发生自动降级，且 Agent、Core、Node 的凭据与 ACL 相互隔离。
-- 固件和 DeviceView 中不存在 Codex、Sub2API 或主机登录凭据。
-- 协议兼容、payload 尺寸、Core 投影、Agent 去重和 MQTT 重连测试通过。
-- OLED 真机完成显示与断网恢复验收。
+验收按证据边界分层。下一层不能由上一层的通过结果代替；“未实现”项不是测试
+失败，而是尚不存在可验收路径。
+
+| 当前状态 | 层级 | 可执行操作 | 明确成功信号 | 不证明什么 |
+| --- | --- | --- | --- | --- |
+| 已执行 | 文档图表 | `npx --yes @mermaid-js/mermaid-cli -i docs/design.md -o /tmp/orbit-design.md` | 命令退出码为 0，全部 6 个 Mermaid block 生成 SVG | 不证明消息链路运行 |
+| 已执行 | 仓库自动化 | `make verify` | 命令退出码为 0；format、vet、Go tests、Buf lint、Node tests、Go/firmware builds 全部完成 | 不证明真实 Broker、账号或硬件 |
+| 已执行 | 状态数据流 | `go test ./internal/integration -run TestSub2APIToRetainedDeviceView -count=1` | 测试 PASS；内存 Broker 中出现 retained DeviceView，三槽内容与预期一致 | 不证明公网 TLS、ACL、真实 Sub2API 或 OLED |
+| 已执行 | Codex 隐私 | `go test ./internal/integration -run TestCodexAgentPublishesSanitizedObservation -count=1` | 测试 PASS；初始 AgentState 先发布，默认隐私字段为空，Observation 非 retained | 不证明本机真实 Codex projection 数据 |
+| 已执行 | 命令数据流 | `go test ./internal/integration -run TestWebIntentOpensCodexSessionThroughCoreAndAgent -count=1` 和 `go test ./internal/agent -run TestOpenCodexCommandExecutesOnceAndPublishesResult -count=1` | 两条测试 PASS；Capability 只执行一次，重复消息返回同一可关联结果 | 不证明 Core/Web 已消费或展示 CommandResult |
+| 需私有配置 | 本地真实链路 | 分别运行 `make dev-core`、`make dev-agent`、`make dev-web` | 日志依次出现 `usage observation published`、`usage observation accepted`、`node state accepted`、`device view published`；Web 收到 fresh View | 不证明公网 ACL 或 OLED 真机 |
+| 需私有配置 | Web 产品动作 | 在 fresh Web View 中点击 session，并用临时管理员或 test-only 凭据订阅 Agent Result Topic | HTTP 返回 202；Core 出现 `command published`；Agent 出现 `command completed`；Result 的 `intent_ref.intent_id` 与 HTTP 返回值一致，状态为最终状态；目标 Codex 会话实际打开 | HTTP 202 本身不表示动作成功；当前 Web 不展示最终结果 |
+| 需公网环境 | Broker TLS/ACL | 使用 Agent、Core、Node 各自凭据逐项执行 [MQTT Topic 矩阵](mqtt-topics.md)，并用错误凭据或越权 Topic 做反向测试 | TLS 证书校验成功；合法 Topic 获得成功 SUBACK/PUBACK；越权操作被 Broker 拒绝 | 不证明 LWT、Message Expiry 或 OLED 渲染 |
+| 未实现 | 连接生命周期 | 实现 Presence、LWT、完整重连屏障后，断开网络、恢复连接并观察 State/Presence/View | retained LWT OFFLINE、无伪造 `changed_at`；恢复后 Epoch 不变且只补发最新状态 | 当前代码无法产生这些信号 |
+| 未实现 | Broker 保存边界 | Publish DeviceView 时接入 Message Expiry 后，等待超过 `retain_until` 再订阅该 Topic | Broker 不再返回过期 retained View | 当前 `retain_until` 只有应用层语义 |
+| 未实现 | 命令反馈 | Core 订阅 Result 并定义 requester-scoped feedback 后，执行 Web Intent | Web 收到与 `intent_id` 关联的最终状态，且其他 Node 不可见 | 当前终点只是 Agent Result Topic |
+| 需实体设备 | OLED 真机 | 在 `nodes/display/models/oled-128x32/variants/yd-esp32-s3` 运行 `make check`、`make build CONFIG=config.local.yaml`、`make upload ...` 和 `make monitor ...`，再执行断网与重连 | 串口出现 boot、I2C `0x3C`、OLED ready；屏幕显示三槽且无错误标签；过期后保留内容并显示 stale；重连后收到 retained View | 只对本次硬件、配置和 Broker 环境成立 |
+
+首版目标完成要求所有“需私有配置”“需公网环境”“需实体设备”项通过，并将
+纳入首版范围的“未实现”项实现后验收。若某个部署不启用 Web 产品动作，必须明确
+记录该层为不适用，不能用自动化测试代替。固件、DeviceView、日志和 Result 中均
+不得出现 Codex、Sub2API 或主机登录凭据、原始提示词、完整路径及 PID。
 
 ## 18. 待决策事项
 
