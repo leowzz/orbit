@@ -1,27 +1,37 @@
+# Required values remain active. Optional settings are commented; defaults are noted where applicable.
+
 node:
+  # Must match a projection_routes key in the Core configuration.
   id: desk-web-01
 
-ntp:
-  server: ntp.aliyun.com
-  sync_interval: 10m
-  timeout: 2s
+# Optional application-level NTP calibration. Defaults are shown below.
+# ntp:
+#   server: ntp.aliyun.com
+#   sync_interval: 10m
+#   timeout: 2s
 
 mqtt:
   url: mqtts://broker.example.com:8883
-  tls:
-    enabled: true
-    ca_file: ""
-    cert_file: secrets/web-client.pem
-    key_file: secrets/web-client.key
+  # Optional. TLS defaults to enabled and uses the system root CA pool.
+  # Set ca_file for a private CA. Set cert_file and key_file together for mTLS.
+  # tls:
+  #   enabled: true
+  #   ca_file: secrets/mqtt-ca.pem
+  #   cert_file: secrets/web-client.pem
+  #   key_file: secrets/web-client.key
+  # Secret file paths are resolved relative to this configuration file.
   credentials:
     username_file: secrets/web-mqtt-username
     password_file: secrets/web-mqtt-password
 
 web:
-  listen: 127.0.0.1:8080
+  # Optional; defaults to 127.0.0.1:8080.
+  # listen: 127.0.0.1:8080
   auth:
     password: replace-with-web-password
-    session_ttl: 24h
+    # Optional; defaults to 24h.
+    # session_ttl: 24h
 
-logging:
-  level: info
+# Optional; defaults to info. Supported values: debug, info, warn, error.
+# logging:
+#   level: info

@@ -1,30 +1,40 @@
+# Required values remain active. Optional settings are commented; defaults are noted where applicable.
+
 agent:
-  id: agent-local
+  # Optional on macOS, where Orbit derives a stable ID from the platform UUID.
+  # Use the derived ID in Core projection routes. Required on other operating systems.
+  # id: agent-local
   host_label: Local workstation
 
-ntp:
-  server: ntp.aliyun.com
-  sync_interval: 10m
-  timeout: 2s
+# Optional application-level NTP calibration. Defaults are shown below.
+# ntp:
+#   server: ntp.aliyun.com
+#   sync_interval: 10m
+#   timeout: 2s
 
 mqtt:
   url: mqtts://broker.example.com:8883
-  tls:
-    enabled: true
-    ca_file: ""
-    cert_file: secrets/agent-client.pem
-    key_file: secrets/agent-client.key
+  # Optional. TLS defaults to enabled and uses the system root CA pool.
+  # Set ca_file for a private CA. Set cert_file and key_file together for mTLS.
+  # tls:
+  #   enabled: true
+  #   ca_file: secrets/mqtt-ca.pem
+  #   cert_file: secrets/agent-client.pem
+  #   key_file: secrets/agent-client.key
+  # Secret file paths are resolved relative to this configuration file.
   credentials:
     username_file: secrets/agent-mqtt-username
     password_file: secrets/agent-mqtt-password
 
+# At least one source must be enabled. Sub2API is the default example source.
 sources:
   sub2api:
     enabled: true
     base_url: https://sub2api.example.com
-    login_endpoint: https://sub2api.example.com/api/v1/auth/login
-    refresh_endpoint: https://sub2api.example.com/api/v1/auth/refresh
-    usage_endpoint: https://sub2api.example.com/api/v1/usage/dashboard/stats
+    # Optional endpoint overrides; each defaults to the corresponding base_url path.
+    # login_endpoint: https://sub2api.example.com/api/v1/auth/login
+    # refresh_endpoint: https://sub2api.example.com/api/v1/auth/refresh
+    # usage_endpoint: https://sub2api.example.com/api/v1/usage/dashboard/stats
     timezone: Asia/Shanghai
     currency_code: USD
     credentials:
@@ -33,23 +43,28 @@ sources:
     poll_interval: 30s
     timeout: 10s
     observation_ttl: 2m
-  codex:
-    enabled: false
-    codex_home: ""
-    poll_interval: 5s
-    observation_ttl: 15s
-    session_limit: 3
-    include_archived: false
-    ignore:
-      cwd: []
-      source: []
-    privacy:
-      include_display_name: false
-      include_project_name: false
 
-capabilities:
-  open_codex_session:
-    enabled: false
+  # Optional Codex source. Uncomment the block to publish local session activity.
+  # codex_home, include_archived, ignore, and privacy fields may be omitted.
+  # codex:
+  #   enabled: true
+  #   codex_home: ""
+  #   poll_interval: 5s
+  #   observation_ttl: 15s
+  #   session_limit: 3
+  #   include_archived: false
+  #   ignore:
+  #     cwd: []
+  #     source: []
+  #   privacy:
+  #     include_display_name: false
+  #     include_project_name: false
 
-logging:
-  level: info
+# Optional remote action. Requires sources.codex to be enabled.
+# capabilities:
+#   open_codex_session:
+#     enabled: true
+
+# Optional; defaults to info. Supported values: debug, info, warn, error.
+# logging:
+#   level: info
