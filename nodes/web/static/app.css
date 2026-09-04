@@ -648,7 +648,7 @@ footer {
     display: block;
     height: calc(100vh - 54px);
     margin-top: 0;
-    padding-left: 24px;
+    padding-left: 30px;
   }
 
   .metric {
