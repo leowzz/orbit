@@ -601,7 +601,7 @@ footer {
   }
 
   .section-heading {
-    align-items: center;
+    display: none;
   }
 
   .overview > .section-heading {
