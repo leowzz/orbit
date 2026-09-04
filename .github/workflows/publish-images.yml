@@ -1,0 +1,55 @@
+name: Publish Docker images
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.binary }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        binary:
+          - orbit-agent
+          - orbit-core
+          - orbit-web
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Log in to Aliyun Container Registry
+        env:
+          REGISTRY_USERNAME: ${{ secrets.ALIYUN_REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+        run: |
+          printf '%s' "$REGISTRY_PASSWORD" | docker login registry.cn-heyuan.aliyuncs.com \
+            --username "$REGISTRY_USERNAME" \
+            --password-stdin
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Build and push images
+        env:
+          ALIYUN_IMAGE: registry.cn-heyuan.aliyuncs.com/leo03w/${{ matrix.binary }}:${{ github.ref_name }}
+          GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.binary }}:${{ github.ref_name }}
+        run: |
+          docker build \
+            --build-arg "BINARY=${{ matrix.binary }}" \
+            --tag "$ALIYUN_IMAGE" \
+            --tag "$GHCR_IMAGE" \
+            .
+          docker push "$ALIYUN_IMAGE"
+          docker push "$GHCR_IMAGE"
