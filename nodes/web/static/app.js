@@ -335,6 +335,7 @@ function connectEvents() {
   eventSource = new EventSource("/api/events");
   eventSource.addEventListener("open", () => setConnection("live", "实时连接"));
   eventSource.addEventListener("message", (event) => render(JSON.parse(event.data)));
+  eventSource.addEventListener("reload", () => window.location.reload());
   eventSource.addEventListener("error", () => setConnection("retrying", "正在重连"));
 }
 

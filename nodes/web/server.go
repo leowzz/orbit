@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -9,12 +10,15 @@ import (
 	"io/fs"
 	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
 
 //go:embed static/*
 var staticFiles embed.FS
+
+const developmentReloadInterval = 250 * time.Millisecond
 
 type SessionIntentPublisher interface {
 	OpenCodexSession(context.Context, string, uint64) (string, error)
@@ -25,6 +29,27 @@ func Handler(store *Store, intents SessionIntentPublisher) http.Handler {
 }
 
 func HandlerWithAuth(store *Store, intents SessionIntentPublisher, authConfig AuthConfig) http.Handler {
+	assets, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		panic(err)
+	}
+	return handlerWithAssets(store, intents, authConfig, assets, nil)
+}
+
+func DevelopmentHandler(store *Store, intents SessionIntentPublisher, authConfig AuthConfig, staticDir string) (http.Handler, error) {
+	if staticDir == "" {
+		return nil, fmt.Errorf("development static directory is required")
+	}
+	assets := os.DirFS(staticDir)
+	if _, err := fs.Stat(assets, "index.html"); err != nil {
+		return nil, fmt.Errorf("open development static directory %q: %w", staticDir, err)
+	}
+	return handlerWithAssets(store, intents, authConfig, assets, func() (string, error) {
+		return staticAssetVersion(assets)
+	}), nil
+}
+
+func handlerWithAssets(store *Store, intents SessionIntentPublisher, authConfig AuthConfig, assets fs.FS, assetVersion func() (string, error)) http.Handler {
 	auth := newAuthManager(authConfig)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /favicon.ico", func(response http.ResponseWriter, _ *http.Request) {
@@ -127,6 +152,16 @@ func HandlerWithAuth(store *Store, intents SessionIntentPublisher, authConfig Au
 		defer unsubscribe()
 		keepAlive := time.NewTicker(15 * time.Second)
 		defer keepAlive.Stop()
+		var reloadTicks <-chan time.Time
+		lastAssetVersion := ""
+		if assetVersion != nil {
+			lastAssetVersion, _ = assetVersion()
+			reloadTicker := time.NewTicker(developmentReloadInterval)
+			defer reloadTicker.Stop()
+			reloadTicks = reloadTicker.C
+		}
+		fmt.Fprint(response, ": connected\n\n")
+		flusher.Flush()
 		for {
 			select {
 			case <-request.Context().Done():
@@ -136,6 +171,14 @@ func HandlerWithAuth(store *Store, intents SessionIntentPublisher, authConfig Au
 				flusher.Flush()
 			case <-keepAlive.C:
 				fmt.Fprint(response, ": keepalive\n\n")
+				flusher.Flush()
+			case <-reloadTicks:
+				version, err := assetVersion()
+				if err != nil || version == lastAssetVersion {
+					continue
+				}
+				lastAssetVersion = version
+				fmt.Fprintf(response, "event: reload\ndata: %s\n\n", version)
 				flusher.Flush()
 			}
 		}
@@ -174,12 +217,41 @@ func HandlerWithAuth(store *Store, intents SessionIntentPublisher, authConfig Au
 		_ = json.NewEncoder(response).Encode(map[string]string{"intent_id": intentID, "status": "accepted"})
 	})))
 
-	assets, err := fs.Sub(staticFiles, "static")
-	if err != nil {
-		panic(err)
+	fileServer := http.FileServer(http.FS(assets))
+	var staticHandler http.Handler = fileServer
+	if assetVersion != nil {
+		staticHandler = http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			response.Header().Set("Cache-Control", "no-store")
+			fileServer.ServeHTTP(response, request)
+		})
 	}
-	mux.Handle("GET /", http.FileServer(http.FS(assets)))
+	mux.Handle("GET /", staticHandler)
 	return securityHeaders(mux)
+}
+
+func staticAssetVersion(assets fs.FS) (string, error) {
+	hash := sha256.New()
+	err := fs.WalkDir(assets, ".", func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		contents, err := fs.ReadFile(assets, path)
+		if err != nil {
+			return err
+		}
+		_, _ = io.WriteString(hash, path)
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(contents)
+		_, _ = hash.Write([]byte{0})
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
 
 func (auth *authManager) protect(next http.Handler) http.Handler {

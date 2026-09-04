@@ -25,6 +25,7 @@ const version = "0.1.0"
 
 func main() {
 	configPath := flag.String("config", "configs/web.local.yaml", "path to the Web Node YAML configuration")
+	staticDir := flag.String("static-dir", "", "development static asset directory with automatic browser reload")
 	flag.Parse()
 	cfg, runErr := config.LoadWebNode(*configPath)
 	level := "info"
@@ -33,7 +34,7 @@ func main() {
 	}
 	logger := zap.Must(logging.New(level))
 	if runErr == nil {
-		runErr = run(cfg, logger)
+		runErr = run(cfg, logger, *staticDir)
 	}
 	if runErr != nil {
 		logger.Error("orbit web node stopped", zap.Error(runErr))
@@ -44,7 +45,7 @@ func main() {
 	}
 }
 
-func run(cfg *config.WebNodeConfig, logger *zap.Logger) error {
+func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error {
 	signalContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	ctx, cancel := context.WithCancel(signalContext)
@@ -76,9 +77,19 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	server := newHTTPServer(ctx, webnode.HandlerWithAuth(store, runner, webnode.AuthConfig{
+	authConfig := webnode.AuthConfig{
 		Password: cfg.Web.Auth.Password, SessionTTL: cfg.Web.Auth.SessionTTL.Duration,
-	}))
+	}
+	var handler http.Handler
+	if staticDir == "" {
+		handler = webnode.HandlerWithAuth(store, runner, authConfig)
+	} else {
+		handler, err = webnode.DevelopmentHandler(store, runner, authConfig, staticDir)
+		if err != nil {
+			return err
+		}
+	}
+	server := newHTTPServer(ctx, handler)
 	errCh := make(chan error, 2)
 	go func() { errCh <- runner.Run(ctx) }()
 	go func() { errCh <- server.Serve(listener) }()

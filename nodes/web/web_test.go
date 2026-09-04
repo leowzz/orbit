@@ -1,11 +1,15 @@
 package web
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -190,6 +194,74 @@ func TestAppCSSSupportsDeviceChrome(t *testing.T) {
 	}
 }
 
+func TestDevelopmentHandlerServesDiskAssetsAndSignalsReload(t *testing.T) {
+	t.Parallel()
+	staticDir := t.TempDir()
+	indexPath := filepath.Join(staticDir, "index.html")
+	if err := os.WriteFile(indexPath, []byte("before"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler, err := DevelopmentHandler(NewStore(), nil, AuthConfig{}, staticDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	assetResponse, err := server.Client().Get(server.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assetBody, err := io.ReadAll(assetResponse.Body)
+	assetResponse.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(assetBody) != "before" || assetResponse.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("unexpected development asset response: body=%q cache-control=%q", assetBody, assetResponse.Header.Get("Cache-Control"))
+	}
+
+	client := server.Client()
+	client.Timeout = 3 * time.Second
+	eventsResponse, err := client.Get(server.URL + "/api/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanner := bufio.NewScanner(eventsResponse.Body)
+	if !scanner.Scan() || scanner.Text() != ": connected" {
+		eventsResponse.Body.Close()
+		t.Fatalf("development event stream did not connect: %q", scanner.Text())
+	}
+	if err := os.WriteFile(indexPath, []byte("after"), 0o600); err != nil {
+		eventsResponse.Body.Close()
+		t.Fatal(err)
+	}
+	reloadSeen := false
+	for scanner.Scan() {
+		if scanner.Text() == "event: reload" {
+			reloadSeen = true
+			break
+		}
+	}
+	eventsResponse.Body.Close()
+	if !reloadSeen {
+		t.Fatalf("development event stream did not signal reload: %v", scanner.Err())
+	}
+
+	updatedResponse, err := server.Client().Get(server.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedBody, err := io.ReadAll(updatedResponse.Body)
+	updatedResponse.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(updatedBody) != "after" {
+		t.Fatalf("development handler served stale content %q", updatedBody)
+	}
+}
+
 func TestStaticPageProvidesFullscreenToggle(t *testing.T) {
 	t.Parallel()
 	markup, err := staticFiles.ReadFile("static/index.html")
@@ -225,7 +297,7 @@ func TestStaticPageReloadsFromConnectionStatus(t *testing.T) {
 	if !strings.Contains(string(markup), `<button class="connection" id="connection" type="button"`) {
 		t.Fatal("index.html does not expose the connection status as a button")
 	}
-	for _, fragment := range []string{`elements.connection.addEventListener("click"`, `window.location.reload()`} {
+	for _, fragment := range []string{`elements.connection.addEventListener("click"`, `eventSource.addEventListener("reload"`, `window.location.reload()`} {
 		if !strings.Contains(string(script), fragment) {
 			t.Errorf("app.js is missing %q", fragment)
 		}

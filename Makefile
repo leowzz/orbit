@@ -8,6 +8,7 @@ NODE_DIR := nodes/display/models/oled-128x32/variants/yd-esp32-s3
 AGENT_CONFIG ?= configs/agent.local.yaml
 CORE_CONFIG ?= configs/core.local.yaml
 WEB_CONFIG ?= configs/web.local.yaml
+WEB_STATIC_DIR ?= nodes/web/static
 AGENT_LAUNCHD_LABEL ?= com.leo.orbit.agent.dev
 CORE_LAUNCHD_LABEL ?= com.leo.orbit.core.dev
 WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
@@ -26,7 +27,7 @@ dev-core:
 	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
 
 dev-web:
-	$(GO) run ./cmd/orbit-web -config "$(WEB_CONFIG)"
+	$(GO) run ./cmd/orbit-web -config "$(WEB_CONFIG)" -static-dir "$(WEB_STATIC_DIR)"
 
 kill: kill-web kill-agent kill-core
 

@@ -261,6 +261,12 @@ in local storage and one SSE connection open. It updates whenever a new retained
 DeviceView is accepted. Its MQTT credential needs publish access to its own
 NodeState topic and subscribe access to its own DeviceView topic only.
 
+`make dev-web` serves `nodes/web/static` directly from disk. Saving an HTML,
+CSS, or JavaScript file in that directory automatically reloads connected
+browsers; no Web Node restart or manual page refresh is needed. Go code changes
+still require restarting the process. Running the binary without `-static-dir`
+continues to serve the embedded production assets.
+
 ### Simulate the target landscape display
 
 Use the following browser settings to compare the Web node with the current
