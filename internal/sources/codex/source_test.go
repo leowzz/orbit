@@ -172,7 +172,7 @@ func TestFetchAppliesFiltersAndArchivedOptionBeforeLimit(t *testing.T) {
 	}
 }
 
-func TestFetchSkipsSubagentSessionsBeforeCountsAndLimit(t *testing.T) {
+func TestFetchSkipsSubagentAndDayflowChatCLISessionsBeforeCountsAndLimit(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now().Truncate(time.Second)
 	statePath := filepath.Join(home, "state_1.sqlite")
@@ -180,13 +180,17 @@ func TestFetchSkipsSubagentSessionsBeforeCountsAndLimit(t *testing.T) {
 	createStateDB(t, statePath, true, []stateFixture{
 		{id: "structured-subagent", title: "Structured", source: `{"subagent":{"other":"guardian"}}`, cwd: "/tmp/subagent", model: "gpt", updatedAt: now},
 		{id: "spawned-subagent", title: "Spawned", source: "vscode", cwd: "/tmp/subagent", model: "gpt", updatedAt: now.Add(-time.Minute)},
-		{id: "root", title: "Root", source: "vscode", cwd: "/tmp/root", model: "gpt", updatedAt: now.Add(-2 * time.Minute)},
+		{id: "dayflow-chatcli", title: "Dayflow", source: "exec", cwd: "/Users/test/Library/Application Support/Dayflow/chatcli", model: "gpt", updatedAt: now.Add(-2 * time.Minute)},
+		{id: "ordinary-chatcli", title: "Ordinary", source: "vscode", cwd: "/Users/test/work/chatcli", model: "gpt", updatedAt: now.Add(-3 * time.Minute)},
+		{id: "root", title: "Root", source: "vscode", cwd: "/tmp/root", model: "gpt", updatedAt: now.Add(-4 * time.Minute)},
 	})
 	createSpawnEdges(t, statePath, "spawned-subagent")
 	createHistoryDB(t, historyPath, []turnFixture{
 		{threadID: "structured-subagent", status: "inProgress", startedAt: now},
 		{threadID: "spawned-subagent", status: "inProgress", startedAt: now.Add(-time.Minute)},
-		{threadID: "root", status: "completed", startedAt: now.Add(-2 * time.Minute), completedAt: now.Add(-2 * time.Minute)},
+		{threadID: "dayflow-chatcli", status: "inProgress", startedAt: now.Add(-2 * time.Minute)},
+		{threadID: "ordinary-chatcli", status: "completed", startedAt: now.Add(-3 * time.Minute), completedAt: now.Add(-3 * time.Minute)},
+		{threadID: "root", status: "completed", startedAt: now.Add(-4 * time.Minute), completedAt: now.Add(-4 * time.Minute)},
 	})
 
 	source, err := New(Config{Home: home, Limit: 1})
@@ -197,7 +201,7 @@ func TestFetchSkipsSubagentSessionsBeforeCountsAndLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.TotalCount != 1 || snapshot.RunningCount != 0 || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].ID != "root" {
+	if snapshot.TotalCount != 2 || snapshot.RunningCount != 0 || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].ID != "ordinary-chatcli" {
 		t.Fatalf("snapshot with subagents = %+v", snapshot)
 	}
 }

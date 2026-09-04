@@ -20,6 +20,7 @@ import (
 
 const (
 	defaultLimit            = 20
+	dayflowChatCLISuffix    = "/Library/Application Support/Dayflow/chatcli"
 	pendingTurnGrace        = 5 * time.Minute
 	pendingTurnMinimumDelta = 2 * time.Second
 	readBusyTimeout         = 2 * time.Second
@@ -348,7 +349,7 @@ func readSessions(ctx context.Context, path string, includeArchived bool) (map[s
 		if !id.Valid || strings.TrimSpace(id.String) == "" {
 			return nil, errors.New("threads row has no id")
 		}
-		if spawned != 0 || isSubagentSource(source.String) {
+		if spawned != 0 || isSubagentSource(source.String) || isDayflowChatCLISession(cwd.String) {
 			continue
 		}
 		titleValue := cleanText(title.String)
@@ -581,6 +582,11 @@ func isSubagentSource(source string) bool {
 	}
 	_, ok := metadata["subagent"]
 	return ok
+}
+
+func isDayflowChatCLISession(cwd string) bool {
+	normalized := filepath.ToSlash(filepath.Clean(strings.TrimSpace(cwd)))
+	return strings.HasSuffix(normalized, dayflowChatCLISuffix)
 }
 
 func cleanText(value string) string { return strings.Join(strings.Fields(value), " ") }
