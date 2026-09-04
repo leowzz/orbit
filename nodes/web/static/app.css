@@ -768,6 +768,8 @@ footer {
   }
 
   .session-row {
+    display: flex;
+    align-items: center;
     height: 70px;
     min-height: 70px;
     padding: 9px 10px 8px 12px;
@@ -778,11 +780,11 @@ footer {
   .session-row-content {
     position: relative;
     display: block;
-    height: 100%;
+    height: auto;
   }
 
   .session-main {
-    height: 100%;
+    height: auto;
   }
 
   .session-name {
@@ -799,10 +801,9 @@ footer {
   }
 
   .session-details {
-    position: absolute;
-    right: 96px;
-    bottom: 0;
-    left: 0;
+    position: static;
+    margin-top: 5px;
+    padding-right: 96px;
   }
 
   .session-id {
