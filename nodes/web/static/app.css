@@ -594,6 +594,7 @@ footer {
   }
 
   .overview {
+    height: calc(100vh - 40px);
     min-width: 0;
     padding: 8px 14px 6px 0;
     border-right: 1px solid var(--line);
@@ -644,12 +645,17 @@ footer {
   }
 
   .metrics {
-    grid-template-columns: minmax(0, 1fr);
-    margin-top: 6px;
-    padding-left: 48px;
+    display: block;
+    height: calc(100vh - 54px);
+    margin-top: 0;
+    padding-left: 24px;
   }
 
   .metric {
+    display: flex;
+    flex-direction: column;
+    height: 25%;
+    justify-content: center;
     padding: 5px 8px 4px 0;
   }
 

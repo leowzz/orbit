@@ -76,12 +76,9 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	server := &http.Server{
-		Handler: webnode.HandlerWithAuth(store, runner, webnode.AuthConfig{
-			Password: cfg.Web.Auth.Password, SessionTTL: cfg.Web.Auth.SessionTTL.Duration,
-		}), ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout: 60 * time.Second,
-	}
+	server := newHTTPServer(ctx, webnode.HandlerWithAuth(store, runner, webnode.AuthConfig{
+		Password: cfg.Web.Auth.Password, SessionTTL: cfg.Web.Auth.SessionTTL.Duration,
+	}))
 	errCh := make(chan error, 2)
 	go func() { errCh <- runner.Run(ctx) }()
 	go func() { errCh <- server.Serve(listener) }()
@@ -102,6 +99,15 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger) error {
 	defer shutdownCancel()
 	shutdownErr := server.Shutdown(shutdownContext)
 	return errors.Join(runErr, shutdownErr)
+}
+
+func newHTTPServer(ctx context.Context, handler http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           handler,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+		ReadHeaderTimeout: 5 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 }
 
 func disconnect(client *mqtt.Client, logger *zap.Logger) {
