@@ -1,0 +1,18 @@
+x-orbit-service: &orbit-service
+  restart: unless-stopped
+  network_mode: host
+  volumes:
+    - ../configs:/app/configs:ro
+
+services:
+  orbit-agent:
+    <<: *orbit-service
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-agent:${version:?set version in .env}
+
+  orbit-core:
+    <<: *orbit-service
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-core:${version:?set version in .env}
+
+  orbit-web:
+    <<: *orbit-service
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-web:${version:?set version in .env}

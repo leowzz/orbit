@@ -1,0 +1,25 @@
+x-orbit-build: &orbit-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  orbit-agent:
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-agent:${version:?set version in .env}
+    build:
+      <<: *orbit-build
+      args:
+        BINARY: orbit-agent
+
+  orbit-core:
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-core:${version:?set version in .env}
+    build:
+      <<: *orbit-build
+      args:
+        BINARY: orbit-core
+
+  orbit-web:
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-web:${version:?set version in .env}
+    build:
+      <<: *orbit-build
+      args:
+        BINARY: orbit-web

@@ -1,0 +1,9 @@
+.git
+.env
+.env.*
+!.env.example
+.tmp
+.tools
+configs
+docs
+nodes/display

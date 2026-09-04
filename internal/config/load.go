@@ -226,11 +226,10 @@ func (cfg *MQTTConfig) validate(baseDir string) error {
 	}
 
 	if cfg.TLS.Enabled {
-		if cfg.TLS.CAFile == "" {
-			return errors.New("tls.ca_file is required when TLS is enabled")
-		}
-		if err := resolveReadableFile(baseDir, &cfg.TLS.CAFile); err != nil {
-			return fmt.Errorf("tls.ca_file: %w", err)
+		if cfg.TLS.CAFile != "" {
+			if err := resolveReadableFile(baseDir, &cfg.TLS.CAFile); err != nil {
+				return fmt.Errorf("tls.ca_file: %w", err)
+			}
 		}
 	} else if cfg.TLS.CAFile != "" || cfg.TLS.CertFile != "" || cfg.TLS.KeyFile != "" {
 		return errors.New("tls certificate files must be empty when TLS is disabled")

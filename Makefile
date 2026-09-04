@@ -14,7 +14,7 @@ WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
 
 .PHONY: dev dev-agent dev-core dev-web kill kill-agent kill-core kill-web \
 	build build-go build-node test test-go test-node lint fmt fmt-check \
-	proto-lint generate verify
+	proto-lint generate verify release
 
 dev:
 	$(MAKE) -j2 dev-agent dev-core
@@ -77,6 +77,10 @@ generate: $(BUF) $(PROTOC_GEN_GO)
 	PATH="$(TOOLS_DIR):$$PATH" $(BUF) generate
 
 verify: fmt-check lint test-go proto-lint test-node build-go build-node
+
+# Bump patch in .env and create an annotated git tag. Override: make release V=v1.2.3
+release:
+	@ENV_FILE=.env V="$(V)" bash scripts/release.sh
 
 $(BUF):
 	@mkdir -p "$(TOOLS_DIR)"

@@ -43,6 +43,24 @@ func TestConnectionConfigRejectsTLSDowngrade(t *testing.T) {
 	}
 }
 
+func TestConnectionConfigUsesSystemRootsWithoutCAFile(t *testing.T) {
+	t.Parallel()
+	_, tlsConfig, err := connectionConfig(Config{
+		URL:      "mqtts://broker.example:8883",
+		ClientID: "agent-a",
+		TLS:      TLSConfig{Enabled: true},
+	})
+	if err != nil {
+		t.Fatalf("connectionConfig returned error: %v", err)
+	}
+	if tlsConfig == nil {
+		t.Fatal("TLS config is nil")
+	}
+	if tlsConfig.RootCAs != nil {
+		t.Fatalf("RootCAs = %v, want nil to use system roots", tlsConfig.RootCAs)
+	}
+}
+
 func TestConnectionConfigAllowsExplicitPlaintext(t *testing.T) {
 	t.Parallel()
 	serverURL, tlsConfig, err := connectionConfig(Config{

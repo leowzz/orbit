@@ -80,11 +80,10 @@ cp nodes/display/models/oled-128x32/variants/yd-esp32-s3/config.example.yaml \
 ### Agent and Core
 
 The host examples resolve relative secret paths from the directory containing
-the YAML file. Create the referenced files under configs/secrets/ (one value
-per file; do not commit them):
+the YAML file. Create the referenced credential files under configs/secrets/
+(one value per file; do not commit them):
 
 ~~~text
-configs/secrets/mqtt-ca.pem
 configs/secrets/agent-client.pem
 configs/secrets/agent-client.key
 configs/secrets/agent-mqtt-username
@@ -129,9 +128,11 @@ names and project names are omitted unless their privacy flags are explicitly
 enabled. `include_display_name` is a deliberate opt-in because the value may
 come from a Codex title or first-user-message fallback.
 
-TLS is enabled by default. With TLS enabled, use an mqtts:// URL and provide
-the CA file; client certificate and key must be supplied together if the broker
-requires them. To intentionally use a plaintext broker, set
+TLS is enabled by default. With TLS enabled, use an mqtts:// URL. Leave
+`mqtt.tls.ca_file` empty to use the operating system trust store, or set it to
+a CA file for a private CA or a root not trusted by the host. Client certificate
+and key must be supplied together if the broker requires them. To intentionally
+use a plaintext broker, set
 mqtt.tls.enabled: false, change the URL to mqtt://, and leave all TLS file
 fields empty. The clients never downgrade automatically after a TLS failure.
 
@@ -177,6 +178,30 @@ make build-go      # compile all Go packages
 make build-node    # generate nanopb and compile the YD-ESP32-S3 firmware
 make verify        # fmt-check, lint, all tests, protocol checks, and builds
 ~~~
+
+Build the three service images with the version from `.env`:
+
+~~~shell
+cp .env.example .env
+docker compose build
+~~~
+
+The images are tagged as
+`registry.cn-heyuan.aliyuncs.com/leo03w/orbit-{agent,core,web}:vX.Y.Z`.
+`make release` bumps the patch version in `.env` by default, updates the tracked
+`.env.example`, creates a `chore: release vX.Y.Z` commit, and adds an annotated
+tag. Use `make release V=v1.2.3` to choose an explicit version. The release
+command requires a clean Git worktree and does not build or push images.
+
+Deploy the published images on a Linux host with the local configuration files:
+
+~~~shell
+docker compose --env-file .env -f docker/docker-compose.yml pull
+docker compose --env-file .env -f docker/docker-compose.yml up -d
+~~~
+
+The deployment uses host networking so `web.listen` may bind a host address.
+Files under `configs/` are mounted read-only and must be readable by UID 65532.
 
 make test-go uses an in-memory MQTT broker, an httptest Sub2API server, and
 Codex fixtures. It proves source selection, initial AgentState ordering,

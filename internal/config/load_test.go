@@ -197,6 +197,21 @@ func TestLoadAgentDefaultsTLSToEnabled(t *testing.T) {
 	}
 }
 
+func TestLoadAgentAllowsEmptyTLSCAFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, true)
+	yaml := strings.Replace(validAgentYAML, "    ca_file: ca.pem\n", "    ca_file: \"\"\n", 1)
+	path := writeConfig(t, dir, "agent.yaml", yaml)
+
+	cfg, err := LoadAgent(path)
+	if err != nil {
+		t.Fatalf("LoadAgent() error = %v", err)
+	}
+	if cfg.MQTT.TLS.CAFile != "" {
+		t.Fatalf("CAFile = %q, want empty", cfg.MQTT.TLS.CAFile)
+	}
+}
+
 func TestLoadCore(t *testing.T) {
 	dir := t.TempDir()
 	writeFixtureFiles(t, dir, false)
