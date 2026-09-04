@@ -274,15 +274,19 @@ function renderSessions(codex) {
     const main = document.createElement("span");
     main.className = "session-main";
     appendText(main, "session-name", session.display_name || `会话 ${session.id.slice(0, 8)}`);
-    appendText(main, "session-id", session.id);
 
-    appendText(content, "session-project", session.project_name || "项目未公开");
-    appendText(content, "session-model", session.model || "模型未知");
+    const details = document.createElement("span");
+    details.className = "session-details";
+    appendText(details, "session-project", session.project_name || "项目未公开");
+    appendText(details, "session-model", session.model || "模型未知");
+    appendText(details, "session-id", session.id);
+    main.append(details);
 
     const meta = document.createElement("span");
     meta.className = "session-meta";
     const status = appendText(meta, "status", statusLabels[session.status] || statusLabels.unknown);
     status.dataset.state = session.status || "unknown";
+    row.dataset.state = session.status || "unknown";
     if (session.process_alive) status.title = "本地进程存活";
     const updated = appendText(meta, "session-time", relativeTime(session.updated_at));
     updated.title = formatDate(session.updated_at);
