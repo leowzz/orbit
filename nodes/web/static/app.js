@@ -5,6 +5,8 @@ const elements = {
   authSubmit: document.querySelector("#auth-submit"),
   authError: document.querySelector("#auth-error"),
   fullscreenToggle: document.querySelector("#fullscreen-toggle"),
+  themeToggle: document.querySelector("#theme-toggle"),
+  colorScheme: document.querySelector('meta[name="color-scheme"]'),
   connection: document.querySelector("#connection"),
   connectionLabel: document.querySelector("#connection-label"),
   updatedAt: document.querySelector("#updated-at"),
@@ -21,6 +23,7 @@ const elements = {
 };
 
 const authStorageKey = "orbit.web.auth";
+const themeStorageKey = "orbit.web.theme";
 const statusLabels = {
   running: "运行中",
   completed: "已完成",
@@ -40,6 +43,36 @@ let authToken = "";
 let authExpiresAt = 0;
 let authExpiryTimer = null;
 let eventSource = null;
+
+function storedTheme() {
+  try {
+    const theme = window.localStorage.getItem(themeStorageKey);
+    return theme === "dark" ? "dark" : "light";
+  } catch (_) {
+    return "light";
+  }
+}
+
+function setTheme(theme, persist) {
+  const dark = theme === "dark";
+  const nextLabel = dark ? "切换到白天模式" : "切换到黑夜模式";
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  elements.colorScheme.setAttribute("content", dark ? "dark" : "light");
+  elements.themeToggle.setAttribute("aria-pressed", String(dark));
+  elements.themeToggle.setAttribute("aria-label", nextLabel);
+  elements.themeToggle.title = nextLabel;
+  if (!persist) return;
+  try {
+    window.localStorage.setItem(themeStorageKey, dark ? "dark" : "light");
+  } catch (_) {
+    // Keep the selected theme for this page when storage is unavailable.
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme");
+  setTheme(current === "dark" ? "light" : "dark", true);
+}
 
 function fullscreenElement() {
   return document.fullscreenElement || document.webkitFullscreenElement;
@@ -401,8 +434,10 @@ async function bootstrap() {
 }
 
 elements.authForm.addEventListener("submit", submitAuth);
+setTheme(storedTheme(), false);
 bootstrap().catch(() => setConnection("retrying", "正在重连"));
 elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
+elements.themeToggle.addEventListener("click", toggleTheme);
 elements.connection.addEventListener("click", () => window.location.reload());
 document.addEventListener("fullscreenchange", syncFullscreenState);
 document.addEventListener("webkitfullscreenchange", syncFullscreenState);

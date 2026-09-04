@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>Orbit 实时状态</title>
-    <link rel="stylesheet" href="/app.css?v=20260904-section-spacing1" />
+    <link rel="stylesheet" href="/app.css?v=20260904-theme1" />
   </head>
   <body>
     <div class="auth-gate" id="auth-gate">
@@ -24,10 +24,28 @@
         <span>Orbit</span>
       </button>
       <time class="topbar-time" id="updated-at">--</time>
-      <button class="connection" id="connection" type="button" data-state="connecting" title="刷新页面">
-        <span class="connection-dot" aria-hidden="true"></span>
-        <span id="connection-label">连接中</span>
-      </button>
+      <div class="topbar-actions">
+        <button
+          class="theme-toggle"
+          id="theme-toggle"
+          type="button"
+          aria-label="切换到黑夜模式"
+          aria-pressed="false"
+          title="切换到黑夜模式"
+        >
+          <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"></path>
+          </svg>
+          <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+          </svg>
+        </button>
+        <button class="connection" id="connection" type="button" data-state="connecting" title="刷新页面">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span id="connection-label">连接中</span>
+        </button>
+      </div>
     </header>
 
     <main>
@@ -84,6 +102,6 @@
       <span id="node-id">Node --</span>
       <span id="revision">Revision --</span>
     </footer>
-    <script src="/app.js?v=20260904-hot-reload1" defer></script>
+    <script src="/app.js?v=20260904-theme1" defer></script>
   </body>
 </html>

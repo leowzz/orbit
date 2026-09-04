@@ -3,15 +3,77 @@
 Orbit connects trusted host state to display nodes. The current V1 path reads
 Sub2API usage and local Codex task state in a host Agent, transports Protobuf
 observations over MQTT, and lets Core publish retained views for OLED and web
-nodes. A Web session click travels back through the same trust model as a typed
-Intent and Command:
+nodes. The architecture is split into two one-way flows: state projection and
+typed command execution.
 
-~~~text
-Sub2API / Codex -> orbit-agent -> MQTT -> orbit-core -> DeviceView -> OLED / Web
-Web click -> Intent -> orbit-core -> OpenCodexSession Command -> orbit-agent -> Codex
-~~~
+**State flow: Observation -> DeviceView**
 
-![Orbit system architecture data flow from Sub2API to OLED](docs/assets/orbit-system-architecture.png)
+```mermaid
+flowchart TB
+    Usage["Usage Source"] -->|"typed payload"| Agent["Orbit Agent<br/>metadata / revision / expiry"]
+    Codex["Codex Source"] -->|"typed payload"| Agent
+    Agent -->|"QoS 1 / non-retained"| Observation["MQTT Observation<br/>agents/{agent_id}/observations/{type}"]
+    Observation --> Ingress["Core ingress<br/>identity / epoch / revision / TTL"]
+    AgentState["MQTT AgentState<br/>retained / current agent_epoch"] -->|"epoch prerequisite"| Ingress
+    Ingress --> Canonical[("Canonical state<br/>latest snapshot per agent/type")]
+    Canonical --> Projector["Projection<br/>route / privacy / profile"]
+    Route["Projection Route<br/>node_id -> profile + inputs"] -->|"routing policy"| Projector
+    NodeState["MQTT NodeState<br/>retained / epoch + product"] -->|"node prerequisite"| Projector
+    Projector -->|"QoS 1 / retained"| View["MQTT DeviceView<br/>nodes/{node_id}/view"]
+    View -->|"usage-oled-128x32"| OLED["OLED Node<br/>local pixel rendering"]
+    View -->|"overview-web"| Web["Web Node<br/>cached view + HTTP/SSE"]
+
+    classDef host fill:#eaf2ff,stroke:#2563eb,color:#172033
+    classDef topic fill:#fff4e8,stroke:#c2410c,color:#172033
+    classDef core fill:#eaf8ef,stroke:#15803d,color:#172033
+    classDef node fill:#f3efff,stroke:#7c3aed,color:#172033
+    class Usage,Codex,Agent host
+    class Observation,AgentState,NodeState,View topic
+    class Ingress,Canonical,Projector,Route core
+    class OLED,Web node
+```
+
+**Command flow: Intent -> CommandResult**
+
+```mermaid
+flowchart TB
+    subgraph Request["1 - Request and route"]
+        direction LR
+        Web["Web Node<br/>fresh cached view"] -->|"TTL 20s"| Intent["MQTT Intent<br/>nodes/{node_id}/intents"]
+        Intent --> Router["Core validation + routing<br/>epoch / revision / session"]
+        Context["Current Core context<br/>Route + Codex state"] --> Router
+        Router -->|"typed / TTL <= 30s"| Command["MQTT Command<br/>agents/{agent_id}/commands"]
+    end
+
+    subgraph Execute["2 - Validate and execute"]
+        direction LR
+        Agent["Orbit Agent<br/>target / TTL / UUID / dedup"] --> Capability["OpenCodexSession<br/>typed Capability"]
+        Capability --> Result["Build final result<br/>intent_ref + status"]
+    end
+
+    subgraph Observe["3 - Observe result"]
+        direction LR
+        ResultTopic["MQTT CommandResult<br/>agents/{agent_id}/results"] --> Observer["Test/admin subscriber<br/>current endpoint"]
+        ResultTopic -. "planned" .-> Feedback["Core -> Web feedback<br/>not implemented"]
+    end
+
+    Command --> Agent
+    Result --> ResultTopic
+
+    classDef host fill:#eaf2ff,stroke:#2563eb,color:#172033
+    classDef topic fill:#fff4e8,stroke:#c2410c,color:#172033
+    classDef core fill:#eaf8ef,stroke:#15803d,color:#172033
+    classDef node fill:#f3efff,stroke:#7c3aed,color:#172033
+    classDef planned fill:#f7f7f8,stroke:#64748b,stroke-dasharray:5 4,color:#475569
+    class Agent,Capability,Result host
+    class Intent,Command,ResultTopic topic
+    class Router,Context core
+    class Web,Observer node
+    class Feedback planned
+    style Request fill:#ffffff,stroke:#cbd5e1,color:#475569
+    style Execute fill:#ffffff,stroke:#cbd5e1,color:#475569
+    style Observe fill:#ffffff,stroke:#cbd5e1,color:#475569
+```
 
 Sub2API credentials and Codex databases stay on the Agent. OLED receives only
 formatted cost, token, TPM, and freshness text. The web node receives the rich

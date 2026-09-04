@@ -284,6 +284,41 @@ func TestStaticPageProvidesFullscreenToggle(t *testing.T) {
 	}
 }
 
+func TestStaticPageProvidesPersistentThemeToggleBeforeConnection(t *testing.T) {
+	t.Parallel()
+	markup, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stylesheet, err := staticFiles.ReadFile("static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	themeButton := strings.Index(string(markup), `id="theme-toggle"`)
+	connectionButton := strings.Index(string(markup), `id="connection"`)
+	if themeButton < 0 || connectionButton < 0 || themeButton >= connectionButton {
+		t.Fatal("index.html does not place the theme toggle before the connection status")
+	}
+	for _, fragment := range []string{`aria-label="切换到黑夜模式"`, `class="theme-icon theme-icon-moon"`, `class="theme-icon theme-icon-sun"`} {
+		if !strings.Contains(string(markup), fragment) {
+			t.Errorf("index.html is missing %q", fragment)
+		}
+	}
+	for _, fragment := range []string{`const themeStorageKey = "orbit.web.theme"`, `setAttribute("data-theme"`, `window.localStorage.setItem(themeStorageKey`, `elements.themeToggle.addEventListener("click"`} {
+		if !strings.Contains(string(script), fragment) {
+			t.Errorf("app.js is missing %q", fragment)
+		}
+	}
+	if !strings.Contains(string(stylesheet), `:root[data-theme="dark"]`) {
+		t.Fatal("app.css is missing the dark theme")
+	}
+}
+
 func TestStaticPageReloadsFromConnectionStatus(t *testing.T) {
 	t.Parallel()
 	markup, err := staticFiles.ReadFile("static/index.html")
