@@ -5,6 +5,7 @@ package orbit.v1;
 option go_package = "orbit/gen/go/orbit/v1;orbitv1";
 
 import "orbit/v1/common.proto";
+import "google/protobuf/timestamp.proto";
 
 enum RequesterKind {
   REQUESTER_KIND_UNSPECIFIED = 0;
@@ -49,6 +50,7 @@ message Command {
   string command_id = 2;
   string target_agent_id = 3;
   IntentRef intent_ref = 4;
+  google.protobuf.Timestamp intent_produced_at = 5;
 
   oneof action {
     OpenCodexSession open_codex_session = 10;

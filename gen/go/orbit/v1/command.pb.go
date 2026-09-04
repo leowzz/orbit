@@ -9,6 +9,7 @@ package orbitv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -369,11 +370,12 @@ func (x *OpenCodexSession) GetSessionId() string {
 }
 
 type Command struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metadata      *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	CommandId     string                 `protobuf:"bytes,2,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
-	TargetAgentId string                 `protobuf:"bytes,3,opt,name=target_agent_id,json=targetAgentId,proto3" json:"target_agent_id,omitempty"`
-	IntentRef     *IntentRef             `protobuf:"bytes,4,opt,name=intent_ref,json=intentRef,proto3" json:"intent_ref,omitempty"`
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Metadata         *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	CommandId        string                 `protobuf:"bytes,2,opt,name=command_id,json=commandId,proto3" json:"command_id,omitempty"`
+	TargetAgentId    string                 `protobuf:"bytes,3,opt,name=target_agent_id,json=targetAgentId,proto3" json:"target_agent_id,omitempty"`
+	IntentRef        *IntentRef             `protobuf:"bytes,4,opt,name=intent_ref,json=intentRef,proto3" json:"intent_ref,omitempty"`
+	IntentProducedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=intent_produced_at,json=intentProducedAt,proto3" json:"intent_produced_at,omitempty"`
 	// Types that are valid to be assigned to Action:
 	//
 	//	*Command_OpenCodexSession
@@ -436,6 +438,13 @@ func (x *Command) GetTargetAgentId() string {
 func (x *Command) GetIntentRef() *IntentRef {
 	if x != nil {
 		return x.IntentRef
+	}
+	return nil
+}
+
+func (x *Command) GetIntentProducedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IntentProducedAt
 	}
 	return nil
 }
@@ -554,7 +563,7 @@ var File_orbit_v1_command_proto protoreflect.FileDescriptor
 
 const file_orbit_v1_command_proto_rawDesc = "" +
 	"\n" +
-	"\x16orbit/v1/command.proto\x12\borbit.v1\x1a\x15orbit/v1/common.proto\"\x8b\x01\n" +
+	"\x16orbit/v1/command.proto\x12\borbit.v1\x1a\x15orbit/v1/common.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x8b\x01\n" +
 	"\tIntentRef\x12\x1b\n" +
 	"\tintent_id\x18\x01 \x01(\tR\bintentId\x12>\n" +
 	"\x0erequester_kind\x18\x02 \x01(\x0e2\x17.orbit.v1.RequesterKindR\rrequesterKind\x12!\n" +
@@ -573,14 +582,15 @@ const file_orbit_v1_command_proto_rawDesc = "" +
 	"\x06action\"1\n" +
 	"\x10OpenCodexSession\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\x8a\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"\xd4\x02\n" +
 	"\aCommand\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x1d\n" +
 	"\n" +
 	"command_id\x18\x02 \x01(\tR\tcommandId\x12&\n" +
 	"\x0ftarget_agent_id\x18\x03 \x01(\tR\rtargetAgentId\x122\n" +
 	"\n" +
-	"intent_ref\x18\x04 \x01(\v2\x13.orbit.v1.IntentRefR\tintentRef\x12J\n" +
+	"intent_ref\x18\x04 \x01(\v2\x13.orbit.v1.IntentRefR\tintentRef\x12H\n" +
+	"\x12intent_produced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10intentProducedAt\x12J\n" +
 	"\x12open_codex_session\x18\n" +
 	" \x01(\v2\x1a.orbit.v1.OpenCodexSessionH\x00R\x10openCodexSessionB\b\n" +
 	"\x06action\"\x85\x02\n" +
@@ -628,22 +638,24 @@ var file_orbit_v1_command_proto_goTypes = []any{
 	(*Command)(nil),                // 6: orbit.v1.Command
 	(*CommandResult)(nil),          // 7: orbit.v1.CommandResult
 	(*Metadata)(nil),               // 8: orbit.v1.Metadata
+	(*timestamppb.Timestamp)(nil),  // 9: google.protobuf.Timestamp
 }
 var file_orbit_v1_command_proto_depIdxs = []int32{
-	0, // 0: orbit.v1.IntentRef.requester_kind:type_name -> orbit.v1.RequesterKind
-	8, // 1: orbit.v1.Intent.metadata:type_name -> orbit.v1.Metadata
-	3, // 2: orbit.v1.Intent.open_codex_session:type_name -> orbit.v1.OpenCodexSessionIntent
-	8, // 3: orbit.v1.Command.metadata:type_name -> orbit.v1.Metadata
-	2, // 4: orbit.v1.Command.intent_ref:type_name -> orbit.v1.IntentRef
-	5, // 5: orbit.v1.Command.open_codex_session:type_name -> orbit.v1.OpenCodexSession
-	8, // 6: orbit.v1.CommandResult.metadata:type_name -> orbit.v1.Metadata
-	2, // 7: orbit.v1.CommandResult.intent_ref:type_name -> orbit.v1.IntentRef
-	1, // 8: orbit.v1.CommandResult.status:type_name -> orbit.v1.CommandStatus
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	0,  // 0: orbit.v1.IntentRef.requester_kind:type_name -> orbit.v1.RequesterKind
+	8,  // 1: orbit.v1.Intent.metadata:type_name -> orbit.v1.Metadata
+	3,  // 2: orbit.v1.Intent.open_codex_session:type_name -> orbit.v1.OpenCodexSessionIntent
+	8,  // 3: orbit.v1.Command.metadata:type_name -> orbit.v1.Metadata
+	2,  // 4: orbit.v1.Command.intent_ref:type_name -> orbit.v1.IntentRef
+	9,  // 5: orbit.v1.Command.intent_produced_at:type_name -> google.protobuf.Timestamp
+	5,  // 6: orbit.v1.Command.open_codex_session:type_name -> orbit.v1.OpenCodexSession
+	8,  // 7: orbit.v1.CommandResult.metadata:type_name -> orbit.v1.Metadata
+	2,  // 8: orbit.v1.CommandResult.intent_ref:type_name -> orbit.v1.IntentRef
+	1,  // 9: orbit.v1.CommandResult.status:type_name -> orbit.v1.CommandStatus
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_command_proto_init() }

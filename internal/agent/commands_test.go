@@ -10,20 +10,25 @@ import (
 	"orbit/internal/mqtt"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type recordingOpener struct {
-	mu       sync.Mutex
-	sessions []string
-	err      error
+	mu        sync.Mutex
+	sessions  []string
+	err       error
+	afterOpen func()
 }
 
 func (opener *recordingOpener) Open(_ context.Context, sessionID string) error {
 	opener.mu.Lock()
 	defer opener.mu.Unlock()
 	opener.sessions = append(opener.sessions, sessionID)
+	if opener.afterOpen != nil {
+		opener.afterOpen()
+	}
 	return opener.err
 }
 
@@ -122,6 +127,43 @@ func TestOpenCodexCommandRejectsExpiredAndInvalidSession(t *testing.T) {
 	}
 }
 
+func TestOpenCodexCommandLogsDispatchAndExecutionLatency(t *testing.T) {
+	t.Parallel()
+	current := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	opener := &recordingOpener{afterOpen: func() { current = current.Add(20 * time.Millisecond) }}
+	logCore, observed := observer.New(zap.InfoLevel)
+	runner, err := New(
+		codexConfig(false, false),
+		Sources{Codex: &stubCodexSource{}},
+		Capabilities{OpenCodexSession: opener},
+		&recordingPublisher{},
+		zap.New(logCore),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner.now = func() time.Time { return current }
+	message := testOpenCodexCommand(t, current.Add(-25*time.Millisecond), "command-latency", "01a066af-69d4-77d1-a21b-26d84534a817")
+
+	if err := runner.handleCommand(context.Background(), message); err != nil {
+		t.Fatal(err)
+	}
+	entries := observed.FilterMessage("command completed").All()
+	if len(entries) != 1 {
+		t.Fatalf("command completed log count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	for name, want := range map[string]int64{
+		"node_to_execution_ms": 80,
+		"core_to_execution_ms": 25,
+		"execution_ms":         20,
+	} {
+		if got := fields[name]; got != want {
+			t.Errorf("%s = %v, want %d", name, got, want)
+		}
+	}
+}
+
 func testOpenCodexCommand(t *testing.T, producedAt time.Time, commandID, sessionID string) mqtt.Message {
 	t.Helper()
 	command := &orbitv1.Command{
@@ -132,8 +174,9 @@ func testOpenCodexCommand(t *testing.T, producedAt time.Time, commandID, session
 			ProducedAt: timestamppb.New(producedAt),
 			ExpiresAt:  timestamppb.New(producedAt.Add(20 * time.Second)),
 		},
-		CommandId:     commandID,
-		TargetAgentId: "agent-a",
+		CommandId:        commandID,
+		TargetAgentId:    "agent-a",
+		IntentProducedAt: timestamppb.New(producedAt.Add(-55 * time.Millisecond)),
 		IntentRef: &orbitv1.IntentRef{
 			IntentId: "intent-1", RequesterKind: orbitv1.RequesterKind_REQUESTER_KIND_NODE, RequesterId: "web-a",
 		},

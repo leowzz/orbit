@@ -3,6 +3,7 @@ module orbit
 go 1.27.0
 
 require (
+	github.com/beevik/ntp v1.5.0
 	github.com/eclipse/paho.golang v0.23.0
 	go.uber.org/zap v1.28.0
 	google.golang.org/protobuf v1.36.12
@@ -18,7 +19,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/net v0.44.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	modernc.org/libc v1.75.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect

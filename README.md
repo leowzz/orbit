@@ -237,6 +237,15 @@ The live host path needs a reachable broker and the configured secret files.
 Start Core first so it is subscribed before observations arrive. Use separate
 terminals when inspecting logs:
 
+Agent, Core, and Web Node also accept an optional top-level `ntp` section with
+`server`, `sync_interval`, and `timeout`. When omitted, it defaults to
+`ntp.aliyun.com`, `10m`, and `2s`. Each process queries NTP once before connecting
+to MQTT and refreshes the offset in the background. A failed query keeps the
+previous offset (or the system clock before the first successful query), logs a
+warning, and does not stop the service. Deployments must allow outbound UDP port
+123 to the configured server. An Alibaba Cloud VPC deployment can override the
+server with `ntp.cloud.aliyuncs.com`.
+
 ~~~shell
 make dev-core CORE_CONFIG=configs/core.local.yaml
 make dev-agent AGENT_CONFIG=configs/agent.local.yaml

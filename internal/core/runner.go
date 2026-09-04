@@ -31,14 +31,17 @@ type Runner struct {
 	now       func() time.Time
 }
 
-func NewRunner(engine *Engine, transport Transport, logger *zap.Logger) (*Runner, error) {
+func NewRunner(engine *Engine, transport Transport, logger *zap.Logger, now func() time.Time) (*Runner, error) {
 	if engine == nil || transport == nil {
 		return nil, errors.New("core engine and transport are required")
 	}
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &Runner{engine: engine, transport: transport, logger: logger, now: time.Now}, nil
+	if now == nil {
+		now = time.Now
+	}
+	return &Runner{engine: engine, transport: transport, logger: logger, now: now}, nil
 }
 
 func (r *Runner) Run(ctx context.Context) error {

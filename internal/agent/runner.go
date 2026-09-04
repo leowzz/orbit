@@ -50,6 +50,7 @@ type Config struct {
 	AgentEpoch     string
 	AgentVersion   string
 	HostLabel      string
+	Now            func() time.Time
 	CurrencyCode   string
 	Location       *time.Location
 	PollInterval   time.Duration
@@ -139,13 +140,17 @@ func newRunner(config Config, sources Sources, capabilities Capabilities, transp
 			health:  orbitv1.SourceHealth_SOURCE_HEALTH_UNSPECIFIED,
 		}
 	}
+	now := config.Now
+	if now == nil {
+		now = time.Now
+	}
 	return &Runner{
 		config:         config,
 		sources:        sources,
 		capabilities:   capabilities,
 		transport:      transport,
 		logger:         logger,
-		now:            time.Now,
+		now:            now,
 		sourceStates:   states,
 		commandResults: make(map[string]cachedCommandResult),
 	}, nil

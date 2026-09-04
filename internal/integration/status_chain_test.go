@@ -69,7 +69,7 @@ func TestSub2APIToRetainedDeviceView(t *testing.T) {
 		t.Fatal(err)
 	}
 	broker := newMemoryBroker()
-	coreRunner, err := core.NewRunner(engine, broker, zap.NewNop())
+	coreRunner, err := core.NewRunner(engine, broker, zap.NewNop(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -60,7 +60,7 @@ func TestWebIntentOpensCodexSessionThroughCoreAndAgent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	coreRunner, err := core.NewRunner(engine, broker, zap.NewNop())
+	coreRunner, err := core.NewRunner(engine, broker, zap.NewNop(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

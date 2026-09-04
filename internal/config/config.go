@@ -6,6 +6,12 @@ type Duration struct {
 	time.Duration
 }
 
+type NTPConfig struct {
+	Server       string   `yaml:"server"`
+	SyncInterval Duration `yaml:"sync_interval"`
+	Timeout      Duration `yaml:"timeout"`
+}
+
 type MQTTConfig struct {
 	URL         string          `yaml:"url"`
 	TLS         MQTTTLSConfig   `yaml:"tls"`
@@ -28,6 +34,7 @@ type MQTTCredentials struct {
 
 type AgentConfig struct {
 	Agent        AgentIdentity     `yaml:"agent"`
+	NTP          NTPConfig         `yaml:"ntp"`
 	MQTT         MQTTConfig        `yaml:"mqtt"`
 	Sources      AgentSources      `yaml:"sources"`
 	Capabilities AgentCapabilities `yaml:"capabilities"`
@@ -96,6 +103,7 @@ type CodexPrivacyConfig struct {
 
 type CoreConfig struct {
 	Core                CoreIdentity                 `yaml:"core"`
+	NTP                 NTPConfig                    `yaml:"ntp"`
 	MQTT                MQTTConfig                   `yaml:"mqtt"`
 	ProjectionRoutes    map[string]ProjectionRoute   `yaml:"projection_routes"`
 	ObservationPolicies map[string]ObservationPolicy `yaml:"observation_policies"`
@@ -104,6 +112,7 @@ type CoreConfig struct {
 
 type WebNodeConfig struct {
 	Node    WebNodeIdentity `yaml:"node"`
+	NTP     NTPConfig       `yaml:"ntp"`
 	MQTT    MQTTConfig      `yaml:"mqtt"`
 	Web     WebConfig       `yaml:"web"`
 	Logging LoggingConfig   `yaml:"logging"`

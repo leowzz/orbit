@@ -38,6 +38,51 @@ func TestLoadAgent(t *testing.T) {
 	}
 }
 
+func TestNTPConfigurationDefaultsAndOverrides(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, true)
+
+	agent, err := LoadAgent(writeConfig(t, dir, "agent.yaml", validAgentYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	core, err := LoadCore(writeConfig(t, dir, "core.yaml", validCoreYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	web, err := LoadWebNode(writeConfig(t, dir, "web.yaml", validWebNodeYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, ntp := range map[string]NTPConfig{
+		"agent": agent.NTP,
+		"core":  core.NTP,
+		"web":   web.NTP,
+	} {
+		if ntp.Server != "ntp.aliyun.com" || ntp.SyncInterval.Duration != 10*time.Minute || ntp.Timeout.Duration != 2*time.Second {
+			t.Errorf("%s NTP defaults = %#v", name, ntp)
+		}
+	}
+
+	customYAML := strings.Replace(validAgentYAML, "mqtt:\n", "ntp:\n  server: time.example.com\n  sync_interval: 30m\n  timeout: 5s\nmqtt:\n", 1)
+	custom, err := LoadAgent(writeConfig(t, dir, "custom-agent.yaml", customYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if custom.NTP.Server != "time.example.com" || custom.NTP.SyncInterval.Duration != 30*time.Minute || custom.NTP.Timeout.Duration != 5*time.Second {
+		t.Fatalf("custom NTP config = %#v", custom.NTP)
+	}
+
+	serverOnlyYAML := strings.Replace(validAgentYAML, "mqtt:\n", "ntp:\n  server: time.example.com\nmqtt:\n", 1)
+	serverOnly, err := LoadAgent(writeConfig(t, dir, "server-only-agent.yaml", serverOnlyYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if serverOnly.NTP.Server != "time.example.com" || serverOnly.NTP.SyncInterval.Duration != 10*time.Minute || serverOnly.NTP.Timeout.Duration != 2*time.Second {
+		t.Fatalf("server-only NTP config = %#v", serverOnly.NTP)
+	}
+}
+
 func TestLoadAgentAcceptsCodexOnlyAndResolvesHome(t *testing.T) {
 	dir := t.TempDir()
 	writeFixtureFiles(t, dir, false)

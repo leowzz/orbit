@@ -380,6 +380,7 @@ Command 使用 `oneof action` 形成能力白名单。首个真实动作是 `Ope
 
 - `command_id`：关联键，由 Core 生成且不可复用；Agent 只在当前进程生命周期内用它抑制重复。
 - `intent_ref`：生成该命令的 `intent_id`、`requester_kind` 和 `requester_id`，用于 Core 在重启后仍能关联反馈。
+- `intent_produced_at`：Node 创建原始 Intent 的时间，由 Core 原样传播，用于观测 Node 到 Agent 开始执行的端到端耗时。
 - `target_agent_id`：明确目标 Agent；Host Label 不参与寻址。
 - `expires_at`：交互命令默认不超过 30 秒。
 - 类型化动作及其受限参数。
@@ -683,7 +684,7 @@ MQTT 用户名和密钥由部署配置显式提供，不从参与者 ID 推导�
 
 启动时必须验证 ID 格式、Topic 可用性、TLS 配置和本地重复身份；配置错误应快速失败，不以降级明文连接继续运行。
 
-Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文件变化、不支持部分热更新；任何配置修改都通过重启对应参与者生效，并产生新的进程 Epoch。
+Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文件变化、不支持部分热更新；任何配置修改都通过重启对应参与者生效，并产生新的进程 Epoch。Go 参与者可通过可选的 `ntp` 配置共享时间基准；未配置时使用默认 NTP 服务，查询失败则保留上次有效偏移并继续运行。
 
 ## 11. 安全与隐私
 
@@ -719,7 +720,7 @@ Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文�
 - `status`
 - `error_code`
 
-首版建议提供以下指标：MQTT 连接状态和重连次数、Source 成功/失败与耗时、Observation/View 发布次数和大小、Observation 合并覆盖数、过期与乱序丢弃数、命令各状态计数、重复命令数及 Capability 执行耗时。
+首版建议提供以下指标：MQTT 连接状态和重连次数、Source 成功/失败与耗时、Observation/View 发布次数和大小、Observation 合并覆盖数、过期与乱序丢弃数、命令各状态计数、重复命令数、Node/Core 到 Capability 开始执行的耗时及 Capability 执行耗时。跨主机耗时依赖参与者时钟同步。
 
 ## 13. 故障语义
 

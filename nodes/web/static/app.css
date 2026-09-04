@@ -254,8 +254,7 @@ main {
 }
 
 .overview {
-  padding: 52px 0 42px;
-  border-bottom: 1px solid var(--line);
+  padding: 52px 0 24px;
 }
 
 .section-heading {
@@ -373,7 +372,7 @@ h2 {
 }
 
 .sessions {
-  padding: 38px 0 64px;
+  padding: 24px 0 64px;
 }
 
 .session-list {

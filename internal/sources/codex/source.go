@@ -308,14 +308,27 @@ func readSessions(ctx context.Context, path string, includeArchived bool) (map[s
 	}
 	threadName := "NULL"
 	if columns["name"] {
-		threadName = "name"
+		threadName = "threads.name"
+	}
+	spawnJoin := ""
+	spawnedSubagent := "0"
+	hasSpawnEdges, err := tableExists(ctx, db, "thread_spawn_edges")
+	if err != nil {
+		return nil, err
+	}
+	if hasSpawnEdges {
+		spawnJoin = "LEFT JOIN thread_spawn_edges AS spawn ON spawn.child_thread_id = threads.id"
+		spawnedSubagent = "spawn.child_thread_id IS NOT NULL"
 	}
 	query := fmt.Sprintf(`
-		SELECT id, %s AS thread_name, title, source, cwd, model,
-		       updated_at_ms, first_user_message, archived
+		SELECT threads.id, %s AS thread_name, threads.title, threads.source,
+		       threads.cwd, threads.model, threads.updated_at_ms,
+		       threads.first_user_message, threads.archived,
+		       %s AS spawned_subagent
 		FROM threads
 		%s
-		ORDER BY updated_at_ms DESC`, threadName, archivedClause(includeArchived))
+		%s
+		ORDER BY threads.updated_at_ms DESC`, threadName, spawnedSubagent, spawnJoin, archivedClause(includeArchived))
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, err
@@ -327,12 +340,16 @@ func readSessions(ctx context.Context, path string, includeArchived bool) (map[s
 		var (
 			id, name, title, source, cwd, model, firstMessage sql.NullString
 			updatedAtMs, archived                             sql.NullInt64
+			spawned                                           int
 		)
-		if err := rows.Scan(&id, &name, &title, &source, &cwd, &model, &updatedAtMs, &firstMessage, &archived); err != nil {
+		if err := rows.Scan(&id, &name, &title, &source, &cwd, &model, &updatedAtMs, &firstMessage, &archived, &spawned); err != nil {
 			return nil, err
 		}
 		if !id.Valid || strings.TrimSpace(id.String) == "" {
 			return nil, errors.New("threads row has no id")
+		}
+		if spawned != 0 || isSubagentSource(source.String) {
+			continue
 		}
 		titleValue := cleanText(title.String)
 		firstValue := cleanText(firstMessage.String)
@@ -373,7 +390,7 @@ func archivedClause(includeArchived bool) string {
 	if includeArchived {
 		return ""
 	}
-	return "WHERE archived = 0"
+	return "WHERE threads.archived = 0"
 }
 
 func readLatestTurns(ctx context.Context, path string) (map[string]turnStatus, error) {
@@ -444,6 +461,14 @@ func tableColumns(ctx context.Context, db *sql.DB, table string) (map[string]boo
 		return nil, err
 	}
 	return columns, nil
+}
+
+func tableExists(ctx context.Context, db *sql.DB, table string) (bool, error) {
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func openReadonly(ctx context.Context, path string) (*sql.DB, error) {
@@ -543,6 +568,19 @@ func isIgnored(session sessionRecord, cwdPatterns []string, sourcePatterns map[s
 	}
 	_, ignored := sourcePatterns[session.source]
 	return ignored
+}
+
+func isSubagentSource(source string) bool {
+	source = strings.TrimSpace(source)
+	if !strings.HasPrefix(source, "{") {
+		return false
+	}
+	var metadata map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(source), &metadata); err != nil {
+		return false
+	}
+	_, ok := metadata["subagent"]
+	return ok
 }
 
 func cleanText(value string) string { return strings.Join(strings.Fields(value), " ") }

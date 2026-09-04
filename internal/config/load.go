@@ -17,6 +17,16 @@ import (
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
+const defaultNTPServer = "ntp.aliyun.com"
+
+func defaultNTPConfig() NTPConfig {
+	return NTPConfig{
+		Server:       defaultNTPServer,
+		SyncInterval: Duration{10 * time.Minute},
+		Timeout:      Duration{2 * time.Second},
+	}
+}
+
 func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.ScalarNode || node.Tag != "!!str" {
 		return errors.New("duration must be a string such as 30s or 5m")
@@ -33,6 +43,7 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 func LoadAgent(path string) (*AgentConfig, error) {
 	cfg := AgentConfig{
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
+		NTP:     defaultNTPConfig(),
 		Logging: LoggingConfig{Level: "info"},
 	}
 	if err := decodeStrict(path, &cfg); err != nil {
@@ -47,6 +58,7 @@ func LoadAgent(path string) (*AgentConfig, error) {
 func LoadCore(path string) (*CoreConfig, error) {
 	cfg := CoreConfig{
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
+		NTP:     defaultNTPConfig(),
 		Logging: LoggingConfig{Level: "info"},
 	}
 	if err := decodeStrict(path, &cfg); err != nil {
@@ -61,6 +73,7 @@ func LoadCore(path string) (*CoreConfig, error) {
 func LoadWebNode(path string) (*WebNodeConfig, error) {
 	cfg := WebNodeConfig{
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
+		NTP:     defaultNTPConfig(),
 		Web:     WebConfig{Listen: "127.0.0.1:8080", Auth: WebAuthConfig{SessionTTL: Duration{24 * time.Hour}}},
 		Logging: LoggingConfig{Level: "info"},
 	}
@@ -97,6 +110,9 @@ func decodeStrict(path string, dst any) error {
 }
 
 func (cfg *AgentConfig) validate(baseDir string) error {
+	if err := cfg.NTP.validate(); err != nil {
+		return fmt.Errorf("ntp: %w", err)
+	}
 	if cfg.Agent.ID != "" {
 		if err := validateID("agent.id", cfg.Agent.ID); err != nil {
 			return err
@@ -128,6 +144,9 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 }
 
 func (cfg *CoreConfig) validate(baseDir string) error {
+	if err := cfg.NTP.validate(); err != nil {
+		return fmt.Errorf("ntp: %w", err)
+	}
 	if err := validateID("core.id", cfg.Core.ID); err != nil {
 		return err
 	}
@@ -193,6 +212,9 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 }
 
 func (cfg *WebNodeConfig) validate(baseDir string) error {
+	if err := cfg.NTP.validate(); err != nil {
+		return fmt.Errorf("ntp: %w", err)
+	}
 	if err := validateID("node.id", cfg.Node.ID); err != nil {
 		return err
 	}
@@ -210,6 +232,20 @@ func (cfg *WebNodeConfig) validate(baseDir string) error {
 		return errors.New("web.auth.session_ttl must be positive")
 	}
 	return validateLogLevel(cfg.Logging.Level)
+}
+
+func (cfg *NTPConfig) validate() error {
+	cfg.Server = strings.TrimSpace(cfg.Server)
+	if cfg.Server == "" {
+		return errors.New("server is required")
+	}
+	if cfg.SyncInterval.Duration <= 0 {
+		return errors.New("sync_interval must be positive")
+	}
+	if cfg.Timeout.Duration <= 0 {
+		return errors.New("timeout must be positive")
+	}
+	return nil
 }
 
 func (cfg *MQTTConfig) validate(baseDir string) error {

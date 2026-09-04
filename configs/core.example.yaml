@@ -1,6 +1,11 @@
 core:
   id: core-local
 
+ntp:
+  server: ntp.aliyun.com
+  sync_interval: 10m
+  timeout: 2s
+
 mqtt:
   url: mqtts://broker.example.com:8883
   tls:

@@ -102,8 +102,9 @@ func (e *Engine) CommandForIntent(now time.Time, intent *orbitv1.Intent) (*orbit
 			ProducedAt: timestamppb.New(now),
 			ExpiresAt:  timestamppb.New(minTime(expiresAt, now.Add(maxIntentTTL))),
 		},
-		CommandId:     newID(),
-		TargetAgentId: targetAgentID,
+		CommandId:        newID(),
+		TargetAgentId:    targetAgentID,
+		IntentProducedAt: timestamppb.New(producedAt),
 		IntentRef: &orbitv1.IntentRef{
 			IntentId: intent.IntentId, RequesterKind: orbitv1.RequesterKind_REQUESTER_KIND_NODE, RequesterId: metadata.ProducerId,
 		},

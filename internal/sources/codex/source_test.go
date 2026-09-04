@@ -172,6 +172,36 @@ func TestFetchAppliesFiltersAndArchivedOptionBeforeLimit(t *testing.T) {
 	}
 }
 
+func TestFetchSkipsSubagentSessionsBeforeCountsAndLimit(t *testing.T) {
+	home := t.TempDir()
+	now := time.Now().Truncate(time.Second)
+	statePath := filepath.Join(home, "state_1.sqlite")
+	historyPath := filepath.Join(home, "thread_history_1.sqlite")
+	createStateDB(t, statePath, true, []stateFixture{
+		{id: "structured-subagent", title: "Structured", source: `{"subagent":{"other":"guardian"}}`, cwd: "/tmp/subagent", model: "gpt", updatedAt: now},
+		{id: "spawned-subagent", title: "Spawned", source: "vscode", cwd: "/tmp/subagent", model: "gpt", updatedAt: now.Add(-time.Minute)},
+		{id: "root", title: "Root", source: "vscode", cwd: "/tmp/root", model: "gpt", updatedAt: now.Add(-2 * time.Minute)},
+	})
+	createSpawnEdges(t, statePath, "spawned-subagent")
+	createHistoryDB(t, historyPath, []turnFixture{
+		{threadID: "structured-subagent", status: "inProgress", startedAt: now},
+		{threadID: "spawned-subagent", status: "inProgress", startedAt: now.Add(-time.Minute)},
+		{threadID: "root", status: "completed", startedAt: now.Add(-2 * time.Minute), completedAt: now.Add(-2 * time.Minute)},
+	})
+
+	source, err := New(Config{Home: home, Limit: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := source.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.TotalCount != 1 || snapshot.RunningCount != 0 || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].ID != "root" {
+		t.Fatalf("snapshot with subagents = %+v", snapshot)
+	}
+}
+
 func TestFetchSupportsThreadsWithoutNameColumn(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now().Truncate(time.Second)
@@ -348,6 +378,23 @@ func createHistoryDB(t *testing.T, path string, fixtures []turnFixture) {
 			completedAt = fixture.completedAt.Unix()
 		}
 		if _, err := db.Exec("INSERT INTO thread_turns (thread_id, turn_id, status, started_at, completed_at) VALUES (?, ?, ?, ?, ?)", fixture.threadID, fixture.turnID, fixture.status, startedAt, completedAt); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func createSpawnEdges(t *testing.T, path string, childIDs ...string) {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("CREATE TABLE thread_spawn_edges (parent_thread_id TEXT NOT NULL, child_thread_id TEXT NOT NULL PRIMARY KEY, status TEXT NOT NULL)"); err != nil {
+		t.Fatal(err)
+	}
+	for _, childID := range childIDs {
+		if _, err := db.Exec("INSERT INTO thread_spawn_edges (parent_thread_id, child_thread_id, status) VALUES (?, ?, ?)", "parent", childID, "open"); err != nil {
 			t.Fatal(err)
 		}
 	}

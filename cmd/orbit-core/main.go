@@ -12,6 +12,7 @@ import (
 	"time"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
+	appclock "orbit/internal/clock"
 	"orbit/internal/config"
 	"orbit/internal/core"
 	"orbit/internal/logging"
@@ -82,6 +83,15 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	synchronizedClock, err := appclock.New(appclock.Config{
+		Server:       cfg.NTP.Server,
+		SyncInterval: cfg.NTP.SyncInterval.Duration,
+		Timeout:      cfg.NTP.Timeout.Duration,
+	}, logger)
+	if err != nil {
+		return err
+	}
+	synchronizedClock.Start(ctx)
 	client, err := mqtt.Connect(ctx, mqtt.Config{
 		URL:      cfg.MQTT.URL,
 		ClientID: "orbit-core-" + cfg.Core.ID,
@@ -98,7 +108,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 		return err
 	}
 	defer disconnect(client, logger)
-	runner, err := core.NewRunner(engine, client, logger)
+	runner, err := core.NewRunner(engine, client, logger, synchronizedClock.Now)
 	if err != nil {
 		return err
 	}

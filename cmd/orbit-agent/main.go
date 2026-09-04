@@ -12,6 +12,7 @@ import (
 
 	"orbit/internal/agent"
 	codexcap "orbit/internal/capabilities/codex"
+	appclock "orbit/internal/clock"
 	"orbit/internal/config"
 	"orbit/internal/logging"
 	"orbit/internal/mqtt"
@@ -103,6 +104,16 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	synchronizedClock, err := appclock.New(appclock.Config{
+		Server:       cfg.NTP.Server,
+		SyncInterval: cfg.NTP.SyncInterval.Duration,
+		Timeout:      cfg.NTP.Timeout.Duration,
+	}, logger)
+	if err != nil {
+		return err
+	}
+	synchronizedClock.Start(ctx)
+	runnerConfig.Now = synchronizedClock.Now
 	client, err := mqtt.Connect(ctx, mqtt.Config{
 		URL:      cfg.MQTT.URL,
 		ClientID: "orbit-agent-" + agentID,

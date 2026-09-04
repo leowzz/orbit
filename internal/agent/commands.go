@@ -51,12 +51,16 @@ func (r *Runner) handleCommand(ctx context.Context, message mqtt.Message) error 
 
 	r.commandMu.Lock()
 	result, duplicate := r.cachedResultLocked(&command, fingerprint)
+	var executionStartedAt time.Time
+	var executionDuration time.Duration
 	if result == nil {
 		status, errorCode := r.validateCommand(r.now().UTC(), &command)
 		if status == orbitv1.CommandStatus_COMMAND_STATUS_UNSPECIFIED {
+			executionStartedAt = r.now()
 			executionContext, cancel := context.WithTimeout(ctx, 5*time.Second)
 			err = r.capabilities.OpenCodexSession.Open(executionContext, command.GetOpenCodexSession().GetSessionId())
 			cancel()
+			executionDuration = r.now().Sub(executionStartedAt)
 			if err == nil {
 				status = orbitv1.CommandStatus_COMMAND_STATUS_SUCCEEDED
 			} else {
@@ -74,13 +78,23 @@ func (r *Runner) handleCommand(ctx context.Context, message mqtt.Message) error 
 	if err := r.publishCommandResult(ctx, result); err != nil {
 		return err
 	}
-	r.logger.Info("command completed",
+	fields := []zap.Field{
 		zap.String("command_id", command.CommandId),
 		zap.String("action_type", "open_codex_session"),
 		zap.String("status", result.Status.String()),
 		zap.String("error_code", result.ErrorCode),
 		zap.Bool("duplicate", duplicate),
-	)
+	}
+	if !executionStartedAt.IsZero() {
+		if intentProducedAt := command.GetIntentProducedAt(); intentProducedAt != nil && intentProducedAt.CheckValid() == nil {
+			fields = append(fields, zap.Int64("node_to_execution_ms", executionStartedAt.Sub(intentProducedAt.AsTime()).Milliseconds()))
+		}
+		fields = append(fields,
+			zap.Int64("core_to_execution_ms", executionStartedAt.Sub(command.Metadata.ProducedAt.AsTime()).Milliseconds()),
+			zap.Int64("execution_ms", executionDuration.Milliseconds()),
+		)
+	}
+	r.logger.Info("command completed", fields...)
 	return nil
 }
 

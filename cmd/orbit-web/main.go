@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	appclock "orbit/internal/clock"
 	"orbit/internal/config"
 	"orbit/internal/logging"
 	"orbit/internal/mqtt"
@@ -50,6 +51,15 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error 
 	defer stopSignals()
 	ctx, cancel := context.WithCancel(signalContext)
 	defer cancel()
+	synchronizedClock, err := appclock.New(appclock.Config{
+		Server:       cfg.NTP.Server,
+		SyncInterval: cfg.NTP.SyncInterval.Duration,
+		Timeout:      cfg.NTP.Timeout.Duration,
+	}, logger)
+	if err != nil {
+		return err
+	}
+	synchronizedClock.Start(ctx)
 
 	client, err := mqtt.Connect(ctx, mqtt.Config{
 		URL:      cfg.MQTT.URL,
@@ -69,7 +79,7 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error 
 	store := webnode.NewStore()
 	nodeEpoch := webnode.NewEpoch()
 	runner, err := webnode.NewRunner(webnode.RunnerConfig{
-		NodeID: cfg.Node.ID, NodeEpoch: nodeEpoch, FirmwareVersion: version,
+		NodeID: cfg.Node.ID, NodeEpoch: nodeEpoch, FirmwareVersion: version, Now: synchronizedClock.Now,
 	}, client, store, logger)
 	if err != nil {
 		return err

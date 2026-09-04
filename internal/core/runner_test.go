@@ -37,7 +37,7 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 		zapcore.AddSync(&logs),
 		zapcore.InfoLevel,
 	))
-	runner, err := NewRunner(engine, transport, logger)
+	runner, err := NewRunner(engine, transport, logger, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 func TestRunnerRejectsTopicPayloadIdentityMismatch(t *testing.T) {
 	t.Parallel()
 	engine := newTestEngine(t)
-	runner, err := NewRunner(engine, &fakeTransport{}, zap.NewNop())
+	runner, err := NewRunner(engine, &fakeTransport{}, zap.NewNop(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestRunnerAcceptsCodexObservationTopic(t *testing.T) {
 		t.Fatal(err)
 	}
 	transport := &fakeTransport{}
-	runner, _ := NewRunner(engine, transport, zap.NewNop())
+	runner, _ := NewRunner(engine, transport, zap.NewNop(), nil)
 	runner.now = func() time.Time { return now }
 	agent := testAgentState(now)
 	agent.Sources = []*orbitv1.SourceStatus{{ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_CODEX, Enabled: true}}
@@ -125,7 +125,7 @@ func TestRunnerRoutesIntentToAgentCommand(t *testing.T) {
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	engine := newCodexCommandEngine(t, now)
 	transport := &fakeTransport{}
-	runner, err := NewRunner(engine, transport, zap.NewNop())
+	runner, err := NewRunner(engine, transport, zap.NewNop(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

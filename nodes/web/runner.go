@@ -31,6 +31,7 @@ type RunnerConfig struct {
 	NodeID          string
 	NodeEpoch       string
 	FirmwareVersion string
+	Now             func() time.Time
 }
 
 type Runner struct {
@@ -54,7 +55,11 @@ func NewRunner(config RunnerConfig, transport Transport, store *Store, logger *z
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return &Runner{config: config, transport: transport, store: store, logger: logger, now: time.Now}, nil
+	now := config.Now
+	if now == nil {
+		now = time.Now
+	}
+	return &Runner{config: config, transport: transport, store: store, logger: logger, now: now}, nil
 }
 
 func (r *Runner) OpenCodexSession(ctx context.Context, sessionID string, viewRevision uint64) (string, error) {

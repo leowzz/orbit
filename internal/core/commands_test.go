@@ -15,6 +15,8 @@ func TestCommandForIntentRoutesCurrentCodexSessionAndDeduplicates(t *testing.T) 
 	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
 	engine := newCodexCommandEngine(t, now)
 	intent := testOpenCodexIntent(now, "intent-1", testCodexSessionID, 1)
+	intentProducedAt := now.Add(-75 * time.Millisecond)
+	intent.Metadata.ProducedAt = timestamppb.New(intentProducedAt)
 
 	command, err := engine.CommandForIntent(now, intent)
 	if err != nil {
@@ -25,6 +27,9 @@ func TestCommandForIntentRoutesCurrentCodexSessionAndDeduplicates(t *testing.T) 
 	}
 	if command.IntentRef.GetRequesterKind() != orbitv1.RequesterKind_REQUESTER_KIND_NODE || command.IntentRef.GetRequesterId() != "web-a" {
 		t.Fatalf("unexpected intent ref: %+v", command.IntentRef)
+	}
+	if command.GetIntentProducedAt() == nil || !command.GetIntentProducedAt().AsTime().Equal(intentProducedAt) {
+		t.Fatalf("intent produced_at = %v, want %v", command.GetIntentProducedAt(), intentProducedAt)
 	}
 	duplicate, err := engine.CommandForIntent(now.Add(time.Second), proto.Clone(intent).(*orbitv1.Intent))
 	if err != nil {
