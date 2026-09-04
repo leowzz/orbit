@@ -616,6 +616,7 @@ footer {
   .topbar {
     min-height: 40px;
     padding: 0 18px;
+    border-bottom: 0;
   }
 
   .topbar-time {
@@ -644,7 +645,7 @@ footer {
   main {
     display: grid;
     grid-template-columns: 150px minmax(0, 1fr);
-    column-gap: 14px;
+    column-gap: 6px;
     width: calc(100% - 28px);
     max-width: none;
     height: calc(100vh - 40px);
@@ -655,7 +656,7 @@ footer {
     height: calc(100vh - 40px);
     min-width: 0;
     padding: 8px 14px 6px 0;
-    border-right: 1px solid var(--line);
+    border-right: 0;
     border-bottom: 0;
   }
 
@@ -750,7 +751,7 @@ footer {
     flex-direction: column;
     min-width: 0;
     height: 100%;
-    padding: 8px 0 6px;
+    padding: 4px 0 6px;
     overflow: hidden;
   }
 
@@ -761,7 +762,7 @@ footer {
     height: auto;
     flex: 1;
     gap: 6px;
-    margin-top: 6px;
+    margin-top: 2px;
     padding-right: 4px;
     border-top: 0;
     overflow-y: auto;
