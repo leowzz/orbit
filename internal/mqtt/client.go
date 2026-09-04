@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/eclipse/paho.golang/autopaho"
+	"github.com/eclipse/paho.golang/packets"
 	"github.com/eclipse/paho.golang/paho"
 	"go.uber.org/zap"
 )
@@ -51,6 +52,10 @@ type subscription struct {
 type Client struct {
 	manager *autopaho.ConnectionManager
 	logger  *zap.Logger
+	cancel  context.CancelFunc
+
+	terminalOnce   sync.Once
+	terminalErrors chan error
 
 	mu            sync.RWMutex
 	subscriptions []subscription
@@ -65,13 +70,18 @@ func Connect(ctx context.Context, cfg Config, logger *zap.Logger) (*Client, erro
 		return nil, err
 	}
 
-	client := &Client{logger: logger}
+	managerContext, cancelManager := context.WithCancel(ctx)
+	client := &Client{
+		logger:         logger,
+		cancel:         cancelManager,
+		terminalErrors: make(chan error, 1),
+	}
 	logger.Debug("mqtt connecting",
 		zap.String("client_id", cfg.ClientID),
 		zap.String("broker", serverURL.Host),
 		zap.Bool("tls", cfg.TLS.Enabled),
 	)
-	manager, err := autopaho.NewConnection(ctx, autopaho.ClientConfig{
+	manager, err := autopaho.NewConnection(managerContext, autopaho.ClientConfig{
 		ServerUrls:                    []*url.URL{serverURL},
 		TlsCfg:                        tlsConfig,
 		KeepAlive:                     30,
@@ -94,16 +104,23 @@ func Connect(ctx context.Context, cfg Config, logger *zap.Logger) (*Client, erro
 		},
 		ClientConfig: paho.ClientConfig{
 			ClientID: cfg.ClientID,
+			OnServerDisconnect: func(disconnect *paho.Disconnect) {
+				if err := terminalDisconnectError(cfg.ClientID, disconnect); err != nil {
+					client.terminate(err)
+				}
+			},
 			OnPublishReceived: []func(paho.PublishReceived) (bool, error){
 				client.route,
 			},
 		},
 	})
 	if err != nil {
+		cancelManager()
 		return nil, fmt.Errorf("create mqtt connection: %w", err)
 	}
 	client.manager = manager
 	if err := manager.AwaitConnection(ctx); err != nil {
+		cancelManager()
 		return nil, fmt.Errorf("connect mqtt: %w", err)
 	}
 	return client, nil
@@ -158,6 +175,25 @@ func (c *Client) Disconnect(ctx context.Context) error {
 	}
 	c.logger.Debug("mqtt disconnected")
 	return nil
+}
+
+// TerminalErrors reports connection failures that must not be retried.
+func (c *Client) TerminalErrors() <-chan error {
+	return c.terminalErrors
+}
+
+func (c *Client) terminate(err error) {
+	c.terminalOnce.Do(func() {
+		c.terminalErrors <- err
+		c.cancel()
+	})
+}
+
+func terminalDisconnectError(clientID string, disconnect *paho.Disconnect) error {
+	if disconnect == nil || disconnect.ReasonCode != packets.DisconnectSessionTakenOver {
+		return nil
+	}
+	return fmt.Errorf("mqtt identity conflict: another connection is using client_id %q (session taken over)", clientID)
 }
 
 func (c *Client) subscribe(ctx context.Context, filter string) error {

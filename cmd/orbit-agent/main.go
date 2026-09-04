@@ -125,7 +125,14 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 		return err
 	}
 	logger.Info("orbit agent started", zap.String("agent_id", agentID))
-	return runner.Run(ctx)
+	runnerErr := make(chan error, 1)
+	go func() { runnerErr <- runner.Run(ctx) }()
+	select {
+	case err := <-runnerErr:
+		return err
+	case err := <-client.TerminalErrors():
+		return fmt.Errorf("mqtt connection terminated: %w", err)
+	}
 }
 
 func disconnect(client *mqtt.Client, logger *zap.Logger) {

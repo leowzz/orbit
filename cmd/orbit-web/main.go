@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -89,6 +90,8 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger) error {
 	var runErr error
 	select {
 	case <-signalContext.Done():
+	case runErr = <-client.TerminalErrors():
+		runErr = fmt.Errorf("mqtt connection terminated: %w", runErr)
 	case runErr = <-errCh:
 		if errors.Is(runErr, http.ErrServerClosed) {
 			runErr = nil

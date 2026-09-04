@@ -1,8 +1,12 @@
 package mqtt
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/eclipse/paho.golang/packets"
+	"github.com/eclipse/paho.golang/paho"
 )
 
 func TestTopicMatches(t *testing.T) {
@@ -84,5 +88,17 @@ func TestReconnectBackoff(t *testing.T) {
 	}
 	if got := backoff(1); got < time.Second || got > 2*time.Second {
 		t.Fatalf("first retry backoff = %v, want 1s..2s", got)
+	}
+}
+
+func TestTerminalDisconnectError(t *testing.T) {
+	t.Parallel()
+	const clientID = "orbit-web-node-a"
+	err := terminalDisconnectError(clientID, &paho.Disconnect{ReasonCode: packets.DisconnectSessionTakenOver})
+	if err == nil || !strings.Contains(err.Error(), clientID) {
+		t.Fatalf("terminalDisconnectError() = %v, want identity conflict containing %q", err, clientID)
+	}
+	if err := terminalDisconnectError(clientID, &paho.Disconnect{ReasonCode: packets.DisconnectServerShuttingDown}); err != nil {
+		t.Fatalf("terminalDisconnectError() = %v, want nil for retryable disconnect", err)
 	}
 }

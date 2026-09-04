@@ -98,7 +98,14 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 		return err
 	}
 	logger.Info("orbit core started", zap.String("core_id", cfg.Core.ID))
-	return runner.Run(ctx)
+	runnerErr := make(chan error, 1)
+	go func() { runnerErr <- runner.Run(ctx) }()
+	select {
+	case err := <-runnerErr:
+		return err
+	case err := <-client.TerminalErrors():
+		return fmt.Errorf("mqtt connection terminated: %w", err)
+	}
 }
 
 func parseObservationType(value string) (orbitv1.ObservationType, error) {
