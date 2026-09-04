@@ -319,6 +319,18 @@ func TestStaticPageProvidesPersistentThemeToggleBeforeConnection(t *testing.T) {
 	}
 }
 
+func TestStaticPageUsesBlueForSentSessionAction(t *testing.T) {
+	t.Parallel()
+	stylesheet, err := staticFiles.ReadFile("static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sentStyle := regexp.MustCompile(`(?s)\.session-row\[data-action="sent"\]\s*\{[^}]*background:\s*var\(--blue-soft\);[^}]*box-shadow:\s*inset 3px 0 0 var\(--blue\);`)
+	if !sentStyle.Match(stylesheet) {
+		t.Fatal("app.css does not distinguish a sent session action with the blue palette")
+	}
+}
+
 func TestStaticPageReloadsFromConnectionStatus(t *testing.T) {
 	t.Parallel()
 	markup, err := staticFiles.ReadFile("static/index.html")

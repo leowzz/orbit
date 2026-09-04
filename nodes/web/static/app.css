@@ -26,6 +26,7 @@
   --red: #c23434;
   --red-soft: #fdeaea;
   --blue: #1769aa;
+  --blue-soft: #e3f0fb;
 }
 
 :root[data-theme="dark"] {
@@ -53,6 +54,7 @@
   --red: #ed7b7b;
   --red-soft: #3a2020;
   --blue: #73acd8;
+  --blue-soft: #172c3d;
 }
 
 * {
@@ -554,8 +556,8 @@ h2 {
 }
 
 .session-row[data-action="sent"] {
-  background: var(--green-soft);
-  box-shadow: inset 3px 0 0 var(--green);
+  background: var(--blue-soft);
+  box-shadow: inset 3px 0 0 var(--blue);
 }
 
 .session-row[data-action="failed"] {
