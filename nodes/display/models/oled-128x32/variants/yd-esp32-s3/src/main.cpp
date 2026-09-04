@@ -29,7 +29,7 @@ uint32_t last_display_retry_ms = 0U;
 uint32_t last_frame_ms = 0U;
 
 void printI2cDevice(uint8_t address) {
-  Serial.printf("I2C device: 0x%02X\n", address);
+  Serial.printf("INFO i2c device discovered address=0x%02X\n", address);
 }
 
 bool startDisplay() {
@@ -41,7 +41,7 @@ bool startDisplay() {
     found = found || address == kDisplayAddress;
   }
   if (!found) {
-    Serial.println("I2C display missing");
+    Serial.println("WARN i2c display missing address=0x3C");
     return false;
   }
 
@@ -52,7 +52,7 @@ bool startDisplay() {
   display.setPowerSave(0);
   display.setContrast(generated_config::kDisplayContrast);
   full_refresh_needed = true;
-  Serial.println("OLED ready");
+  Serial.println("INFO oled ready address=0x3C size=128x32");
   return true;
 }
 
@@ -60,7 +60,9 @@ bool startDisplay() {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Orbit display boot");
+  Serial.printf("INFO orbit display boot node_id=%s firmware_version=%s\n",
+                generated_config::kNodeId,
+                generated_config::kFirmwareVersion);
   Wire.begin(kSdaPin, kSclPin);
   Wire.setClock(kI2cClockHz);
   display_ready = startDisplay();

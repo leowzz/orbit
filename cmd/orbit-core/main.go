@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"syscall"
 	"time"
 
@@ -42,7 +43,9 @@ func main() {
 
 func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	routes := make([]core.Route, 0, len(cfg.ProjectionRoutes))
+	nodeIDs := make([]string, 0, len(cfg.ProjectionRoutes))
 	for nodeID, route := range cfg.ProjectionRoutes {
+		nodeIDs = append(nodeIDs, nodeID)
 		inputs := make([]core.RouteInput, 0, len(route.Inputs))
 		for _, input := range route.Inputs {
 			observationType, err := parseObservationType(input.ObservationType)
@@ -55,11 +58,13 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 			NodeID: nodeID, Profile: route.Profile, Inputs: inputs,
 		})
 	}
+	sort.Strings(nodeIDs)
 	usagePolicy := cfg.ObservationPolicies["usage"]
 	codexPolicy := cfg.ObservationPolicies["codex"]
+	coreEpoch := core.NewEpoch()
 	engine, err := core.New(core.Config{
 		CoreID:    cfg.Core.ID,
-		CoreEpoch: core.NewEpoch(),
+		CoreEpoch: coreEpoch,
 		Routes:    routes,
 		UsagePolicy: core.UsagePolicy{
 			MaxTTL:        usagePolicy.MaxTTL.Duration,
@@ -97,7 +102,12 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	logger.Info("orbit core started", zap.String("core_id", cfg.Core.ID))
+	logger.Info("orbit core started",
+		zap.String("core_id", cfg.Core.ID),
+		zap.String("core_epoch", coreEpoch),
+		zap.Int("route_count", len(routes)),
+		zap.Strings("node_ids", nodeIDs),
+	)
 	runnerErr := make(chan error, 1)
 	go func() { runnerErr <- runner.Run(ctx) }()
 	select {

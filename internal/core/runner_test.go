@@ -35,7 +35,7 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 	logger := zap.New(zapcore.NewCore(
 		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
 		zapcore.AddSync(&logs),
-		zapcore.DebugLevel,
+		zapcore.InfoLevel,
 	))
 	runner, err := NewRunner(engine, transport, logger)
 	if err != nil {
@@ -67,7 +67,7 @@ func TestRunnerRoutesObservationToRetainedView(t *testing.T) {
 	}
 	for _, want := range []string{"agent state accepted", "node state accepted", "usage observation accepted", `"views":1`, "device view published", `"primary":"$12.35"`} {
 		if !strings.Contains(logs.String(), want) {
-			t.Errorf("debug log missing %q: %s", want, logs.String())
+			t.Errorf("info log missing %q: %s", want, logs.String())
 		}
 	}
 }

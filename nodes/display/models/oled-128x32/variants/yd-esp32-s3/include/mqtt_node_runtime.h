@@ -45,6 +45,9 @@ class MqttNodeRuntime {
   uint64_t node_revision_{1};
   uint32_t next_wifi_attempt_ms_{0};
   uint32_t next_mqtt_attempt_ms_{0};
+  bool wifi_connected_logged_{false};
+  bool clock_trusted_logged_{false};
+  bool mqtt_connected_logged_{false};
 
   static MqttNodeRuntime* active_instance_;
 };

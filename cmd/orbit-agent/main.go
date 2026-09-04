@@ -124,7 +124,15 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	logger.Info("orbit agent started", zap.String("agent_id", agentID))
+	logger.Info("orbit agent started",
+		zap.String("agent_id", agentID),
+		zap.String("agent_epoch", runnerConfig.AgentEpoch),
+		zap.String("agent_version", runnerConfig.AgentVersion),
+		zap.String("host_label", runnerConfig.HostLabel),
+		zap.Bool("usage_enabled", sources.Usage != nil),
+		zap.Bool("codex_enabled", sources.Codex != nil),
+		zap.Bool("open_codex_session_enabled", capabilities.OpenCodexSession != nil),
+	)
 	runnerErr := make(chan error, 1)
 	go func() { runnerErr <- runner.Run(ctx) }()
 	select {

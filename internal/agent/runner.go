@@ -157,7 +157,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		if err := r.transport.Subscribe(ctx, topic, r.handleCommand); err != nil {
 			return err
 		}
-		r.logger.Debug("agent command subscription ready", zap.String("topic", topic))
+		r.logger.Info("agent command subscription ready",
+			zap.String("agent_id", r.config.AgentID),
+			zap.String("topic", topic),
+			zap.Int("qos", 1),
+		)
 	}
 	if err := r.publishState(ctx); err != nil {
 		return err
@@ -321,8 +325,12 @@ func (r *Runner) publishObservation(ctx context.Context, name string, observatio
 		return fmt.Errorf("publish %s observation: %w", name, err)
 	}
 	fields := []zap.Field{
+		zap.String("agent_id", r.config.AgentID),
 		zap.String("source_type", name),
+		zap.String("topic", topic),
 		zap.Uint64("revision", observation.GetMetadata().GetRevision()),
+		zap.Int("qos", 1),
+		zap.Bool("retained", false),
 		zap.Int("bytes", len(payload)),
 	}
 	if name == "codex" {
@@ -333,7 +341,7 @@ func (r *Runner) publishObservation(ctx context.Context, name string, observatio
 			zap.Int("session_count", len(codexPayload.GetSessions())),
 		)
 	}
-	r.logger.Debug("observation published", fields...)
+	r.logger.Info("observation published", fields...)
 	return nil
 }
 
@@ -426,11 +434,24 @@ func (r *Runner) publishStateLocked(ctx context.Context) error {
 	if err := r.transport.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload, Retain: true}); err != nil {
 		return fmt.Errorf("publish agent state: %w", err)
 	}
-	r.logger.Debug("agent state published",
+	fields := []zap.Field{
+		zap.String("agent_id", r.config.AgentID),
+		zap.String("topic", topic),
 		zap.Uint64("revision", r.stateRevision),
 		zap.Int("sources", len(state.Sources)),
+		zap.Int("qos", 1),
+		zap.Bool("retained", true),
 		zap.Int("bytes", len(payload)),
-	)
+	}
+	for _, source := range state.Sources {
+		name := strings.ToLower(strings.TrimPrefix(source.ObservationType.String(), "OBSERVATION_TYPE_"))
+		health := strings.ToLower(strings.TrimPrefix(source.Health.String(), "SOURCE_HEALTH_"))
+		fields = append(fields, zap.String(name+"_health", health))
+		if source.ErrorCode != "" {
+			fields = append(fields, zap.String(name+"_error_code", source.ErrorCode))
+		}
+	}
+	r.logger.Info("agent state published", fields...)
 	return nil
 }
 

@@ -123,7 +123,11 @@ func (r *Runner) Run(ctx context.Context) error {
 	if err := r.publishState(ctx); err != nil {
 		return err
 	}
-	r.logger.Debug("web node subscription ready", zap.String("topic", viewTopic))
+	r.logger.Info("web node subscription ready",
+		zap.String("node_id", r.config.NodeID),
+		zap.String("topic", viewTopic),
+		zap.Int("qos", 1),
+	)
 	<-ctx.Done()
 	return nil
 }
@@ -142,10 +146,13 @@ func (r *Runner) handleView(_ context.Context, message mqtt.Message) error {
 	if err := r.store.Update(&view, r.now().UTC()); err != nil {
 		return err
 	}
-	r.logger.Debug("web view accepted",
+	r.logger.Info("web view accepted",
+		zap.String("node_id", r.config.NodeID),
+		zap.String("topic", message.Topic),
 		zap.Uint64("revision", view.Metadata.Revision),
 		zap.String("freshness", view.Freshness.String()),
 		zap.Bool("retained", message.Retain),
+		zap.Int("bytes", len(message.Payload)),
 	)
 	return nil
 }
@@ -174,6 +181,16 @@ func (r *Runner) publishState(ctx context.Context) error {
 	if err := r.transport.Publish(ctx, mqtt.Message{Topic: topic, Payload: payload, Retain: true}); err != nil {
 		return err
 	}
+	r.logger.Info("web node state published",
+		zap.String("node_id", r.config.NodeID),
+		zap.String("node_epoch", r.config.NodeEpoch),
+		zap.String("firmware_version", r.config.FirmwareVersion),
+		zap.String("topic", topic),
+		zap.Uint64("revision", state.Metadata.Revision),
+		zap.Int("qos", 1),
+		zap.Bool("retained", true),
+		zap.Int("bytes", len(payload)),
+	)
 	return nil
 }
 

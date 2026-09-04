@@ -76,7 +76,7 @@ func Connect(ctx context.Context, cfg Config, logger *zap.Logger) (*Client, erro
 		cancel:         cancelManager,
 		terminalErrors: make(chan error, 1),
 	}
-	logger.Debug("mqtt connecting",
+	logger.Info("mqtt connecting",
 		zap.String("client_id", cfg.ClientID),
 		zap.String("broker", serverURL.Host),
 		zap.Bool("tls", cfg.TLS.Enabled),
@@ -92,7 +92,7 @@ func Connect(ctx context.Context, cfg Config, logger *zap.Logger) (*Client, erro
 		ConnectUsername:               cfg.Username,
 		ConnectPassword:               []byte(cfg.Password),
 		OnConnectionUp: func(manager *autopaho.ConnectionManager, connack *paho.Connack) {
-			logger.Debug("mqtt connection established",
+			logger.Info("mqtt connection established",
 				zap.String("client_id", cfg.ClientID),
 				zap.String("broker", serverURL.Host),
 				zap.Bool("session_present", connack.SessionPresent),
@@ -173,7 +173,7 @@ func (c *Client) Disconnect(ctx context.Context) error {
 	if err := c.manager.Disconnect(ctx); err != nil {
 		return err
 	}
-	c.logger.Debug("mqtt disconnected")
+	c.logger.Info("mqtt disconnected")
 	return nil
 }
 
@@ -210,7 +210,7 @@ func (c *Client) subscribe(ctx context.Context, filter string) error {
 			return fmt.Errorf("subscribe %q rejected with reason 0x%x", filter, reason)
 		}
 	}
-	c.logger.Debug("mqtt subscription active", zap.String("topic", filter), zap.Int("qos", 1))
+	c.logger.Info("mqtt subscription active", zap.String("topic", filter), zap.Int("qos", 1))
 	return nil
 }
 
@@ -239,7 +239,7 @@ func (c *Client) resubscribe(manager *autopaho.ConnectionManager) {
 				}
 			}
 			if accepted {
-				c.logger.Debug("mqtt subscription restored", zap.String("topic", filter), zap.Int("qos", 1))
+				c.logger.Info("mqtt subscription restored", zap.String("topic", filter), zap.Int("qos", 1))
 			}
 		}()
 	}

@@ -99,7 +99,7 @@ func TestPollOncePublishesUsageAndHealthyState(t *testing.T) {
 	runner.logger = zap.New(zapcore.NewCore(
 		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
 		zapcore.AddSync(&logs),
-		zapcore.DebugLevel,
+		zapcore.InfoLevel,
 	))
 	now := time.Date(2026, 9, 3, 16, 30, 0, 0, time.UTC)
 	runner.now = func() time.Time { return now }
@@ -132,7 +132,7 @@ func TestPollOncePublishesUsageAndHealthyState(t *testing.T) {
 	}
 	for _, want := range []string{"observation published", `"source_type":"usage"`, "agent state published"} {
 		if !strings.Contains(logs.String(), want) {
-			t.Errorf("debug log missing %q: %s", want, logs.String())
+			t.Errorf("info log missing %q: %s", want, logs.String())
 		}
 	}
 	if strings.Contains(logs.String(), "1500000") {
@@ -194,7 +194,7 @@ func TestPollCodexOncePublishesSanitizedObservationAndHealthyState(t *testing.T)
 	runner.logger = zap.New(zapcore.NewCore(
 		zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
 		zapcore.AddSync(&logs),
-		zapcore.DebugLevel,
+		zapcore.InfoLevel,
 	))
 	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
 	runner.now = func() time.Time { return now }
@@ -232,12 +232,12 @@ func TestPollCodexOncePublishesSanitizedObservationAndHealthyState(t *testing.T)
 			t.Errorf("forbidden value %q appeared in observation payload", forbidden)
 		}
 		if strings.Contains(logs.String(), forbidden) {
-			t.Errorf("forbidden value %q appeared in debug logs: %s", forbidden, logs.String())
+			t.Errorf("forbidden value %q appeared in info logs: %s", forbidden, logs.String())
 		}
 	}
 	for _, want := range []string{`"total_count":1`, `"running_count":1`, `"session_count":1`} {
 		if !strings.Contains(logs.String(), want) {
-			t.Errorf("Codex aggregate count missing from debug logs %q: %s", want, logs.String())
+			t.Errorf("Codex aggregate count missing from info logs %q: %s", want, logs.String())
 		}
 	}
 	var state orbitv1.AgentState

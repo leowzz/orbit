@@ -67,8 +67,9 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error 
 	defer disconnect(client, logger)
 
 	store := webnode.NewStore()
+	nodeEpoch := webnode.NewEpoch()
 	runner, err := webnode.NewRunner(webnode.RunnerConfig{
-		NodeID: cfg.Node.ID, NodeEpoch: webnode.NewEpoch(), FirmwareVersion: version,
+		NodeID: cfg.Node.ID, NodeEpoch: nodeEpoch, FirmwareVersion: version,
 	}, client, store, logger)
 	if err != nil {
 		return err
@@ -93,7 +94,12 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error 
 	errCh := make(chan error, 2)
 	go func() { errCh <- runner.Run(ctx) }()
 	go func() { errCh <- server.Serve(listener) }()
-	logger.Info("orbit web node started", zap.String("node_id", cfg.Node.ID), zap.String("url", "http://"+cfg.Web.Listen))
+	logger.Info("orbit web node started",
+		zap.String("node_id", cfg.Node.ID),
+		zap.String("node_epoch", nodeEpoch),
+		zap.String("firmware_version", version),
+		zap.String("url", "http://"+cfg.Web.Listen),
+	)
 
 	var runErr error
 	select {

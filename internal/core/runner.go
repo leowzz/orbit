@@ -56,7 +56,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 	}
-	r.logger.Debug("core subscriptions ready")
+	r.logger.Info("core subscriptions ready", zap.Int("subscriptions", 5), zap.Int("qos", 1))
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -131,11 +131,15 @@ func (r *Runner) handleAgentState(_ context.Context, message mqtt.Message) error
 	if err := r.engine.ApplyAgentState(&state); err != nil {
 		return err
 	}
-	r.logger.Debug("agent state accepted",
+	r.logger.Info("agent state accepted",
 		zap.String("agent_id", state.AgentId),
+		zap.String("agent_epoch", state.AgentEpoch),
+		zap.String("agent_version", state.AgentVersion),
+		zap.String("topic", message.Topic),
 		zap.Uint64("revision", state.Metadata.Revision),
 		zap.Int("sources", len(state.Sources)),
 		zap.Bool("retained", message.Retain),
+		zap.Int("bytes", len(message.Payload)),
 	)
 	return nil
 }
@@ -156,11 +160,18 @@ func (r *Runner) handleNodeState(ctx context.Context, message mqtt.Message) erro
 	if err != nil {
 		return err
 	}
-	r.logger.Debug("node state accepted",
+	r.logger.Info("node state accepted",
 		zap.String("node_id", state.NodeId),
+		zap.String("node_epoch", state.NodeEpoch),
+		zap.String("series_id", state.SeriesId),
+		zap.String("model_id", state.ModelId),
+		zap.String("variant_id", state.VariantId),
+		zap.String("firmware_version", state.FirmwareVersion),
+		zap.String("topic", message.Topic),
 		zap.Uint64("revision", state.Metadata.Revision),
 		zap.Int("views", len(views)),
 		zap.Bool("retained", message.Retain),
+		zap.Int("bytes", len(message.Payload)),
 	)
 	return r.publishViews(ctx, views)
 }
@@ -193,12 +204,15 @@ func (r *Runner) handleTypedObservation(ctx context.Context, message mqtt.Messag
 	if err != nil {
 		return err
 	}
-	r.logger.Debug(name+" observation accepted",
+	r.logger.Info(name+" observation accepted",
 		zap.String("agent_id", agentID),
+		zap.String("agent_epoch", observation.AgentEpoch),
 		zap.String("source_type", name),
+		zap.String("topic", message.Topic),
 		zap.Uint64("revision", observation.Metadata.Revision),
 		zap.Int("views", len(views)),
 		zap.Bool("retained", message.Retain),
+		zap.Int("bytes", len(message.Payload)),
 	)
 	return r.publishViews(ctx, views)
 }
@@ -212,20 +226,25 @@ func (r *Runner) publishViews(ctx context.Context, views []*orbitv1.DeviceView) 
 		if len(payload) > maxDeviceViewPayload {
 			return fmt.Errorf("view for node %q exceeds %d bytes", view.NodeId, maxDeviceViewPayload)
 		}
+		topic := fmt.Sprintf("orbit/v1/nodes/%s/view", view.NodeId)
 		if err := r.transport.Publish(ctx, mqtt.Message{
-			Topic:   fmt.Sprintf("orbit/v1/nodes/%s/view", view.NodeId),
+			Topic:   topic,
 			Payload: payload,
 			Retain:  true,
 		}); err != nil {
 			return err
 		}
-		r.logger.Debug("device view published",
+		r.logger.Info("device view published",
 			zap.String("node_id", view.NodeId),
+			zap.String("core_epoch", view.CoreEpoch),
+			zap.String("topic", topic),
 			zap.Uint64("revision", view.GetMetadata().GetRevision()),
 			zap.String("freshness", view.Freshness.String()),
 			zap.String("primary", view.GetPrimary().GetText()),
 			zap.String("secondary", view.GetSecondary().GetText()),
 			zap.String("footer", view.GetFooter().GetText()),
+			zap.Int("qos", 1),
+			zap.Bool("retained", true),
 			zap.Int("bytes", len(payload)),
 		)
 	}
