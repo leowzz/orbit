@@ -33,14 +33,17 @@ kill: kill-web kill-agent kill-core
 kill-agent:
 	@launchctl remove "$(AGENT_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-agent([[:space:]]|$$)' 2>/dev/null || true
+	@if pgrep -f '[/][o]rbit-agent([[:space:]]|$$)' >/dev/null; then sleep 1; pkill -KILL -f '[/][o]rbit-agent([[:space:]]|$$)' 2>/dev/null || true; fi
 
 kill-core:
 	@launchctl remove "$(CORE_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-core([[:space:]]|$$)' 2>/dev/null || true
+	@if pgrep -f '[/][o]rbit-core([[:space:]]|$$)' >/dev/null; then sleep 1; pkill -KILL -f '[/][o]rbit-core([[:space:]]|$$)' 2>/dev/null || true; fi
 
 kill-web:
 	@launchctl remove "$(WEB_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-web([[:space:]]|$$)' 2>/dev/null || true
+	@if pgrep -f '[/][o]rbit-web([[:space:]]|$$)' >/dev/null; then sleep 1; pkill -KILL -f '[/][o]rbit-web([[:space:]]|$$)' 2>/dev/null || true; fi
 
 build: build-go
 

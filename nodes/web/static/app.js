@@ -1,4 +1,9 @@
 const elements = {
+  authGate: document.querySelector("#auth-gate"),
+  authForm: document.querySelector("#auth-form"),
+  authPassword: document.querySelector("#auth-password"),
+  authSubmit: document.querySelector("#auth-submit"),
+  authError: document.querySelector("#auth-error"),
   fullscreenToggle: document.querySelector("#fullscreen-toggle"),
   connection: document.querySelector("#connection"),
   connectionLabel: document.querySelector("#connection-label"),
@@ -15,6 +20,7 @@ const elements = {
   revision: document.querySelector("#revision"),
 };
 
+const authStorageKey = "orbit.web.auth";
 const statusLabels = {
   running: "运行中",
   completed: "已完成",
@@ -30,6 +36,10 @@ const compactFormat = new Intl.NumberFormat("zh-CN", {
   maximumFractionDigits: 2,
 });
 let latestSnapshot = null;
+let authToken = "";
+let authExpiresAt = 0;
+let authExpiryTimer = null;
+let eventSource = null;
 
 function fullscreenElement() {
   return document.fullscreenElement || document.webkitFullscreenElement;
@@ -66,6 +76,85 @@ function toggleFullscreen() {
 function setConnection(state, label) {
   elements.connection.dataset.state = state;
   elements.connectionLabel.textContent = label;
+}
+
+function setAuthGate(visible) {
+  elements.authGate.hidden = !visible;
+  if (visible) {
+    elements.authError.hidden = true;
+    elements.authPassword.focus();
+  }
+}
+
+function readStoredAuth() {
+  try {
+    const raw = window.localStorage.getItem(authStorageKey);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!saved || typeof saved !== "object") return null;
+    const expiresAt = Date.parse(saved.expires_at);
+    if (typeof saved.token !== "string" || !saved.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      window.localStorage.removeItem(authStorageKey);
+      return null;
+    }
+    return { token: saved.token, expiresAt };
+  } catch (_) {
+    return null;
+  }
+}
+
+function persistAuth(token, expiresAt) {
+  authToken = token;
+  authExpiresAt = expiresAt;
+  try {
+    window.localStorage.setItem(authStorageKey, JSON.stringify({ token, expires_at: new Date(expiresAt).toISOString() }));
+  } catch (_) {
+    // The session remains usable until this page is closed when storage is unavailable.
+  }
+  scheduleAuthExpiry();
+}
+
+function clearAuth() {
+  authToken = "";
+  authExpiresAt = 0;
+  if (authExpiryTimer) window.clearTimeout(authExpiryTimer);
+  authExpiryTimer = null;
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  try {
+    window.localStorage.removeItem(authStorageKey);
+  } catch (_) {
+    // Ignore unavailable browser storage.
+  }
+  try {
+    fetch("/api/auth/logout", { method: "POST" });
+  } catch (_) {
+    // The cookie will naturally expire if logout cannot be sent.
+  }
+  setAuthGate(true);
+  setConnection("locked", "需要认证");
+}
+
+function scheduleAuthExpiry() {
+  if (authExpiryTimer) window.clearTimeout(authExpiryTimer);
+  if (!authExpiresAt) return;
+  const delay = Math.max(1000, authExpiresAt - Date.now());
+  authExpiryTimer = window.setTimeout(clearAuth, delay);
+}
+
+async function fetchAPI(url, options) {
+  const requestOptions = options || {};
+  const headers = requestOptions.headers || {};
+  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  requestOptions.headers = headers;
+  const response = await fetch(url, requestOptions);
+  if (response.status === 401) {
+    clearAuth();
+    throw new Error("authentication required");
+  }
+  return response;
 }
 
 function formatCost(micros, currency) {
@@ -140,7 +229,7 @@ async function openCodexSession(row, session) {
   row.dataset.action = "pending";
   elements.actionStatus.textContent = `正在打开 ${session.display_name || session.id}`;
   try {
-    const response = await fetch(`/api/sessions/${encodeURIComponent(session.id)}/open`, {
+    const response = await fetchAPI(`/api/sessions/${encodeURIComponent(session.id)}/open`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ view_revision: latestSnapshot.revision }),
@@ -236,19 +325,78 @@ function render(snapshot) {
 }
 
 async function loadInitialState() {
-  const response = await fetch("/api/state", { cache: "no-store" });
+  const response = await fetchAPI("/api/state", { cache: "no-store" });
+  if (!response.ok && response.status !== 204) throw new Error(`request failed with status ${response.status}`);
   if (response.ok && response.status !== 204) render(await response.json());
 }
 
 function connectEvents() {
-  const events = new EventSource("/api/events");
-  events.addEventListener("open", () => setConnection("live", "实时连接"));
-  events.addEventListener("message", (event) => render(JSON.parse(event.data)));
-  events.addEventListener("error", () => setConnection("retrying", "正在重连"));
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource("/api/events");
+  eventSource.addEventListener("open", () => setConnection("live", "实时连接"));
+  eventSource.addEventListener("message", (event) => render(JSON.parse(event.data)));
+  eventSource.addEventListener("error", () => setConnection("retrying", "正在重连"));
 }
 
-loadInitialState().catch(() => setConnection("retrying", "正在重连"));
-connectEvents();
+async function submitAuth(event) {
+  event.preventDefault();
+  const password = elements.authPassword.value;
+  elements.authSubmit.disabled = true;
+  elements.authError.hidden = true;
+  try {
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+    if (!response.ok) throw new Error("invalid credentials");
+    const payload = await response.json();
+    const expiresAt = Date.parse(payload.expires_at);
+    if (typeof payload.token !== "string" || !payload.token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      throw new Error("invalid session");
+    }
+    persistAuth(payload.token, expiresAt);
+    elements.authPassword.value = "";
+    setAuthGate(false);
+    await fetchAPI("/api/auth/session", { method: "POST" });
+    await loadInitialState();
+    connectEvents();
+  } catch (_) {
+    clearAuth();
+    elements.authError.textContent = "密码错误或认证服务不可用";
+    elements.authError.hidden = false;
+  } finally {
+    elements.authSubmit.disabled = false;
+  }
+}
+
+async function bootstrap() {
+  const configResponse = await fetch("/api/auth/config", { cache: "no-store" });
+  if (!configResponse.ok) throw new Error("authentication configuration unavailable");
+  const authConfig = await configResponse.json();
+  if (!authConfig.required) {
+    setAuthGate(false);
+    await loadInitialState();
+    connectEvents();
+    return;
+  }
+  const saved = readStoredAuth();
+  if (!saved) {
+    setAuthGate(true);
+    setConnection("locked", "需要认证");
+    return;
+  }
+  authToken = saved.token;
+  authExpiresAt = saved.expiresAt;
+  scheduleAuthExpiry();
+  setAuthGate(false);
+  await fetchAPI("/api/auth/session", { method: "POST" });
+  await loadInitialState();
+  connectEvents();
+}
+
+elements.authForm.addEventListener("submit", submitAuth);
+bootstrap().catch(() => setConnection("retrying", "正在重连"));
 elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
 document.addEventListener("fullscreenchange", syncFullscreenState);
 document.addEventListener("webkitfullscreenchange", syncFullscreenState);

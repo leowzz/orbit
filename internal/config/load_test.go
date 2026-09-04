@@ -253,6 +253,32 @@ func TestLoadWebNode(t *testing.T) {
 	if cfg.Node.ID != "desk-web-01" || cfg.Web.Listen != "127.0.0.1:8080" || cfg.MQTT.Credentials.Username != "agent-user" {
 		t.Fatalf("unexpected web config: %#v", cfg)
 	}
+	if cfg.Web.Auth.Password != "web-secret" || cfg.Web.Auth.SessionTTL.Duration != 12*time.Hour {
+		t.Fatalf("unexpected web auth config: %#v", cfg.Web.Auth)
+	}
+}
+
+func TestLoadWebNodeRejectsInvalidAuthConfiguration(t *testing.T) {
+	tests := []struct {
+		name    string
+		replace string
+		with    string
+		want    string
+	}{
+		{name: "missing password", replace: "password: web-secret", with: "password: \"\"", want: "web.auth.password"},
+		{name: "non-positive session ttl", replace: "session_ttl: 12h", with: "session_ttl: 0s", want: "web.auth.session_ttl"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFixtureFiles(t, dir, false)
+			yaml := strings.Replace(validWebNodeYAML, tt.replace, tt.with, 1)
+			path := writeConfig(t, dir, "web.yaml", yaml)
+			if _, err := LoadWebNode(path); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("LoadWebNode() error = %v, want containing %q", err, tt.want)
+			}
+		})
+	}
 }
 
 func writeFixtureFiles(t *testing.T, dir string, includeSub2API bool) {
@@ -418,6 +444,9 @@ mqtt:
     password_file: mqtt-password
 web:
   listen: 127.0.0.1:8080
+  auth:
+    password: web-secret
+    session_ttl: 12h
 logging:
   level: info
 `

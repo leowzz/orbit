@@ -61,7 +61,7 @@ func LoadCore(path string) (*CoreConfig, error) {
 func LoadWebNode(path string) (*WebNodeConfig, error) {
 	cfg := WebNodeConfig{
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
-		Web:     WebConfig{Listen: "127.0.0.1:8080"},
+		Web:     WebConfig{Listen: "127.0.0.1:8080", Auth: WebAuthConfig{SessionTTL: Duration{24 * time.Hour}}},
 		Logging: LoggingConfig{Level: "info"},
 	}
 	if err := decodeStrict(path, &cfg); err != nil {
@@ -202,6 +202,12 @@ func (cfg *WebNodeConfig) validate(baseDir string) error {
 	host, port, err := net.SplitHostPort(cfg.Web.Listen)
 	if err != nil || strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
 		return fmt.Errorf("web.listen must be a host:port address: %q", cfg.Web.Listen)
+	}
+	if strings.TrimSpace(cfg.Web.Auth.Password) == "" {
+		return errors.New("web.auth.password is required")
+	}
+	if cfg.Web.Auth.SessionTTL.Duration <= 0 {
+		return errors.New("web.auth.session_ttl must be positive")
 	}
 	return validateLogLevel(cfg.Logging.Level)
 }

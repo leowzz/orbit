@@ -8,6 +8,12 @@ The action accepts a lowercase UUID, constructs the fixed
 command from the network. Commands expire within 30 seconds and are deduplicated
 in bounded process memory.
 
+The Web Node protects its state, event stream, and session action endpoints with
+one password from `web.auth.password`. A successful login receives an HMAC-signed
+token that expires after `web.auth.session_ttl`; the browser persists that token
+locally and the server keeps no session database. Static assets and the login
+endpoint remain public so an unauthenticated browser can render the login form.
+
 The full threat model, credential lifecycle, ACL examples, and local-confirmation
 policy still need to be specified before destructive or privacy-sensitive host
 capabilities are connected to a broker.

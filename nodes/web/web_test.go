@@ -79,6 +79,75 @@ func TestStoreExposesLatestRichView(t *testing.T) {
 	}
 }
 
+func TestWebAuthProtectsAPIAndPersistsSessionCookie(t *testing.T) {
+	t.Parallel()
+	store := NewStore()
+	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
+	if err := store.Update(testView(now), now); err != nil {
+		t.Fatal(err)
+	}
+	handler := HandlerWithAuth(store, nil, AuthConfig{Password: "web-secret", SessionTTL: time.Hour})
+
+	unauthorized := httptest.NewRecorder()
+	handler.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/api/state", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized state status = %d", unauthorized.Code)
+	}
+
+	badLogin := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{"password":"wrong"}`))
+	badLogin.Header.Set("Content-Type", "application/json")
+	badResponse := httptest.NewRecorder()
+	handler.ServeHTTP(badResponse, badLogin)
+	if badResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("bad login status = %d", badResponse.Code)
+	}
+
+	login := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{"password":"web-secret"}`))
+	login.Header.Set("Content-Type", "application/json")
+	loginResponse := httptest.NewRecorder()
+	handler.ServeHTTP(loginResponse, login)
+	if loginResponse.Code != http.StatusOK {
+		t.Fatalf("login status = %d, body = %s", loginResponse.Code, loginResponse.Body.String())
+	}
+	var session struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(loginResponse.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	if session.Token == "" {
+		t.Fatal("login did not return a token")
+	}
+	cookies := loginResponse.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Name != authCookieName {
+		t.Fatalf("login did not set %q cookie", authCookieName)
+	}
+
+	authorized := httptest.NewRequest(http.MethodGet, "/api/state", nil)
+	authorized.Header.Set("Authorization", "Bearer "+session.Token)
+	authorizedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(authorizedResponse, authorized)
+	if authorizedResponse.Code != http.StatusOK {
+		t.Fatalf("authorized state status = %d", authorizedResponse.Code)
+	}
+
+	cookieAuthorized := httptest.NewRequest(http.MethodGet, "/api/state", nil)
+	cookieAuthorized.AddCookie(cookies[0])
+	cookieResponse := httptest.NewRecorder()
+	handler.ServeHTTP(cookieResponse, cookieAuthorized)
+	if cookieResponse.Code != http.StatusOK {
+		t.Fatalf("cookie-authorized state status = %d", cookieResponse.Code)
+	}
+
+	tampered := httptest.NewRequest(http.MethodGet, "/api/state", nil)
+	tampered.Header.Set("Authorization", "Bearer "+session.Token+"x")
+	tamperedResponse := httptest.NewRecorder()
+	handler.ServeHTTP(tamperedResponse, tampered)
+	if tamperedResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("tampered token status = %d", tamperedResponse.Code)
+	}
+}
+
 func TestAppJSSupportsDeviceChrome(t *testing.T) {
 	t.Parallel()
 	script, err := staticFiles.ReadFile("static/app.js")

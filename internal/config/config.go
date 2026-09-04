@@ -114,7 +114,13 @@ type WebNodeIdentity struct {
 }
 
 type WebConfig struct {
-	Listen string `yaml:"listen"`
+	Listen string        `yaml:"listen"`
+	Auth   WebAuthConfig `yaml:"auth"`
+}
+
+type WebAuthConfig struct {
+	Password   string   `yaml:"password"`
+	SessionTTL Duration `yaml:"session_ttl"`
 }
 
 type CoreIdentity struct {

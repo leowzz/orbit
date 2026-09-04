@@ -5,9 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>Orbit 实时状态</title>
-    <link rel="stylesheet" href="/app.css?v=20260903" />
+    <link rel="stylesheet" href="/app.css?v=20260903-auth1" />
   </head>
   <body>
+    <div class="auth-gate" id="auth-gate">
+      <form class="auth-card" id="auth-form">
+        <p class="eyebrow">Orbit</p>
+        <h1>输入密码</h1>
+        <label class="auth-label" for="auth-password">访问密码</label>
+        <input class="auth-password" id="auth-password" type="password" autocomplete="current-password" required />
+        <button class="auth-submit" id="auth-submit" type="submit">进入</button>
+        <p class="auth-error" id="auth-error" role="alert" hidden></p>
+      </form>
+    </div>
     <header class="topbar">
       <button class="brand" id="fullscreen-toggle" type="button" aria-pressed="false" title="进入全屏">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
@@ -74,6 +84,6 @@
       <span id="node-id">Node --</span>
       <span id="revision">Revision --</span>
     </footer>
-    <script src="/app.js?v=20260903" defer></script>
+    <script src="/app.js?v=20260903-auth1" defer></script>
   </body>
 </html>

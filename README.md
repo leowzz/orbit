@@ -110,7 +110,8 @@ Update the local YAML values for the selected broker and account:
   capabilities.open_codex_session to let approved Web intents open a local
   Codex task.
 - core.local.yaml: core.id, MQTT URL/TLS files, and projection_routes.
-- web.local.yaml: node.id, its MQTT credentials, and the local HTTP listen address.
+- web.local.yaml: node.id, its MQTT credentials, the local HTTP listen address,
+  and `web.auth.password` plus `web.auth.session_ttl` for the browser login.
 
 Each Core route key must equal the corresponding node configuration's node.id;
 every input agent_id must equal the Agent's resolved ID (agent.id when it is
@@ -229,9 +230,10 @@ make dev-web WEB_CONFIG=configs/web.local.yaml
 ~~~
 
 The startup log prints its local URL (127.0.0.1:8080 in the example). The page
-keeps one SSE connection open and updates whenever a new retained DeviceView is
-accepted. Its MQTT credential needs publish access to its own NodeState topic
-and subscribe access to its own DeviceView topic only.
+requires the configured single password, then keeps an expiring browser session
+in local storage and one SSE connection open. It updates whenever a new retained
+DeviceView is accepted. Its MQTT credential needs publish access to its own
+NodeState topic and subscribe access to its own DeviceView topic only.
 
 Each service exits non-zero on a configuration, TLS, authentication, ACL, or
 initial MQTT connection error. A successful startup emits an "orbit core
