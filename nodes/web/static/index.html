@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>Orbit 实时状态</title>
-    <link rel="stylesheet" href="/app.css?v=20260904-landscape8" />
+    <link rel="stylesheet" href="/app.css?v=20260904-connection-refresh1" />
   </head>
   <body>
     <div class="auth-gate" id="auth-gate">
@@ -24,10 +24,10 @@
         <span>Orbit</span>
       </button>
       <time class="topbar-time" id="updated-at">--</time>
-      <div class="connection" id="connection" data-state="connecting">
+      <button class="connection" id="connection" type="button" data-state="connecting" title="刷新页面">
         <span class="connection-dot" aria-hidden="true"></span>
         <span id="connection-label">连接中</span>
-      </div>
+      </button>
     </header>
 
     <main>
@@ -84,6 +84,6 @@
       <span id="node-id">Node --</span>
       <span id="revision">Revision --</span>
     </footer>
-    <script src="/app.js?v=20260903-auth1" defer></script>
+    <script src="/app.js?v=20260904-connection-refresh1" defer></script>
   </body>
 </html>

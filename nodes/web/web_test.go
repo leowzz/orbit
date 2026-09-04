@@ -212,6 +212,26 @@ func TestStaticPageProvidesFullscreenToggle(t *testing.T) {
 	}
 }
 
+func TestStaticPageReloadsFromConnectionStatus(t *testing.T) {
+	t.Parallel()
+	markup, err := staticFiles.ReadFile("static/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, err := staticFiles.ReadFile("static/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(markup), `<button class="connection" id="connection" type="button"`) {
+		t.Fatal("index.html does not expose the connection status as a button")
+	}
+	for _, fragment := range []string{`elements.connection.addEventListener("click"`, `window.location.reload()`} {
+		if !strings.Contains(string(script), fragment) {
+			t.Errorf("app.js is missing %q", fragment)
+		}
+	}
+}
+
 func TestStaticPageOpensSessionsThroughNodeIntent(t *testing.T) {
 	t.Parallel()
 	markup, err := staticFiles.ReadFile("static/index.html")

@@ -398,6 +398,7 @@ async function bootstrap() {
 elements.authForm.addEventListener("submit", submitAuth);
 bootstrap().catch(() => setConnection("retrying", "正在重连"));
 elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
+elements.connection.addEventListener("click", () => window.location.reload());
 document.addEventListener("fullscreenchange", syncFullscreenState);
 document.addEventListener("webkitfullscreenchange", syncFullscreenState);
 syncFullscreenState();

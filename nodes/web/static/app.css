@@ -165,7 +165,8 @@ body {
 }
 
 @media (hover: none) {
-  .brand:focus {
+  .brand:focus,
+  .connection:focus {
     outline: 0;
   }
 }
@@ -212,8 +213,20 @@ footer {
 }
 
 .connection {
+  min-height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   color: var(--muted);
+  background: transparent;
+  font-family: inherit;
   font-size: 13px;
+  cursor: pointer;
+}
+
+.connection:focus {
+  outline: 2px solid var(--green);
+  outline-offset: 4px;
 }
 
 .connection-dot {
