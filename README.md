@@ -493,7 +493,7 @@ The full live acceptance is: the node reaches OLED ready, connects to Wi-Fi
 and the broker, publishes retained NodeState, receives its retained
 orbit/v1/nodes/{node_id}/view, and renders the three slots without an error
 label. The primary slot is formatted cost, the secondary slot is token count,
-and the footer is TPM; the integration fixture renders $12.35, 1M, and 4K,
+and the footer is TPM; the integration fixture renders $12.35, 1.2M, and 4.5K,
 while live values depend on Sub2API. The node does not print a dedicated
 MQTT-success line, so confirm the
 NodeState/View topics in the broker or use Core debug logs (node state accepted

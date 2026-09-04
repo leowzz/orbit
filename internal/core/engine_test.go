@@ -32,7 +32,7 @@ func TestUsageProjectionAndStaleTransition(t *testing.T) {
 		t.Fatalf("got %d views, want 1", len(views))
 	}
 	view := views[0]
-	if view.Freshness != orbitv1.Freshness_FRESHNESS_FRESH || view.Primary.Text != "$12.35" || view.Secondary.Text != "1M" || view.Footer.Text != "4K" {
+	if view.Freshness != orbitv1.Freshness_FRESHNESS_FRESH || view.Primary.Text != "$12.35" || view.Secondary.Text != "1.2M" || view.Footer.Text != "4.5K" {
 		t.Fatalf("unexpected view: %+v", view)
 	}
 	if view.Usage != nil || view.Codex != nil {
