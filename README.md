@@ -320,6 +320,44 @@ make dev AGENT_CONFIG=configs/agent.local.yaml \
   CORE_CONFIG=configs/core.local.yaml
 ~~~
 
+### Run Agent as a macOS background service
+
+Install the Agent as a per-user launchd service after preparing the local Agent
+configuration:
+
+~~~shell
+make install-agent AGENT_CONFIG=configs/agent.local.yaml
+~~~
+
+The command builds a standalone binary under
+`~/Library/Application Support/Orbit/bin/`, writes
+`~/Library/LaunchAgents/com.leo.orbit.agent.plist`, and starts the service. The
+job starts at login, is restarted by launchd if it exits, and writes stdout and
+stderr under `~/Library/Logs/Orbit/`. The plist stores the absolute path to the
+selected YAML file, so keep that file and its relative secret files in place.
+
+Running `make install-agent` again is the update path: it builds and validates
+the replacement before stopping the current service, then reloads launchd. If
+activation fails, the previous binary and plist are restored.
+
+Stop the background service before running an Agent from the repository:
+
+~~~shell
+make stop-agent
+make dev-agent AGENT_CONFIG=configs/agent.local.yaml
+~~~
+
+`make stop-agent` is idempotent and leaves the installed files in place. Run
+`make install-agent` to update or resume the background service. To remove the
+launchd job and installed binary:
+
+~~~shell
+make uninstall-agent
+~~~
+
+Uninstalling preserves `~/Library/Logs/Orbit/` for diagnostics and never
+removes the source YAML or secret files.
+
 Start the web node in a third terminal:
 
 ~~~shell

@@ -9,11 +9,18 @@ AGENT_CONFIG ?= configs/agent.local.yaml
 CORE_CONFIG ?= configs/core.local.yaml
 WEB_CONFIG ?= configs/web.local.yaml
 WEB_STATIC_DIR ?= nodes/web/static
-AGENT_LAUNCHD_LABEL ?= com.leo.orbit.agent.dev
+AGENT_LAUNCHD_LABEL ?= com.leo.orbit.agent
+AGENT_LEGACY_LAUNCHD_LABEL ?= com.leo.orbit.agent.dev
+AGENT_INSTALL_DIR ?= $(HOME)/Library/Application Support/Orbit
+AGENT_LAUNCHD_PLIST ?= $(HOME)/Library/LaunchAgents/$(AGENT_LAUNCHD_LABEL).plist
+AGENT_LOG_DIR ?= $(HOME)/Library/Logs/Orbit
+LAUNCHCTL ?= /bin/launchctl
+PLUTIL ?= /usr/bin/plutil
 CORE_LAUNCHD_LABEL ?= com.leo.orbit.core.dev
 WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
 
-.PHONY: dev dev-agent dev-core dev-web kill kill-agent kill-core kill-web \
+.PHONY: dev dev-agent dev-core dev-web install-agent stop-agent uninstall-agent \
+	kill kill-agent kill-core kill-web \
 	build build-go build-node test test-go test-node lint fmt fmt-check \
 	proto-lint generate verify release
 
@@ -29,10 +36,40 @@ dev-core:
 dev-web:
 	$(GO) run ./cmd/orbit-web -config "$(WEB_CONFIG)" -static-dir "$(WEB_STATIC_DIR)"
 
+install-agent:
+	@ORBIT_REPO_ROOT="$(CURDIR)" \
+		ORBIT_AGENT_CONFIG="$(abspath $(AGENT_CONFIG))" \
+		ORBIT_AGENT_LABEL="$(AGENT_LAUNCHD_LABEL)" \
+		ORBIT_AGENT_LEGACY_LABEL="$(AGENT_LEGACY_LAUNCHD_LABEL)" \
+		ORBIT_AGENT_INSTALL_DIR="$(AGENT_INSTALL_DIR)" \
+		ORBIT_AGENT_PLIST="$(AGENT_LAUNCHD_PLIST)" \
+		ORBIT_AGENT_LOG_DIR="$(AGENT_LOG_DIR)" \
+		GO_BIN="$(GO)" LAUNCHCTL_BIN="$(LAUNCHCTL)" PLUTIL_BIN="$(PLUTIL)" \
+		/bin/bash scripts/macos-agent.sh install
+
+stop-agent:
+	@ORBIT_AGENT_LABEL="$(AGENT_LAUNCHD_LABEL)" \
+		ORBIT_AGENT_LEGACY_LABEL="$(AGENT_LEGACY_LAUNCHD_LABEL)" \
+		ORBIT_AGENT_INSTALL_DIR="$(AGENT_INSTALL_DIR)" \
+		ORBIT_AGENT_PLIST="$(AGENT_LAUNCHD_PLIST)" \
+		ORBIT_AGENT_LOG_DIR="$(AGENT_LOG_DIR)" \
+		LAUNCHCTL_BIN="$(LAUNCHCTL)" PLUTIL_BIN="$(PLUTIL)" \
+		/bin/bash scripts/macos-agent.sh stop
+
+uninstall-agent:
+	@ORBIT_AGENT_LABEL="$(AGENT_LAUNCHD_LABEL)" \
+		ORBIT_AGENT_LEGACY_LABEL="$(AGENT_LEGACY_LAUNCHD_LABEL)" \
+		ORBIT_AGENT_INSTALL_DIR="$(AGENT_INSTALL_DIR)" \
+		ORBIT_AGENT_PLIST="$(AGENT_LAUNCHD_PLIST)" \
+		ORBIT_AGENT_LOG_DIR="$(AGENT_LOG_DIR)" \
+		LAUNCHCTL_BIN="$(LAUNCHCTL)" PLUTIL_BIN="$(PLUTIL)" \
+		/bin/bash scripts/macos-agent.sh uninstall
+
 kill: kill-web kill-agent kill-core
 
 kill-agent:
 	@launchctl remove "$(AGENT_LAUNCHD_LABEL)" 2>/dev/null || true
+	@launchctl remove "$(AGENT_LEGACY_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-agent([[:space:]]|$$)' 2>/dev/null || true
 	@if pgrep -f '[/][o]rbit-agent([[:space:]]|$$)' >/dev/null; then sleep 1; pkill -KILL -f '[/][o]rbit-agent([[:space:]]|$$)' 2>/dev/null || true; fi
 

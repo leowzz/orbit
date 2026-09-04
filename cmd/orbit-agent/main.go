@@ -26,8 +26,12 @@ const version = "0.1.0"
 
 func main() {
 	configPath := flag.String("config", "configs/agent.local.yaml", "path to the Agent YAML configuration")
+	checkConfig := flag.Bool("check-config", false, "validate the Agent configuration and exit")
 	flag.Parse()
 	cfg, runErr := config.LoadAgent(*configPath)
+	if runErr == nil && *checkConfig {
+		return
+	}
 	level := "info"
 	if runErr == nil {
 		level = cfg.Logging.Level
