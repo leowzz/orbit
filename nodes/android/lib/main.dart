@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
+import 'quick_config_server.dart';
 
 void main() => runApp(const OrbitApp());
 
@@ -30,7 +33,7 @@ class NodePage extends StatefulWidget {
   State<NodePage> createState() => _NodePageState();
 }
 
-class _NodePageState extends State<NodePage> {
+class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
   static const channel = MethodChannel('dev.orbit/node');
   final form = GlobalKey<FormState>();
   final uri = TextEditingController(text: 'ssl://');
@@ -39,6 +42,7 @@ class _NodePageState extends State<NodePage> {
   final password = TextEditingController();
   Map<String, dynamic> snapshot = {};
   Timer? timer;
+  QuickConfigServer? quickConfigServer;
   bool busy = false;
   bool loaded = false;
   bool hidden = true;
@@ -47,8 +51,23 @@ class _NodePageState extends State<NodePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     initialize();
-    timer = Timer.periodic(const Duration(seconds: 3), (_) => refresh());
+    resumeRefresh();
+  }
+
+  void resumeRefresh() {
+    timer?.cancel();
+    timer = Timer.periodic(const Duration(seconds: 10), (_) => refresh());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    timer?.cancel();
+    if (state == AppLifecycleState.resumed) {
+      refresh();
+      resumeRefresh();
+    }
   }
 
   Future<void> initialize() async {
@@ -139,6 +158,101 @@ class _NodePageState extends State<NodePage> {
     }
   }
 
+  Future<void> showQuickConfig() async {
+    if (busy) return;
+    setState(() {
+      busy = true;
+      message = null;
+    });
+    final server = QuickConfigServer(() => config, (method, values) async {
+      try {
+        final result = await channel.invokeMethod<String>(method, values);
+        if (method == 'save') {
+          // Reload the normalized native configuration, using the same vault.
+          await initialize();
+          return '配置已加密保存到设备。运行中的同步已重新加载；未启动时请在设备上开始同步。';
+        }
+        return result ?? '操作完成';
+      } on PlatformException catch (error) {
+        return error.message ?? '操作失败，请检查配置';
+      }
+    });
+    quickConfigServer = server;
+    try {
+      final urls = await server.start();
+      if (!mounted) return;
+      var selected = urls.first;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => StatefulBuilder(
+          builder: (context, update) => AlertDialog(
+            title: const Text('扫码快捷配置'),
+            content: SizedBox(
+              width: 300,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('用手机扫描二维码，在网页配置和测试 MQTT。两台设备需连接同一局域网，请保持此弹窗打开。'),
+                    const SizedBox(height: 16),
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.all(12),
+                      child: QrImageView(data: selected, size: 230),
+                    ),
+                    if (urls.length > 1)
+                      DropdownButton<String>(
+                        isExpanded: true,
+                        value: selected,
+                        items: urls
+                            .map(
+                              (url) => DropdownMenuItem(
+                                value: url,
+                                child: Text(Uri.parse(url).host),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (url) => update(() => selected = url!),
+                      ),
+                    const SizedBox(height: 12),
+                    SelectableText(
+                      selected,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      '关闭后链接失效。仅在可信局域网使用。',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('完成并关闭'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => message = error is StateError
+              ? error.message.toString()
+              : '无法启动快捷配置，请检查局域网连接后重试',
+        );
+      }
+    } finally {
+      await server.close();
+      quickConfigServer = null;
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> showPinHelp(bool requested) async {
     // Some launchers accept the request but silently block it behind their own
     // shortcut permission. A true result does not prove that a widget was added.
@@ -170,7 +284,9 @@ class _NodePageState extends State<NodePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     timer?.cancel();
+    quickConfigServer?.close();
     for (final controller in [uri, nodeId, username, password]) {
       controller.dispose();
     }
@@ -264,7 +380,7 @@ class _NodePageState extends State<NodePage> {
             style: TextStyle(fontSize: 21, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
-          const Text('保存配置后开始同步。后台同步会显示常驻通知，可随时停止。'),
+          const Text('亮屏时同步，息屏时暂停。用量约每分钟更新，Session 状态变化及时更新，可随时停止。'),
           const SizedBox(height: 18),
           Form(
             key: form,
@@ -363,6 +479,11 @@ class _NodePageState extends State<NodePage> {
                     : () => action('test', args: config, validate: true),
                 icon: const Icon(Icons.network_check),
                 label: const Text('测试连接'),
+              ),
+              OutlinedButton.icon(
+                onPressed: busy || !loaded ? null : showQuickConfig,
+                icon: const Icon(Icons.qr_code),
+                label: const Text('二维码'),
               ),
               FilledButton.icon(
                 onPressed: busy || !loaded

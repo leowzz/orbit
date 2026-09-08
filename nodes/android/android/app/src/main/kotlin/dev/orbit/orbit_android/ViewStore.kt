@@ -2,6 +2,7 @@ package dev.orbit.orbit_android
 
 import android.content.Context
 import android.util.Base64
+import android.os.SystemClock
 import orbit.v1.View.DeviceView
 import orbit.v1.View.Freshness
 import com.google.protobuf.Timestamp
@@ -24,6 +25,14 @@ object ViewPolicy {
         }
         return true
     }
+    // Transport revisions and lease renewals do not change the displayed content.
+    fun content(view: DeviceView): DeviceView = view.toBuilder().clearMetadata()
+        .clearFreshUntil().clearRetainUntil().apply {
+            if (hasUsage()) usage = usage.toBuilder().clearObservedAt().clearFreshUntil().build()
+            if (hasCodex()) codex = codex.toBuilder().clearObservedAt().clearFreshUntil().apply {
+                for (i in 0 until sessionsCount) setSessions(i, getSessions(i).toBuilder().clearUpdatedAt())
+            }.build()
+        }.build()
     fun freshness(value: Freshness, deadline: Timestamp, now: Long): String = when {
         value == Freshness.FRESHNESS_OFFLINE -> "离线"
         value != Freshness.FRESHNESS_FRESH || millis(deadline) <= now -> "数据已过期"
@@ -33,16 +42,41 @@ object ViewPolicy {
 
 class ViewStore(context: Context) {
     private val prefs = context.getSharedPreferences("orbit_view", Context.MODE_PRIVATE)
-    fun load(): DeviceView? = runCatching {
-        prefs.getString("view", null)?.let { DeviceView.parseFrom(Base64.decode(it, Base64.NO_WRAP)) }
-    }.getOrNull()
-    fun clear() { prefs.edit().clear().commit() }
-    fun accept(payload: ByteArray, nodeId: String, now: Long): Boolean {
+    companion object {
+        private val lock = Any()
+        private var loaded = false
+        private var latest: DeviceView? = null
+        private var persistedContent: DeviceView? = null
+        private var persistedAt = 0L
+    }
+    fun load(): DeviceView? = synchronized(lock) {
+        if (!loaded) {
+            latest = runCatching { prefs.getString("view", null)?.let {
+                DeviceView.parseFrom(Base64.decode(it, Base64.NO_WRAP))
+            } }.getOrNull()
+            persistedContent = latest?.let { ViewPolicy.content(it) }
+            loaded = true
+        }
+        latest
+    }
+    fun clear() = synchronized(lock) {
+        latest = null; persistedContent = null; loaded = true; persistedAt = 0
+        prefs.edit().clear().commit()
+    }
+    fun accept(payload: ByteArray, nodeId: String, now: Long): Boolean = synchronized(lock) {
         if (payload.size !in 1..32768) return false
         val next = runCatching { DeviceView.parseFrom(payload) }.getOrNull() ?: return false
         if (!ViewPolicy.valid(next, load(), nodeId, now)) return false
-        prefs.edit().putString("view", Base64.encodeToString(payload, Base64.NO_WRAP)).apply()
-        return true
+        latest = next
+        val content = ViewPolicy.content(next)
+        val elapsed = SystemClock.elapsedRealtime()
+        // Keep the newest lease/revision in memory, checkpoint unchanged content at most once a minute.
+        if (content != persistedContent || elapsed - persistedAt >= 60000) {
+            prefs.edit().putString("view", Base64.encodeToString(payload, Base64.NO_WRAP)).apply()
+            persistedContent = content
+            persistedAt = elapsed
+        }
+        true
     }
     fun snapshot(now: Long = System.currentTimeMillis()): Map<String, Any> {
         val view = load()

@@ -78,5 +78,15 @@ class MainActivity : FlutterActivity() {
             }
         }
     }
+    override fun onStart() {
+        super.onStart()
+        OrbitService.appVisible = true
+        OrbitService.reconcile()
+    }
+    override fun onStop() {
+        OrbitService.appVisible = false
+        OrbitService.reconcile()
+        super.onStop()
+    }
     override fun onDestroy() { io.shutdown(); super.onDestroy() }
 }

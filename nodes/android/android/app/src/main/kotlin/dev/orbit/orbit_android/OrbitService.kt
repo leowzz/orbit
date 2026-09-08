@@ -1,7 +1,10 @@
 package dev.orbit.orbit_android
 
 import android.app.*
-import android.content.Intent
+import android.content.*
+import android.net.*
+import android.os.PowerManager
+import android.util.Log
 import android.os.IBinder
 import com.google.protobuf.Timestamp
 import orbit.v1.Common.Metadata
@@ -11,13 +14,14 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ScheduledFuture
 
 object OrbitMqtt {
     fun options(config: NodeConfig) = MqttConnectOptions().apply {
         mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
         isCleanSession = true
         connectionTimeout = 10
-        keepAliveInterval = 30
+        keepAliveInterval = 300
         if (config.username.isNotEmpty()) userName = config.username
         if (config.password.isNotEmpty()) password = config.password.toCharArray()
         // Paho uses the platform trust store and validates TLS hostnames by default.
@@ -49,10 +53,26 @@ class OrbitService : Service() {
     private var config: NodeConfig? = null
     private var epoch = UUID.randomUUID().toString()
     private var revision = 0L
-    private var nextAttempt = 0L
+    private var awaitingSnapshot = false
+    private var retry: ScheduledFuture<*>? = null
+    private var redraw: ScheduledFuture<*>? = null
+    private val backoff = RetryBackoff()
+    private val power by lazy { getSystemService(PowerManager::class.java) }
+    private val network by lazy { getSystemService(ConnectivityManager::class.java) }
+    private val screenEvents = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) { reconcile() }
+    }
+    private val networkEvents = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) { reconcile() }
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) { reconcile() }
+        override fun onLost(network: Network) { reconcile() }
+    }
     @Volatile private var alive = true
     companion object {
+        @Volatile private var instance: OrbitService? = null
+        @Volatile var appVisible = false
         @Volatile var active = false
+        fun reconcile() { instance?.reconcile() }
         @Volatile var connection = "未连接"
     }
     override fun onBind(intent: Intent?): IBinder? = null
@@ -64,15 +84,59 @@ class OrbitService : Service() {
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 1, Intent(this, OrbitService::class.java).setAction("stop"), PendingIntent.FLAG_IMMUTABLE)
         startForeground(1, Notification.Builder(this, "orbit").setSmallIcon(R.drawable.ic_orbit)
-            .setContentTitle("Orbit 桌面组件同步").setContentText("正在接收 MQTT 数据 · 可在应用中停止")
+            .setContentTitle("Orbit 桌面组件同步").setContentText("亮屏同步 · 息屏暂停 · 可在应用中停止")
             .setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null, "停止", stop).build()).build())
-        worker.scheduleWithFixedDelay({
-            if (alive) {
-                if (config != null && client?.isConnected != true && System.currentTimeMillis() >= nextAttempt) connect()
-                OrbitWidgets.updateAll(this)
-            }
-        }, 1, 5, TimeUnit.SECONDS)
+        instance = this
+        registerReceiver(screenEvents, IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        })
+        network.registerDefaultNetworkCallback(networkEvents)
     }
+    private fun online(): Boolean = network.getNetworkCapabilities(network.activeNetwork)
+        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+
+    private fun reconcile() {
+        if (alive) runCatching { worker.execute { if (alive) reconcileOnWorker() } }
+    }
+    private fun reconcileOnWorker() {
+        if (!appVisible && !OrbitWidgets.hasWidgets(this)) { stopSelf(); return }
+        if (!power.isInteractive || !online()) {
+            retry?.cancel(false); retry = null
+            redraw?.cancel(false); redraw = null
+            val current = client
+            client = null // Ignore any queued callbacks from the suspended connection.
+            OrbitMqtt.close(current)
+            backoff.reset()
+            setConnection(if (!power.isInteractive) "息屏暂停 · 亮屏后恢复" else "无网络 · 等待恢复")
+            return
+        }
+        if (redraw == null) {
+            OrbitWidgets.updateAll(this, force = true)
+            redraw = worker.scheduleWithFixedDelay({
+                if (alive && power.isInteractive) OrbitWidgets.updateAll(this)
+            }, 60, 60, TimeUnit.SECONDS)
+        }
+        if (config != null && client?.isConnected != true && retry == null) connect()
+    }
+    private fun setConnection(value: String) {
+        if (connection == value) return
+        connection = value
+        Log.i("OrbitSync", value)
+        if (power.isInteractive) OrbitWidgets.updateAll(this)
+    }
+    private fun scheduleRetry() {
+        if (!alive || !power.isInteractive || !online()) { reconcile(); return }
+        if (retry != null) return
+        val delay = backoff.nextDelayMillis()
+        Log.i("OrbitSync", "retry in ${delay / 1000}s")
+        retry = worker.schedule({
+            retry = null
+            if (alive) reconcileOnWorker()
+        }, delay, TimeUnit.MILLISECONDS)
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "stop") { stopSelf(); return START_NOT_STICKY }
         worker.execute {
@@ -84,29 +148,42 @@ class OrbitService : Service() {
             config = nextConfig
             epoch = UUID.randomUUID().toString()
             revision = 0
-            nextAttempt = 0
+            retry?.cancel(false); retry = null
+            backoff.reset()
             connection = if (config == null) "请先配置 MQTT" else "正在连接"
-            if (config == null) stopSelf()
+            if (config == null) stopSelf() else reconcileOnWorker()
         }
         return START_STICKY
     }
     private fun connect() {
         val cfg = config ?: return
-        nextAttempt = System.currentTimeMillis() + 15000
-        connection = "正在连接"
+        if (!power.isInteractive || !online()) return
+        setConnection("正在连接")
         OrbitMqtt.close(client)
         val current = OrbitMqtt.client(cfg)
         client = current
+        awaitingSnapshot = true
         current.setCallback(object : MqttCallback {
-            override fun connectionLost(cause: Throwable?) { if (alive && client === current) connection = "连接断开 · 正在重试" }
+            override fun connectionLost(cause: Throwable?) {
+                if (alive) runCatching { worker.execute {
+                    if (alive && client === current) {
+                        client = null
+                        OrbitMqtt.close(current)
+                        setConnection("连接断开 · 等待重试")
+                        scheduleRetry()
+                    }
+                } }
+            }
             override fun deliveryComplete(token: IMqttDeliveryToken?) {}
             override fun messageArrived(topic: String?, message: MqttMessage?) {
                 if (alive && topic == "orbit/v1/nodes/${cfg.nodeId}/view" && message != null) {
                     val bytes = message.payload.copyOf()
                     runCatching { worker.execute {
-                        if (alive && client === current && ViewStore(this@OrbitService).accept(bytes, cfg.nodeId, System.currentTimeMillis())) {
-                            connection = "已连接 · 已接收数据"
-                            OrbitWidgets.updateAll(this@OrbitService)
+                        if (alive && power.isInteractive && client === current && ViewStore(this@OrbitService).accept(bytes, cfg.nodeId, System.currentTimeMillis())) {
+                            setConnection("已连接 · 已接收数据")
+                            // Retained cache and the first live Core reply bypass the usage throttle.
+                            OrbitWidgets.updateAll(this@OrbitService, force = awaitingSnapshot)
+                            if (!message.isRetained) awaitingSnapshot = false
                         }
                     } }
                 }
@@ -114,7 +191,7 @@ class OrbitService : Service() {
         })
         try {
             current.connect(OrbitMqtt.options(cfg))
-            if (!alive) { OrbitMqtt.close(current); return }
+            if (!alive || !power.isInteractive || !online()) { OrbitMqtt.close(current); client = null; return }
             val granted = current.subscribeWithResponse("orbit/v1/nodes/${cfg.nodeId}/view", 1).grantedQos
             check(granted.size == 1 && granted[0] in 0..1) { "subscription rejected" }
             val now = Timestamp.newBuilder().setSeconds(System.currentTimeMillis() / 1000).build()
@@ -123,16 +200,23 @@ class OrbitService : Service() {
                 .setMetadata(Metadata.newBuilder().setMessageId(UUID.randomUUID().toString()).setProducerId(cfg.nodeId)
                     .setRevision(++revision).setProducedAt(now)).build()
             current.publish("orbit/v1/nodes/${cfg.nodeId}/state", state.toByteArray(), 1, true)
-            connection = "已连接 · 等待 Core 数据"
+            backoff.reset()
+            setConnection("已连接 · 等待 Core 数据")
         } catch (error: Exception) {
-            connection = OrbitMqtt.safeError(error) + " · 正在重试"
+            setConnection(OrbitMqtt.safeError(error) + " · 等待重试")
             OrbitMqtt.close(current)
             if (client === current) client = null
+            scheduleRetry()
         }
     }
     override fun onDestroy() {
         alive = false
         active = false
+        instance = null
+        unregisterReceiver(screenEvents)
+        network.unregisterNetworkCallback(networkEvents)
+        retry?.cancel(false)
+        redraw?.cancel(false)
         connection = "已停止"
         worker.execute { OrbitMqtt.close(client); client = null }
         worker.shutdown()

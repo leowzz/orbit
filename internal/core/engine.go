@@ -96,6 +96,7 @@ type Engine struct {
 	codex           map[string]canonicalCodex
 	viewRevision    map[string]uint64
 	lastFresh       map[string]string
+	lastAndroid     map[string]*orbitv1.DeviceView
 	intentCommands  map[string]cachedIntentCommand
 	intentOrder     []string
 	commandRevision uint64
@@ -154,6 +155,7 @@ func New(config Config) (*Engine, error) {
 		codex:          make(map[string]canonicalCodex),
 		viewRevision:   make(map[string]uint64),
 		lastFresh:      make(map[string]string),
+		lastAndroid:    make(map[string]*orbitv1.DeviceView),
 		intentCommands: make(map[string]cachedIntentCommand),
 	}, nil
 }
@@ -237,6 +239,8 @@ func (e *Engine) ApplyNodeState(now time.Time, state *orbitv1.NodeState) ([]*orb
 	}
 	e.nodes[state.NodeId] = participantState{epoch: state.NodeEpoch, revision: state.Metadata.Revision, producedAt: producedAt}
 	e.nodeProducts[state.NodeId] = proto.Clone(state).(*orbitv1.NodeState)
+	// A reconnect always receives the current canonical snapshot, even during coalescing.
+	delete(e.lastAndroid, state.NodeId)
 	return e.projectNodeLocked(now, state.NodeId)
 }
 
@@ -304,14 +308,14 @@ func (e *Engine) ApplyObservation(now time.Time, observation *orbitv1.Observatio
 	return views, nil
 }
 
-// Refresh emits a new retained view only when a current view crosses into stale state.
+// Refresh emits freshness transitions and flushes coalesced Android snapshots.
 func (e *Engine) Refresh(now time.Time) ([]*orbitv1.DeviceView, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	var views []*orbitv1.DeviceView
 	for _, route := range e.config.Routes {
 		signature := e.freshnessSignature(now, route)
-		if signature == e.lastFresh[route.NodeID] {
+		if route.Profile != androidProfile && signature == e.lastFresh[route.NodeID] {
 			continue
 		}
 		projected, err := e.projectNodeLocked(now, route.NodeID)
@@ -432,13 +436,11 @@ func (e *Engine) projectNodeLocked(now time.Time, nodeID string) ([]*orbitv1.Dev
 		return nil, nil
 	}
 	freshness, freshUntil, retainUntil := e.routeFreshness(now, *route, usage, hasUsage, codex, hasCodex)
-	e.viewRevision[nodeID]++
-	e.lastFresh[nodeID] = e.freshnessSignature(now, *route)
 	view := &orbitv1.DeviceView{
 		Metadata: &orbitv1.Metadata{
 			MessageId:  newID(),
 			ProducerId: e.config.CoreID,
-			Revision:   e.viewRevision[nodeID],
+			Revision:   e.viewRevision[nodeID] + 1,
 			ProducedAt: timestamppb.New(now),
 			ExpiresAt:  timestamppb.New(retainUntil),
 		},
@@ -487,6 +489,14 @@ func (e *Engine) projectNodeLocked(now time.Time, nodeID string) ([]*orbitv1.Dev
 			})
 		}
 	}
+	if route.Profile == androidProfile {
+		if !publishAndroid(now, e.lastAndroid[nodeID], view) {
+			return nil, nil
+		}
+		e.lastAndroid[nodeID] = proto.Clone(view).(*orbitv1.DeviceView)
+	}
+	e.viewRevision[nodeID]++
+	e.lastFresh[nodeID] = e.freshnessSignature(now, *route)
 	return []*orbitv1.DeviceView{view}, nil
 }
 

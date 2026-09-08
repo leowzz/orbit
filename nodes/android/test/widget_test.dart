@@ -27,6 +27,29 @@ void main() {
         .setMockMethodCallHandler(channel, null),
   );
 
+  testWidgets('background stops polling and resume refreshes immediately', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const OrbitApp());
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    calls.clear();
+    await tester.pump(const Duration(minutes: 2));
+    expect(calls.where((c) => c.method == 'snapshot'), isEmpty);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(calls.where((c) => c.method == 'snapshot'), hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('invalid broker is rejected before invoking native test', (
     tester,
   ) async {

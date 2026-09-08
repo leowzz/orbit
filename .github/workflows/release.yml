@@ -91,6 +91,9 @@ jobs:
         with:
           context: .
           push: true
+          # Aliyun ACR rejects BuildKit's attestation manifest. Cosign signs the image below.
+          provenance: false
+          sbom: false
           build-args: BINARY=${{ matrix.binary }}
           tags: ${{ steps.names.outputs.tags }}
           cache-from: type=gha,scope=${{ matrix.binary }}
@@ -122,6 +125,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TAG: ${{ github.ref_name }}
+      # Must match the hosted source recorded in nodes/android/pubspec.lock.
+      PUB_HOSTED_URL: https://pub.flutter-io.cn
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
