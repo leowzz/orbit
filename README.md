@@ -255,6 +255,12 @@ The images are tagged as
 tag. Use `make release V=v1.2.3` to choose an explicit version. The release
 command requires a clean Git worktree and does not build or push images.
 
+Pushing a `v*` tag triggers the [release workflow](docs/releases.md): signed GHCR
+images, a release-signed Android APK, and a signed ESP32-S3 firmware archive.
+The GitHub Release includes image addresses/digests and downloadable artifacts.
+Configure the Android signing secrets before the first tag push. Public ESP32-S3
+firmware uses example network settings; connected devices need a private build.
+
 Deploy the published images on a Linux host with the local configuration files:
 
 ~~~shell

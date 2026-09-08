@@ -1,9 +1,0 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:background="@drawable/widget_background">
-    <TextView android:id="@+id/widget_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#A4D8BF" android:textSize="11sp" android:letterSpacing="0.12" android:maxLines="1" />
-    <TextView android:id="@+id/widget_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textColor="#FFFFFF" android:textSize="22sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
-    <TextView android:id="@+id/widget_body" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="8dp" android:textColor="#E0ECE5" android:textSize="13sp" android:maxLines="4" android:ellipsize="end" />
-    <TextView android:id="@+id/widget_state" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#A4D8BF" android:textSize="10sp" android:maxLines="1" android:ellipsize="end" />
-    <TextView android:id="@+id/widget_updated" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:textColor="#91A6A1" android:textSize="10sp" android:maxLines="1" />
-</LinearLayout>

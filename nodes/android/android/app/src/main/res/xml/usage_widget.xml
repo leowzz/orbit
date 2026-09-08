@@ -1,5 +1,5 @@
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:minWidth="250dp" android:minHeight="160dp" android:minResizeWidth="180dp" android:minResizeHeight="140dp"
-    android:targetCellWidth="4" android:targetCellHeight="3"
-    android:updatePeriodMillis="1800000" android:initialLayout="@layout/orbit_widget"
-    android:previewLayout="@layout/orbit_widget" android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen" />
+    android:minWidth="110dp" android:minHeight="40dp" android:minResizeWidth="110dp" android:minResizeHeight="40dp"
+    android:targetCellWidth="2" android:targetCellHeight="1"
+    android:updatePeriodMillis="1800000" android:initialLayout="@layout/usage_widget"
+    android:previewLayout="@layout/usage_widget" android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen" />

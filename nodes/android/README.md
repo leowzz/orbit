@@ -2,6 +2,9 @@
 
 Flutter Android 应用，包含两个可独立添加、可缩放的桌面小组件：**用量**和 **Session 状态**。最低 Android 8.0（API 26）。
 
+- 用量：浅色紧凑卡片，默认/最小 2×1，只显示金额；USD 使用 `$`，向零截断到两位小数并省略末尾零，正数不足一美分显示 `<$0.01`。
+- Session：默认 4×2、最小 2×2，状态和名称分列显示，以颜色区分运行、完成、失败、中断、取消；行数随组件高度调整。
+
 ## 使用
 
 1. 安装 APK，在应用中填写 MQTT 服务地址、Node ID、用户名和密码。
@@ -49,9 +52,9 @@ observation_policies:
 
 Flutter 负责配置和应用内预览；Android 原生前台服务负责 MQTT、持久缓存和 RemoteViews，Flutter 页面关闭后仍能更新。网络断开后每 15 秒重试，恢复后重新订阅 view、发布 State。未启用开机自动启动，重启手机后打开应用开始同步。
 
-组件分别按 Usage/Codex 的 `fresh_until` 显示过期状态，连接状态单独显示；达到 `retain_until` 后隐藏旧值。拒绝超过 32 KiB、错误 Node ID、无效元数据、重复或倒退版本以及已过保留期限的视图。Session 组件优先展示运行中的 Session，最多显示 4 条。
+组件分别按 Usage/Codex 的 `fresh_until` 显示过期状态，正常时不显示连接和更新时间，仅在停止、离线或过期时显示简短提示；达到 `retain_until` 后隐藏旧值。拒绝超过 32 KiB、错误 Node ID、无效元数据、重复或倒退版本以及已过保留期限的视图。Session 组件优先展示运行中的 Session，其余按更新时间倒序，随组件高度显示 1–6 条。
 
-服务运行时约 5 秒检查一次过期状态；系统强停、Doze 或厂商省电策略仍可能暂停后台网络/组件更新，不能保证锁屏持续实时。每个组件显示绝对更新时间供判断。系统强停后须重新打开应用启动；系统周期性组件刷新最低约 30 分钟。桌面上的多个同类组件共享该手机的配置与数据。
+服务运行时约 5 秒检查一次过期状态；系统强停、Doze 或厂商省电策略仍可能暂停后台网络/组件更新，不能保证锁屏持续实时。点击组件进入应用可查看详细连接状态和绝对更新时间。系统强停后须重新打开应用启动；系统周期性组件刷新最低约 30 分钟。桌面上的多个同类组件共享该手机的配置与数据。
 
 ## 开发与验证
 
@@ -65,7 +68,7 @@ cd android
 ./gradlew :app:testDebugUnitTest
 ```
 
-Android Gradle 构建从仓库根 `proto/` 自动生成 Java lite 代码，无需修改 Go 协议或提交生成目录。APK：`build/app/outputs/flutter-apk/app-debug.apk`。当前 release 使用 Flutter 模板的 debug 签名，仅用于本地安装；正式分发前需配置自己的签名。
+Android Gradle 构建从仓库根 `proto/` 自动生成 Java lite 代码，无需修改 Go 协议或提交生成目录。Debug APK：`build/app/outputs/flutter-apk/app-debug.apk`。Release 必须通过环境变量配置专用 keystore，不再回退到 debug 签名。`v*` tag 自动构建签名 APK 并发布到 GitHub Release，配置方式见[发布文档](../../docs/releases.md)。
 
 协议路由测试：仓库根运行 `go test ./internal/core ./internal/config ./internal/integration`。
 

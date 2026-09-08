@@ -99,7 +99,27 @@ class _NodePageState extends State<NodePage> {
       final result = await channel.invokeMethod<Object?>(method, args);
       if (!mounted) return;
       if (method == 'pin') {
-        await showPinHelp(result == true);
+        if (result == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('请在系统弹窗中确认添加'),
+              action: SnackBarAction(
+                label: '没有弹窗？',
+                onPressed: () async {
+                  try {
+                    await showPinHelp(true);
+                  } on PlatformException catch (e) {
+                    if (mounted) {
+                      setState(() => message = e.message ?? '无法打开应用信息');
+                    }
+                  }
+                },
+              ),
+            ),
+          );
+        } else {
+          await showPinHelp(false);
+        }
         return;
       }
       setState(
@@ -127,7 +147,7 @@ class _NodePageState extends State<NodePage> {
       builder: (context) => AlertDialog(
         title: const Text('桌面快捷方式权限'),
         content: Text(
-          '${requested ? '请在系统弹窗中确认添加。如果没有弹窗，可能尚未允许创建桌面快捷方式。' : '未能请求添加桌面组件，请检查创建桌面快捷方式权限。'}\n\n'
+          '${requested ? '请在系统弹窗中确认添加。如果没有弹窗，可能尚未允许创建桌面快捷方式。' : '未能请求添加桌面组件，可能是桌面不支持或权限受限。'}\n\n'
           '前往应用信息 → 其他权限（或权限管理），开启「创建桌面快捷方式」，然后返回重试。'
           '\n\n也可以长按桌面，从小部件列表中添加 Orbit。',
         ),

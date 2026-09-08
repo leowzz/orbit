@@ -7,6 +7,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// CI supplies a persistent release keystore through environment variables.
+val releaseStore = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+fun signingSecret(name: String): String = providers.environmentVariable(name).orNull
+    ?.takeIf { it.isNotBlank() } ?: error("Missing Android release signing variable: $name")
+
 android {
     namespace = "dev.orbit.orbit_android"
     compileSdk = flutter.compileSdkVersion
@@ -28,11 +33,21 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (releaseStore != null) {
+            create("release") {
+                storeFile = file(releaseStore)
+                storePassword = signingSecret("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = signingSecret("ANDROID_KEY_ALIAS")
+                keyPassword = signingSecret("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Never silently distribute an APK signed with the debug key.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 }
@@ -59,4 +74,13 @@ dependencies {
     implementation("com.google.protobuf:protobuf-javalite:3.25.5")
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
     testImplementation("junit:junit:4.13.2")
+}
+
+// Debug builds remain available without release credentials.
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && it.name.contains("Release") }) {
+        require(!releaseStore.isNullOrBlank()) {
+            "Release builds require ANDROID_KEYSTORE_PATH and Android signing variables; see docs/releases.md"
+        }
+    }
 }

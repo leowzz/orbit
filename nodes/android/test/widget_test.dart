@@ -67,24 +67,26 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
   for (final accepted in [false, true]) {
-    testWidgets(
-      'pin $accepted offers application settings without assuming permission',
-      (tester) async {
-        pinAccepted = accepted;
-        await tester.pumpWidget(const OrbitApp());
+    testWidgets('pin $accepted only shows permission help when needed', (
+      tester,
+    ) async {
+      pinAccepted = accepted;
+      await tester.pumpWidget(const OrbitApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('添加到桌面').first);
+      await tester.pumpAndSettle();
+      if (accepted) {
+        expect(find.text('桌面快捷方式权限'), findsNothing);
+        expect(find.text('没有弹窗？'), findsOneWidget);
+        await tester.tap(find.text('没有弹窗？'));
         await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('添加到桌面').first);
-        await tester.pumpAndSettle();
-        expect(find.text('桌面快捷方式权限'), findsOneWidget);
-        expect(calls.where((call) => call.method == 'appSettings'), isEmpty);
-        await tester.tap(find.text('去应用信息'));
-        await tester.pumpAndSettle();
-        expect(
-          calls.where((call) => call.method == 'appSettings'),
-          hasLength(1),
-        );
-        await tester.pumpWidget(const SizedBox());
-      },
-    );
+      }
+      expect(find.text('桌面快捷方式权限'), findsOneWidget);
+      expect(calls.where((call) => call.method == 'appSettings'), isEmpty);
+      await tester.tap(find.text('去应用信息'));
+      await tester.pumpAndSettle();
+      expect(calls.where((call) => call.method == 'appSettings'), hasLength(1));
+      await tester.pumpWidget(const SizedBox());
+    });
   }
 }
