@@ -7,6 +7,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Build
+import android.util.SizeF
+import android.util.TypedValue
 import android.os.PowerManager
 import android.os.SystemClock
 import android.view.View
@@ -48,41 +51,66 @@ object OrbitWidgets {
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         for ((provider, usage) in listOf(UsageWidget::class.java to true, SessionWidget::class.java to false)) {
             for (id in manager.getAppWidgetIds(ComponentName(context, provider))) {
-                val views = RemoteViews(context.packageName, if (usage) R.layout.usage_widget else R.layout.session_widget)
-                val key = mutableListOf<Any>()
-                var widgetHint: String
-                if (usage) {
-                    val value = data?.takeIf { it.hasUsage() }?.usage
-                    val amount = if (value?.hasActualCostMicros() == true)
-                        WidgetPresentation.cost(value.actualCostMicros, value.currencyCode) else "—"
-                    widgetHint = if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
-                    views.setTextViewText(R.id.widget_amount, amount)
-                    views.setTextViewText(R.id.widget_hint, widgetHint)
-                    key.add(amount)
-                    key.add(widgetHint)
-                } else {
-                    val value = data?.takeIf { it.hasCodex() }?.codex
-                    val state = if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
-                    widgetHint = state.ifBlank { "${value?.runningCount ?: 0} 运行中" }
-                    views.setTextViewText(R.id.widget_hint, widgetHint)
-                    key.add(widgetHint)
-                    views.removeAllViews(R.id.widget_sessions)
-                    // Use the smaller offered height so all rows also fit after rotation.
-                    val height = manager.getAppWidgetOptions(id).getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 150)
-                    val limit = ((height - 44) / 28).coerceIn(1, 6)
-                    val sessions = WidgetPresentation.sessions(value?.sessionsList.orEmpty(), limit)
-                    views.setViewVisibility(R.id.widget_empty, if (sessions.isEmpty()) View.VISIBLE else View.GONE)
-                    for (session in sessions) {
-                        val row = RemoteViews(context.packageName, R.layout.session_widget_row)
-                        val (label, color) = WidgetPresentation.status(session.statusValue)
-                        row.setTextViewText(R.id.session_status, label)
-                        row.setTextColor(R.id.session_status, if (state.isBlank()) color else 0xFF92988F.toInt())
-                        val name = session.displayName.ifBlank { session.projectName }
-                            .ifBlank { session.model }.ifBlank { session.sessionId.take(8) }.take(80)
-                        row.setTextViewText(R.id.session_name, name)
-                        key.add(listOf(label, color, name, state))
-                        views.addView(R.id.widget_sessions, row)
+                val options = manager.getAppWidgetOptions(id)
+                val portrait = SizeF(options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 180).toFloat(),
+                    options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 150).toFloat())
+                val landscape = SizeF(options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 280).toFloat(),
+                    options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110).toFloat())
+                @Suppress("DEPRECATION")
+                val sizes = if (Build.VERSION.SDK_INT >= 31)
+                    options.getParcelableArrayList<SizeF>(AppWidgetManager.OPTION_APPWIDGET_SIZES)
+                        ?.filter { it.width > 0 && it.height > 0 }?.distinct()?.take(16).orEmpty() else emptyList()
+                val key = mutableListOf<Any>(sizes.ifEmpty { listOf(portrait, landscape) }, context.resources.configuration.fontScale)
+                var widgetHint = ""
+                fun render(size: SizeF): RemoteViews {
+                    val layout = WidgetSizing.session(size.width, size.height, context.resources.configuration.fontScale)
+                    val views = RemoteViews(context.packageName, if (usage) R.layout.usage_widget else R.layout.session_widget)
+                    fun pixels(dp: Int) = (dp * context.resources.displayMetrics.density).toInt()
+                    val vertical = if (usage) (size.height / 12).toInt().coerceIn(4, 18) else layout.padding
+                    views.setViewPadding(R.id.widget_root, pixels(layout.padding), pixels(vertical), pixels(layout.padding), pixels(vertical))
+                    views.setTextViewText(R.id.widget_label, if (usage) "用量" else if (size.width < 180) "会话" else "Sessions")
+                    views.setTextViewTextSize(R.id.widget_label, TypedValue.COMPLEX_UNIT_SP, layout.textSize)
+                    views.setTextViewTextSize(R.id.widget_hint, TypedValue.COMPLEX_UNIT_SP, (layout.textSize - 2).coerceAtLeast(9f))
+                    if (usage) {
+                        val value = data?.takeIf { it.hasUsage() }?.usage
+                        val amount = if (value?.hasActualCostMicros() == true)
+                            WidgetPresentation.cost(value.actualCostMicros, value.currencyCode) else "—"
+                        widgetHint = if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
+                        views.setTextViewText(R.id.widget_amount, amount)
+                        views.setTextViewText(R.id.widget_hint, widgetHint)
+                        key.add(amount)
+                        key.add(widgetHint)
+                    } else {
+                        val value = data?.takeIf { it.hasCodex() }?.codex
+                        val state = if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
+                        widgetHint = state.ifBlank { "${value?.runningCount ?: 0} 运行中" }
+                        views.setTextViewText(R.id.widget_hint, widgetHint)
+                        key.add(widgetHint)
+                        views.removeAllViews(R.id.widget_sessions)
+                        val sessions = WidgetPresentation.sessions(value?.sessionsList.orEmpty(), layout.rows)
+                        views.setViewVisibility(R.id.widget_empty, if (sessions.isEmpty()) View.VISIBLE else View.GONE)
+                        for (session in sessions) {
+                            val row = RemoteViews(context.packageName, R.layout.session_widget_row)
+                            row.setViewPadding(R.id.session_row, 0, pixels(4), 0, pixels(4))
+                            row.setTextViewTextSize(R.id.session_status, TypedValue.COMPLEX_UNIT_SP, layout.textSize - 1)
+                            row.setTextViewTextSize(R.id.session_name, TypedValue.COMPLEX_UNIT_SP, layout.textSize)
+                            val (label, color) = WidgetPresentation.status(session.statusValue)
+                            row.setTextViewText(R.id.session_status, label)
+                            row.setTextColor(R.id.session_status, if (state.isBlank()) color else 0xFF92988F.toInt())
+                            val name = session.displayName.ifBlank { session.projectName }
+                                .ifBlank { session.model }.ifBlank { session.sessionId.take(8) }.take(80)
+                            row.setTextViewText(R.id.session_name, name)
+                            key.add(listOf(label, color, name, state))
+                            views.addView(R.id.widget_sessions, row)
+                        }
                     }
+                    views.setOnClickPendingIntent(R.id.widget_root, open)
+                    return views
+                }
+                val views = if (Build.VERSION.SDK_INT >= 31 && sizes.isNotEmpty()) {
+                    RemoteViews(sizes.associateWith { render(it) })
+                } else {
+                    RemoteViews(render(landscape), render(portrait))
                 }
                 val elapsed = SystemClock.elapsedRealtime()
                 val previous = rendered[id]
@@ -91,7 +119,6 @@ object OrbitWidgets {
                     if (usage && previous.hint == widgetHint && elapsed - previous.at < 60000) continue
                 }
                 rendered[id] = Rendered(key, widgetHint, elapsed)
-                views.setOnClickPendingIntent(R.id.widget_root, open)
                 manager.updateAppWidget(id, views)
             }
         }

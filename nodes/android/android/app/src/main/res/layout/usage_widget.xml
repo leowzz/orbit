@@ -3,7 +3,7 @@
     android:orientation="vertical" android:paddingHorizontal="14dp" android:paddingVertical="6dp"
     android:background="@drawable/widget_background">
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
-        <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+        <TextView android:id="@+id/widget_label" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="用量" android:textColor="#788379" android:textSize="10sp" android:maxLines="1" />
         <TextView android:id="@+id/widget_hint" android:layout_width="wrap_content" android:layout_height="wrap_content"
             android:textColor="#997346" android:textSize="9sp" android:maxLines="1" />
@@ -12,5 +12,5 @@
         android:layout_weight="1" android:gravity="center_vertical" android:text="—"
         android:textColor="#233B2E" android:textSize="28sp" android:fontFamily="sans-serif-medium"
         android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end"
-        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="30sp" android:autoSizeStepGranularity="1sp" />
+        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="64sp" android:autoSizeStepGranularity="1sp" />
 </LinearLayout>
