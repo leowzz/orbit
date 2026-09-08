@@ -2,9 +2,20 @@
 
 Orbit connects trusted host state to display nodes. The current V1 path reads
 Sub2API usage and local Codex task state in a host Agent, transports Protobuf
-observations over MQTT, and lets Core publish retained views for OLED and web
-nodes. The architecture is split into two one-way flows: state projection and
-typed command execution.
+observations over MQTT, and lets Core publish retained views for OLED, Web, and
+Android nodes. Core includes an authenticated React console for inspecting
+Agents and Nodes and managing projection routes stored in local SQLite.
+Deployment settings remain in YAML.
+
+| Component | Responsibility |
+| --- | --- |
+| Agent | Collect host usage and Codex state; execute enabled typed capabilities. |
+| Core + console | Validate observations, manage routes, and publish device views. The console defaults to `127.0.0.1:7620`. |
+| Web Node | Display its assigned view over HTTP/SSE; optionally request opening a Codex task. It has its own login and is separate from the Core console. |
+| OLED / Android Node | Render the view assigned by Core on a physical display or Android widgets. |
+
+The architecture is split into two one-way flows: state projection and typed
+command execution.
 
 **State flow: Observation -> DeviceView**
 
@@ -17,11 +28,13 @@ flowchart TB
     AgentState["MQTT AgentState<br/>retained / current agent_epoch"] -->|"epoch prerequisite"| Ingress
     Ingress --> Canonical[("Canonical state<br/>latest snapshot per agent/type")]
     Canonical --> Projector["Projection<br/>route / privacy / profile"]
-    Route["Projection Route<br/>node_id -> profile + inputs"] -->|"routing policy"| Projector
+    Console["Authenticated Core Console"] --> SQLite[("SQLite routes")]
+    SQLite --> Route["Projection Route<br/>node_id -> profile + inputs"] -->|"routing policy"| Projector
     NodeState["MQTT NodeState<br/>retained / epoch + product"] -->|"node prerequisite"| Projector
     Projector -->|"QoS 1 / retained"| View["MQTT DeviceView<br/>nodes/{node_id}/view"]
     View -->|"usage-oled-128x32"| OLED["OLED Node<br/>local pixel rendering"]
     View -->|"overview-web"| Web["Web Node<br/>cached view + HTTP/SSE"]
+    View -->|"overview-android"| Android["Android Node<br/>home screen widgets"]
 
     classDef host fill:#eaf2ff,stroke:#2563eb,color:#172033
     classDef topic fill:#fff4e8,stroke:#c2410c,color:#172033
@@ -30,7 +43,7 @@ flowchart TB
     class Usage,Codex,Agent host
     class Observation,AgentState,NodeState,View topic
     class Ingress,Canonical,Projector,Route core
-    class OLED,Web node
+    class OLED,Web,Android node
 ```
 
 **Command flow: Intent -> CommandResult**
@@ -85,6 +98,9 @@ locally. There is no arbitrary URL or shell command payload.
 ## Requirements
 
 - Go 1.27 or newer (go.mod declares go 1.27.0).
+- Node.js 22.12+ and pnpm 11.9.0 for the Core console and Make-based Go
+  builds/checks (CI and Docker use Node 24). These are not needed to run the
+  compiled Core binary.
 - uv and Python 3.13 or newer for the firmware project.
 - A C++17 toolchain supported by PlatformIO.
 - For live operation: an MQTT broker reachable by all participants, credentials
@@ -97,6 +113,8 @@ Check the local tools before installing dependencies:
 
 ~~~shell
 go version
+node --version
+pnpm --version
 uv --version
 python3 --version
 ~~~
@@ -112,7 +130,8 @@ From the repository root, download Go dependencies and run the Go build:
 
 ~~~shell
 go mod download
-make build-go
+make build-go       # build the console, then compile all Go packages
+make build-core     # write a standalone binary to dist/orbit-core
 ~~~
 
 Install the firmware environment separately:
@@ -170,18 +189,22 @@ Update the local YAML values for the selected broker and account:
   polling, filtering, and privacy settings. Enable
   capabilities.open_codex_session to let approved Web intents open a local
   Codex task.
-- core.local.yaml: core.id, MQTT URL/TLS files, and projection_routes.
+- core.local.yaml: core.id, MQTT URL/TLS files, `console.password`, optional
+  console listen/database paths, and `observation_policies`. Manage routes in
+  the Core console; YAML `projection_routes` is deprecated and only seeds a
+  database on its first initialization.
 - web.local.yaml: node.id, its MQTT credentials, the local HTTP listen address,
   and `web.auth.password` plus `web.auth.session_ttl` for the browser login.
 
-Each Core route key must equal the corresponding node configuration's node.id;
-every input agent_id must equal the Agent's resolved ID (agent.id when it is
-explicitly set). The example routes connect desk-oled-01 and desk-web-01 to
-agent-local.
+After starting the services, log into the Core console and create a route for
+each display node. The route's node ID must equal the node configuration's
+`node.id`; each input `agent_id` must equal the Agent's resolved ID (`agent.id`
+when explicitly set). The current Core example starts without routes.
 
 Host configuration is strict and is validated before a process connects. IDs
-must match [a-z0-9][a-z0-9_-]{0,63}. Agent host_label, Core routes, the usage
-policy, MQTT credentials, and all enabled source values are required. Durations
+must match `[a-z0-9][a-z0-9_-]{0,63}`. Agent host_label, Core console password,
+MQTT credentials, and all enabled source values are required. Configure an observation policy for each type used
+by the routes; an empty route set is valid. Durations
 use Go syntax such as 30s, 10s, and 2m; Sub2API requires USD and each source's
 observation TTL must be at least its poll interval.
 
@@ -222,13 +245,96 @@ The hardware wiring expected by this variant is:
 | SDA | GPIO5 |
 | SCL | GPIO6 |
 
+## Core console and routing
+
+Set `console.password` in the existing Core YAML, then run `make dev-core` and
+open <http://127.0.0.1:7620>. The console has separate pages:
+
+| Page | Contents |
+| --- | --- |
+| Overview (`/`) | Summary and configured data flow. |
+| Agents (`/agents`) | Discovered hosts, versions, source health, and observation freshness. |
+| Nodes (`/nodes`) | Discovered devices, product types, and associated routes. |
+| Routes (`/routes`) | Create, edit, and delete projection routes. |
+| System (`/system`) | Core identity, storage, session, and observation policies. |
+
+State refreshes every 5 seconds. Discovery is based on MQTT participant state;
+Presence is not implemented, so a discovered participant is not proof that it
+is currently online.
+
+### Authentication and configuration
+
+```yaml
+console:
+  listen: 127.0.0.1:7620
+  database: data/core.sqlite
+  password: replace-with-your-password
+```
+
+The password is required. The login page creates a 24-hour HttpOnly session
+Cookie; logout invalidates the session, and Core restart requires a new login.
+The Core frontend stores neither passwords nor tokens in local storage. Basic
+Auth is not accepted. Use HTTPS or an SSH tunnel for remote access.
+
+Keep Core identity, MQTT/TLS credentials, observation policies, NTP, logging,
+and console settings in YAML. SQLite stores projection routes and their
+revision; it does not replace the deployment configuration. Relative database
+paths resolve from the Core YAML directory, so the default local configuration
+uses `configs/data/core.sqlite`.
+
+### Manage routes
+
+Each Node has one route, selecting a profile and at most one source Agent per
+observation type:
+
+| Profile | Inputs | Target |
+| --- | --- | --- |
+| `usage-oled-128x32` | Usage | OLED display |
+| `overview-web` | Usage and/or Codex | Web Node |
+| `overview-android` | Usage and/or Codex | Android widgets |
+
+Agents and Nodes can be configured before discovery. Keep the corresponding
+`observation_policies` in YAML. Saving a rule immediately updates runtime
+routing; revision checks prevent one browser from overwriting another's edits.
+Core retries failed view delivery and sends an expired clearing view when a
+route change or deletion would otherwise leave old data on the device.
+
+Legacy YAML `projection_routes` is imported only when SQLite is first
+initialized. Later YAML route edits have no effect, even after all rules have
+been deleted in the console. Manage subsequent changes through the console.
+Discovery and Canonical State are rebuilt from MQTT after restart; SQLite is
+not a history of online devices or observations.
+
+### Frontend development and embedded builds
+
+[`web/core-console`](web/core-console/README.md) is an independent React +
+TypeScript project using Vite, Tailwind CSS, and pnpm, with its own dependencies
+and type checks.
+
+```sh
+make dev-core       # build the frontend and start Core with its YAML
+make dev-console    # Vite; /api proxies to Core at 127.0.0.1:7620
+make build-console  # install locked frontend dependencies and build assets
+make build-core     # embed frontend assets into dist/orbit-core
+make build-go       # build frontend and compile all Go packages
+```
+
+`make build-core`, Docker builds, and release CI build the frontend before Go
+embeds its assets. The resulting binary needs no Node.js, pnpm, or external
+static files at runtime. Before using `go build` or `go test` directly, run
+`make build-console`; without built assets the console entry point returns 503.
+The Vite development server defaults to port 5173 and uses the same Core login.
+
 ## Automated checks
 
 Run these from the repository root. A passing check exits with status 0; any
 non-zero status is a failure even if some earlier packages passed.
 
 ~~~shell
-make test-go       # Go unit tests and in-memory source/integration tests
+make test-go       # build console; run Go unit and in-memory integration tests
+make test-web      # Web Node browser-state tests
+pnpm --dir web/core-console check
+pnpm --dir web/core-console format:check
 go test ./internal/agent ./internal/integration
 go test -race ./internal/agent ./internal/integration
 go test ./internal/sources/codex
@@ -271,9 +377,19 @@ docker compose --env-file .env -f deploy/docker-compose.yml pull
 docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ~~~
 
-The deployment publishes Web on port 7621, so its `web.listen` value must be
-`0.0.0.0:7621`. Files under `configs/` are mounted read-only and must be readable
-by UID 65532.
+The deployment binds the Core console to host `127.0.0.1:7620` and publishes
+Web Node on port 7621. Set these values in the respective YAML files:
+
+- Core: `console.listen: 0.0.0.0:7620`,
+  `console.database: /app/data/core.sqlite`, and a `console.password`.
+- Web Node: `web.listen: 0.0.0.0:7621` and `web.auth.password`.
+
+Files under `configs/` are mounted read-only and must be readable by UID 65532.
+The `orbit-core-data` volume persists SQLite across container replacements;
+retain it during upgrades and back it up along with the YAML and secrets.
+Expose the Core console through an HTTPS reverse proxy to `127.0.0.1:7620`,
+or access it over an SSH tunnel. Core frontend assets are included in its image;
+there is no separate frontend service to deploy.
 
 make test-go uses an in-memory MQTT broker, an httptest Sub2API server, and
 Codex fixtures. It proves source selection, initial AgentState ordering,
@@ -377,7 +493,7 @@ The startup log prints its local URL (127.0.0.1:8080 in the example). The page
 requires the configured single password, then keeps an expiring browser session
 in local storage and one SSE connection open. It updates whenever a new retained
 DeviceView is accepted. Its MQTT credential needs publish access to its own
-NodeState topic and subscribe access to its own DeviceView topic only.
+NodeState and Intent topics and subscribe access to its own DeviceView topic.
 
 `make dev-web` serves `nodes/web/static` directly from disk. Saving an HTML,
 CSS, or JavaScript file in that directory automatically reloads connected
@@ -419,7 +535,7 @@ configured interval. A successful live chain has these messages in the broker:
 | orbit/v1/nodes/{node_id}/view | Core | Node | yes |
 | orbit/v1/nodes/{node_id}/intents | Node | Core | no |
 | orbit/v1/agents/{agent_id}/commands | Core | Agent | no |
-| orbit/v1/agents/{agent_id}/results | Agent | Core | no |
+| orbit/v1/agents/{agent_id}/results | Agent | Test/admin subscriber (Core feedback not implemented) | no |
 
 All Go MQTT payloads use application/protobuf and QoS 1. Broker ACLs should
 allow each identity only the publish/subscribe rows it owns. See
@@ -517,7 +633,7 @@ evaluated normally.
 If the node stays at WIFI or TIME, check Wi-Fi and NTP reachability. If it
 shows MQTT or MQTT ERR, check the broker host, port, CA, credentials, and ACL.
 If it is connected but no view arrives, compare the node ID and Agent ID with
-the Core projection_routes entry and confirm that Core received NodeState.
+the rule in the Core console and confirm that Core received NodeState.
 I2C display missing means the OLED is not detected at address 0x3C; check
 wiring, power, and the address before debugging MQTT.
 
@@ -544,12 +660,15 @@ non-zero exit require investigation.
 ## Layout
 
 ~~~text
-cmd/                    Agent and Core process assembly
+cmd/                    Agent, Core, and Web Node process assembly
 internal/               config, source, transport, Agent, and Core logic
 proto/orbit/v1/         versioned wire schemas
 gen/go/                 generated Go Protobuf bindings
 nodes/display/          shared display firmware and model/variant delivery units
 nodes/web/              browser display node, HTTP/SSE server, and static UI
+nodes/android/          Flutter Android app and home screen widgets
+web/core-console/       independent React/TypeScript console and Go embed bridge
+deploy/                 published-image Compose deployment
 configs/                non-sensitive host configuration examples
 docs/                   architecture, security, MQTT, and ADR documentation
 ~~~
@@ -559,57 +678,9 @@ The Go service contracts and routing rules are described in the source and
 are also kept in
 [nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md](nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md).
 
-### Android 桌面组件
+### Android widgets
 
-[Flutter Android Node](nodes/android/README.md) 提供「用量」「Session 状态」两个桌面小组件，应用内支持 MQTT 地址、认证配置、连接测试与后台同步。Core 使用 `overview-android` 路由；构建和接入方式见该目录 README。
-
-## Core 网页控制台
-
-在原 Core YAML 中设置 `console.password` 后，`make dev-core` 同时启动内置控制台，默认访问 <http://127.0.0.1:7620>。
-控制台展示 MQTT 已发现的 Agents / Nodes、版本、Source 健康状态和 usage / codex
-数据新鲜度，每 5 秒刷新。当前实现没有发布 Presence，已发现不等于当前在线。
-
-在“转发分流”中为 Node 选择 `usage-oled-128x32`、`overview-web` 或
-`overview-android`，分别填写 usage / codex 来源 Agent；支持新增、修改和删除。
-每个 Node 一条规则，每种 Observation 最多一个来源；OLED 仅支持 usage。
-尚未发现的 Agent / Node 也可预配置。相关 `observation_policies` 仍在 YAML 中设置。
-
-```yaml
-console:
-  listen: 127.0.0.1:7620
-  database: data/core.sqlite
-  password: your-password
-```
-
-数据库路径相对 Core YAML 所在目录，默认是 `configs/data/core.sqlite`。
-SQLite 首次初始化导入 YAML `projection_routes`；此后以数据库为准，删除所有规则
-也不会重新导入。网页保存采用版本检查，冲突时重新载入；保存后立即切换运行规则，
-投递失败的设备视图由 Core 重试。修改来源或删除规则会发送清空旧数据的过期视图。
-配置持久化，设备发现和 Canonical State 由 MQTT 重新获取，不把历史记录伪装成在线设备。
-
-控制台始终要求设置 `console.password`，浏览器通过独立登录页输入密码，认证使用 24 小时 HttpOnly 会话 Cookie，
-支持退出登录；Core 重启后需要重新登录。远程访问建议通过 SSH 隧道或 HTTPS 反向代理。控制台与 `orbit-web`
-设备视图是两个独立入口。
-
-Docker 使用 `deploy/docker-compose.yml` 的 `orbit-core-data` 持久卷：设置
-`console.database: /app/data/core.sqlite`、`console.listen: 0.0.0.0:7620` 和密码。
-宿主机仅映射 `127.0.0.1:7620`，升级时保留该卷。
-
-
-### 独立 React 控制台
-
-前端项目位于 [`web/core-console`](web/core-console)，使用 React、TypeScript、Vite、
-Tailwind CSS 和 pnpm，拥有独立依赖、类型检查与开发服务器。
-页面分为总览、Agents、Nodes、转发规则和系统信息，使用独立 URL，支持直接访问和刷新。
-
-```sh
-make dev-core       # 构建前端后启动 Core（使用原 Core YAML）
-make dev-console    # 单独启动 Vite；/api 代理到 127.0.0.1:7620
-make build-core     # 构建前端并嵌入 dist/orbit-core
-make build-go       # 构建前端及全部 Go 服务
-```
-
-`make build-core`、Docker 镜像和发布 CI 都会先执行前端生产构建，随后由 Go embed
-打包到二进制中，运行时不需要 Node、pnpm 或外部静态文件。直接使用 `go build`
-或 `go test` 前，先运行 `make build-console`；缺少产物时静态入口返回明确的 503。
-原 `console.password` 不变，新认证不再接受 Basic Auth；旧 Cookie 不会迁移。
+The [Flutter Android Node](nodes/android/README.md) provides usage and session
+status home screen widgets, MQTT connection settings, connection testing, and
+background synchronization. Select the `overview-android` profile in the Core
+console. See its README for Android build and setup instructions.
