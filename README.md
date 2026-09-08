@@ -587,10 +587,29 @@ SQLite 首次初始化导入 YAML `projection_routes`；此后以数据库为准
 投递失败的设备视图由 Core 重试。修改来源或删除规则会发送清空旧数据的过期视图。
 配置持久化，设备发现和 Canonical State 由 MQTT 重新获取，不把历史记录伪装成在线设备。
 
-控制台始终要求设置 `console.password`，浏览器使用 HTTP Basic 登录
-（用户名任意）。远程访问建议通过 SSH 隧道或 HTTPS 反向代理。控制台与 `orbit-web`
+控制台始终要求设置 `console.password`，浏览器通过独立登录页输入密码，认证使用 24 小时 HttpOnly 会话 Cookie，
+支持退出登录；Core 重启后需要重新登录。远程访问建议通过 SSH 隧道或 HTTPS 反向代理。控制台与 `orbit-web`
 设备视图是两个独立入口。
 
 Docker 使用 `deploy/docker-compose.yml` 的 `orbit-core-data` 持久卷：设置
 `console.database: /app/data/core.sqlite`、`console.listen: 0.0.0.0:7620` 和密码。
 宿主机仅映射 `127.0.0.1:7620`，升级时保留该卷。
+
+
+### 独立 React 控制台
+
+前端项目位于 [`web/core-console`](web/core-console)，使用 React、TypeScript、Vite、
+Tailwind CSS 和 pnpm，拥有独立依赖、类型检查与开发服务器。
+页面分为总览、Agents、Nodes、转发规则和系统信息，使用独立 URL，支持直接访问和刷新。
+
+```sh
+make dev-core       # 构建前端后启动 Core（使用原 Core YAML）
+make dev-console    # 单独启动 Vite；/api 代理到 127.0.0.1:7620
+make build-core     # 构建前端并嵌入 dist/orbit-core
+make build-go       # 构建前端及全部 Go 服务
+```
+
+`make build-core`、Docker 镜像和发布 CI 都会先执行前端生产构建，随后由 Go embed
+打包到二进制中，运行时不需要 Node、pnpm 或外部静态文件。直接使用 `go build`
+或 `go test` 前，先运行 `make build-console`；缺少产物时静态入口返回明确的 503。
+原 `console.password` 不变，新认证不再接受 Basic Auth；旧 Cookie 不会迁移。

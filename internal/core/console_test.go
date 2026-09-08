@@ -114,7 +114,16 @@ func TestConsoleRoutesValidationConflictAuthAndHotApply(t *testing.T) {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
 		r.Header.Set("Content-Type", "application/json")
 		if password != "" {
-			r.SetBasicAuth("orbit", password)
+			login := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{"password":"`+password+`"}`))
+			login.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, login)
+			if response.Code != 200 {
+				t.Fatalf("login: %s", response.Body.String())
+			}
+			for _, cookie := range response.Result().Cookies() {
+				r.AddCookie(cookie)
+			}
 		}
 		if origin != "" {
 			r.Header.Set("Origin", origin)
@@ -126,7 +135,7 @@ func TestConsoleRoutesValidationConflictAuthAndHotApply(t *testing.T) {
 	if w := request("GET", "/api/state", "", "", ""); w.Code != 401 {
 		t.Fatal(w.Code)
 	}
-	if w := request("GET", "/", "", "test-password", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "Projection Routes") {
+	if w := request("GET", "/", "", "test-password", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "Core Console") {
 		t.Fatal(w.Code)
 	}
 	if w := request("PUT", "/api/routes", `{"revision":1,"routes":{}}`, "test-password", "https://evil.example"); w.Code != 403 {

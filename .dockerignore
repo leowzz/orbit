@@ -9,3 +9,6 @@ docs
 nodes/display
 
 nodes/android
+
+**/node_modules
+web/core-console/dist

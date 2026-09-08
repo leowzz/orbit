@@ -1,6 +1,8 @@
 .DEFAULT_GOAL := dev
 
 GO ?= go
+PNPM ?= pnpm
+CONSOLE_DIR := web/core-console
 TOOLS_DIR := $(CURDIR)/.tools/bin
 BUF := $(TOOLS_DIR)/buf
 PROTOC_GEN_GO := $(TOOLS_DIR)/protoc-gen-go
@@ -30,7 +32,7 @@ dev:
 dev-agent:
 	$(GO) run ./cmd/orbit-agent -config "$(AGENT_CONFIG)"
 
-dev-core:
+dev-core: build-console
 	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
 
 dev-web:
@@ -85,7 +87,7 @@ kill-web:
 
 build: build-go
 
-build-go:
+build-go: build-console
 	$(GO) build ./...
 
 build-node:
@@ -93,20 +95,20 @@ build-node:
 
 test: test-go
 
-test-go:
+test-go: build-console
 	$(GO) test ./...
 
 test-node:
 	$(MAKE) -C "$(NODE_DIR)" check
 
-lint:
+lint: build-console
 	$(GO) vet ./...
 
 fmt:
-	gofmt -w $$(find cmd internal proto -name '*.go' -type f)
+	gofmt -w $$(find cmd internal proto -name '*.go' -type f) web/core-console/*.go
 
 fmt-check:
-	@test -z "$$(gofmt -l $$(find cmd internal proto -name '*.go' -type f))"
+	@test -z "$$(gofmt -l $$(find cmd internal proto -name '*.go' -type f) web/core-console/*.go)"
 
 proto-lint: $(BUF)
 	$(BUF) lint
@@ -127,3 +129,16 @@ $(BUF):
 $(PROTOC_GEN_GO):
 	@mkdir -p "$(TOOLS_DIR)"
 	GOBIN="$(TOOLS_DIR)" $(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+
+.PHONY: dev-console build-console build-core
+
+dev-console:
+	$(PNPM) --dir "$(CONSOLE_DIR)" install --frozen-lockfile
+	$(PNPM) --dir "$(CONSOLE_DIR)" dev
+
+build-console:
+	$(PNPM) --dir "$(CONSOLE_DIR)" install --frozen-lockfile
+	$(PNPM) --dir "$(CONSOLE_DIR)" build
+
+build-core: build-console
+	$(GO) build -trimpath -o dist/orbit-core ./cmd/orbit-core

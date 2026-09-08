@@ -2,21 +2,18 @@ package core
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -24,10 +21,8 @@ import (
 	_ "modernc.org/sqlite"
 	orbitv1 "orbit/gen/go/orbit/v1"
 	"orbit/internal/config"
+	coreconsole "orbit/web/core-console"
 )
-
-//go:embed console/*
-var consoleAssets embed.FS
 
 // RouteStore stores one atomic, versioned routing document. An empty document is
 // intentional and must never cause YAML routes to be imported again.
@@ -199,9 +194,22 @@ func (e *Engine) consoleState(now time.Time) map[string]any {
 }
 
 func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig) http.Handler {
-	assets, _ := fs.Sub(consoleAssets, "console")
+	auth := newConsoleAuth(cfg.Console.Password)
+	startedAt := time.Now().UTC()
 	mux := http.NewServeMux()
-	mux.Handle("GET /", http.FileServer(http.FS(assets)))
+	mux.Handle("GET /", coreconsole.Handler())
+	mux.HandleFunc("POST /api/auth/login", auth.login)
+	mux.HandleFunc("POST /api/auth/logout", auth.logout)
+	mux.HandleFunc("GET /api/auth/session", func(w http.ResponseWriter, r *http.Request) {
+		writeConsoleJSON(w, map[string]bool{"authenticated": true})
+	})
+	mux.HandleFunc("GET /api/system", func(w http.ResponseWriter, r *http.Request) {
+		policies := map[string]map[string]string{}
+		for kind, policy := range cfg.ObservationPolicies {
+			policies[kind] = map[string]string{"max_ttl": policy.MaxTTL.Duration.String(), "max_future_skew": policy.MaxFutureSkew.Duration.String()}
+		}
+		writeConsoleJSON(w, map[string]any{"started_at": startedAt, "policies": policies, "session_hours": 24})
+	})
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {
 		writeConsoleJSON(w, runner.engine.consoleState(runner.now()))
 	})
@@ -263,19 +271,13 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig) h
 				return
 			}
 		}
-		if cfg.Console.Password == "" {
-			http.Error(w, "console authentication is not configured", http.StatusServiceUnavailable)
+		if r.Header.Get("Sec-Fetch-Site") == "cross-site" && r.Method != "GET" && r.Method != "HEAD" {
+			http.Error(w, "cross-site request rejected", 403)
 			return
 		}
-		{
-			_, password, ok := r.BasicAuth()
-			actual := sha256.Sum256([]byte(password))
-			expected := sha256.Sum256([]byte(cfg.Console.Password))
-			if !ok || subtle.ConstantTimeCompare(actual[:], expected[:]) != 1 {
-				w.Header().Set("WWW-Authenticate", `Basic realm="Orbit Core", charset="UTF-8"`)
-				http.Error(w, "authentication required", 401)
-				return
-			}
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/auth/login" && !auth.valid(r) {
+			http.Error(w, "authentication required", 401)
+			return
 		}
 		mux.ServeHTTP(w, r)
 	})
