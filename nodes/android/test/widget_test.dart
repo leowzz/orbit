@@ -7,8 +7,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('dev.orbit/node');
   final calls = <MethodCall>[];
+  var pinAccepted = false;
   setUp(() {
     calls.clear();
+    pinAccepted = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           calls.add(call);
@@ -16,6 +18,7 @@ void main() {
             return {'connection': '未连接', 'active': false};
           }
           if (call.method == 'test') return '连接成功';
+          if (call.method == 'pin') return pinAccepted;
           return null;
         });
   });
@@ -63,4 +66,25 @@ void main() {
     expect(calls.where((c) => c.method == 'save'), isEmpty);
     await tester.pumpWidget(const SizedBox());
   });
+  for (final accepted in [false, true]) {
+    testWidgets(
+      'pin $accepted offers application settings without assuming permission',
+      (tester) async {
+        pinAccepted = accepted;
+        await tester.pumpWidget(const OrbitApp());
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('添加到桌面').first);
+        await tester.pumpAndSettle();
+        expect(find.text('桌面快捷方式权限'), findsOneWidget);
+        expect(calls.where((call) => call.method == 'appSettings'), isEmpty);
+        await tester.tap(find.text('去应用信息'));
+        await tester.pumpAndSettle();
+        expect(
+          calls.where((call) => call.method == 'appSettings'),
+          hasLength(1),
+        );
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
 }

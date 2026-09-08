@@ -6,6 +6,8 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.net.Uri
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -42,7 +44,15 @@ class MainActivity : FlutterActivity() {
                     "pin" -> {
                         val provider = if (call.arguments == "usage") UsageWidget::class.java else SessionWidget::class.java
                         val manager = getSystemService(AppWidgetManager::class.java)
-                        result.success(manager.isRequestPinAppWidgetSupported && manager.requestPinAppWidget(ComponentName(this, provider), null, null))
+                        try {
+                            result.success(manager.isRequestPinAppWidgetSupported && manager.requestPinAppWidget(ComponentName(this, provider), null, null))
+                        } catch (_: SecurityException) {
+                            result.success(false)
+                        }
+                    }
+                    "appSettings" -> {
+                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                        result.success(null)
                     }
                     "test" -> {
                         val config = NodeConfig.from(call.arguments as Map<*, *>).also { it.validate() }

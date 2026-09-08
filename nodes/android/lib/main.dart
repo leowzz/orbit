@@ -98,14 +98,16 @@ class _NodePageState extends State<NodePage> {
     try {
       final result = await channel.invokeMethod<Object?>(method, args);
       if (!mounted) return;
+      if (method == 'pin') {
+        await showPinHelp(result == true);
+        return;
+      }
       setState(
         () => message = switch (method) {
           'test' => result as String?,
           'save' => '配置已加密保存。点击「开始同步」接收数据。',
           'start' => '已启动同步，请查看连接状态。',
           'stop' => '已停止后台同步。',
-          'pin' =>
-            result == true ? '请在桌面确认添加组件。' : '请长按桌面 → 小组件 → Orbit，选择所需组件。',
           _ => null,
         },
       );
@@ -114,6 +116,35 @@ class _NodePageState extends State<NodePage> {
       if (mounted) setState(() => message = e.message ?? '操作失败');
     } finally {
       if (mounted) setState(() => busy = false);
+    }
+  }
+
+  Future<void> showPinHelp(bool requested) async {
+    // Some launchers accept the request but silently block it behind their own
+    // shortcut permission. A true result does not prove that a widget was added.
+    final openSettings = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('桌面快捷方式权限'),
+        content: Text(
+          '${requested ? '请在系统弹窗中确认添加。如果没有弹窗，可能尚未允许创建桌面快捷方式。' : '未能请求添加桌面组件，请检查创建桌面快捷方式权限。'}\n\n'
+          '前往应用信息 → 其他权限（或权限管理），开启「创建桌面快捷方式」，然后返回重试。'
+          '\n\n也可以长按桌面，从小部件列表中添加 Orbit。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('关闭'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('去应用信息'),
+          ),
+        ],
+      ),
+    );
+    if (openSettings == true && mounted) {
+      await channel.invokeMethod<void>('appSettings');
     }
   }
 
