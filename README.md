@@ -254,6 +254,9 @@ The images are tagged as
 `.env.example`, creates a `chore: release vX.Y.Z` commit, and adds an annotated
 tag. Use `make release V=v1.2.3` to choose an explicit version. The release
 command requires a clean Git worktree and does not build or push images.
+Without `V`, `make release` increments the last component (for example,
+`v0.1.8` → `v0.1.9`). Both env files must contain one `version=vX.Y.Z` entry;
+other settings, comments and blank lines are preserved.
 
 Pushing a `v*` tag triggers the [release workflow](docs/releases.md): signed GHCR
 images, a release-signed Android APK, and a signed ESP32-S3 firmware archive.
