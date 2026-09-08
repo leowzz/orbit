@@ -23,11 +23,22 @@ function draw() {
     ` Core: ${statuses.Core}  |  Vite: ${statuses.Vite}  |  Ctrl-C 停止全部`,
     "─".repeat(width),
   ];
-  // Wrapping is disabled; position and clear each physical row explicitly.
-  const visible = [...header, ...lines.slice(-Math.max(0, height - header.length))].slice(0, height);
-  output.write("\x1b[H" + visible.map((line, index) =>
-    `\x1b[${index + 1};1H\x1b[2K${line.replace(/[\r\n]/g, " ")}`,
-  ).join("") + "\x1b[J");
+  // Keep the header fixed, but let the terminal wrap logs using its own
+  // Unicode cell widths. Only the body scrolls when wrapped lines overflow.
+  const headerRows = header.slice(0, height);
+  const bodyRows = Math.max(0, height - headerRows.length);
+  let frame = "\x1b[r\x1b[?7l\x1b[H\x1b[2J";
+  frame += headerRows.map((line, index) =>
+    `\x1b[${index + 1};1H${line}`,
+  ).join("");
+  if (bodyRows) {
+    const top = headerRows.length + 1;
+    // The last N logical lines contain at least N physical rows. The terminal
+    // scroll region keeps the tail if any of those lines wrap to multiple rows.
+    frame += `\x1b[${top};${height}r\x1b[${top};1H\x1b[?7h`;
+    frame += lines.slice(-bodyRows).join("\r\n");
+  }
+  output.write(frame);
 }
 
 function log(name, value) {
@@ -50,7 +61,7 @@ function finish() {
   clearTimeout(repaint);
   // A shell/go-run parent can exit before its descendants: clean up its group too.
   children.forEach(({ child }) => signalGroup(child, "SIGKILL"));
-  if (interactive) output.write("\x1b[?7h\x1b[?25h\x1b[?1049l");
+  if (interactive) output.write("\x1b[r\x1b[?7h\x1b[?25h\x1b[?1049l");
   console.log(`Orbit 开发进程已停止。前端地址：${address}`);
   process.exit(exitCode);
 }
@@ -92,7 +103,7 @@ process.on("SIGINT", () => stop(130));
 process.on("SIGTERM", () => stop(143));
 output.on("resize", draw);
 if (interactive) {
-  // Alternate screen + disabled wrapping keep logs inside their physical rows.
+  // Alternate screen keeps the development dashboard separate from shell history.
   output.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[2J");
 } else {
   console.log(`Orbit Core · 前端 ${address} · Ctrl-C 停止全部`);
