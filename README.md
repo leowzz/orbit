@@ -549,3 +549,7 @@ The Go service contracts and routing rules are described in the source and
 [docs/design.md](docs/design.md). The OLED-specific build and hardware notes
 are also kept in
 [nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md](nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md).
+
+### Android 桌面组件
+
+[Flutter Android Node](nodes/android/README.md) 提供「用量」「Session 状态」两个桌面小组件，应用内支持 MQTT 地址、认证配置、连接测试与后台同步。Core 使用 `overview-android` 路由；构建和接入方式见该目录 README。

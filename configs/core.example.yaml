@@ -41,6 +41,15 @@ projection_routes:
   #     - agent_id: agent-local
   #       observation_type: codex
 
+  # Optional Android home-screen widgets. Enable the codex policy below too.
+  # android-phone:
+  #   profile: overview-android
+  #   inputs:
+  #     - agent_id: agent-local
+  #       observation_type: usage
+  #     - agent_id: agent-local
+  #       observation_type: codex
+
 observation_policies:
   usage:
     max_ttl: 5m

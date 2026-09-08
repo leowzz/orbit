@@ -280,3 +280,43 @@ func testCodexObservation(now time.Time) *orbitv1.Observation {
 		}},
 	}
 }
+
+func TestAndroidNodeProjectsUsageAndSessions(t *testing.T) {
+	now := time.Now().UTC()
+	engine, err := New(Config{
+		CoreID: "core-a", CoreEpoch: "epoch-a",
+		Routes: []Route{{NodeID: "android-a", Profile: androidProfile, Inputs: []RouteInput{
+			{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE},
+			{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_CODEX},
+		}}},
+		UsagePolicy: UsagePolicy{MaxTTL: time.Hour}, CodexPolicy: CodexPolicy{MaxTTL: time.Minute},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := testNodeState(now)
+	state.NodeId = "android-a"
+	state.Metadata.ProducerId = state.NodeId
+	state.ModelId, state.VariantId = androidModel, androidVariant
+	if _, err := engine.ApplyNodeState(now, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := engine.ApplyAgentState(testAgentState(now)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := engine.ApplyObservation(now, testObservation(now)); err != nil {
+		t.Fatal(err)
+	}
+	views, err := engine.ApplyObservation(now, testCodexObservation(now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 1 || views[0].Usage == nil || views[0].Codex == nil || views[0].Codex.RunningCount != 1 {
+		t.Fatalf("android projection missing sections: %v", views)
+	}
+	state.ModelId, state.VariantId = webModel, webVariant
+	state.Metadata.Revision++
+	if _, err := engine.ApplyNodeState(now, state); err == nil {
+		t.Fatal("accepted web product on Android route")
+	}
+}

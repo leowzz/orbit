@@ -510,3 +510,16 @@ web:
 logging:
   level: info
 `
+
+func TestLoadCoreAcceptsAndroidProjection(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	path := writeConfig(t, dir, "core.yaml", strings.ReplaceAll(validWebCoreYAML, "overview-web", "overview-android"))
+	cfg, err := LoadCore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if route := cfg.ProjectionRoutes["desk-web-01"]; route.Profile != "overview-android" || len(route.Inputs) != 2 {
+		t.Fatalf("unexpected android route: %#v", route)
+	}
+}

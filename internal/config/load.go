@@ -161,7 +161,7 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
-		if route.Profile != "usage-oled-128x32" && route.Profile != "overview-web" {
+		if route.Profile != "usage-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-android" {
 			return fmt.Errorf("projection route %q: unsupported profile %q", nodeID, route.Profile)
 		}
 		if len(route.Inputs) == 0 {

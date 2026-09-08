@@ -16,13 +16,16 @@ import (
 )
 
 const (
-	displaySeries = "display"
-	oledModel     = "oled-128x32"
-	ydVariant     = "yd-esp32-s3"
-	usageProfile  = "usage-oled-128x32"
-	webModel      = "web"
-	webVariant    = "browser"
-	webProfile    = "overview-web"
+	displaySeries  = "display"
+	oledModel      = "oled-128x32"
+	ydVariant      = "yd-esp32-s3"
+	usageProfile   = "usage-oled-128x32"
+	webModel       = "web"
+	webVariant     = "browser"
+	webProfile     = "overview-web"
+	androidModel   = "android"
+	androidVariant = "flutter"
+	androidProfile = "overview-android"
 )
 
 type RouteInput struct {
@@ -111,7 +114,7 @@ func New(config Config) (*Engine, error) {
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
 		}
-		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != webProfile) || len(route.Inputs) == 0 {
+		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != webProfile && route.Profile != androidProfile) || len(route.Inputs) == 0 {
 			return nil, fmt.Errorf("invalid route for node %q", route.NodeID)
 		}
 		inputTypes := make(map[orbitv1.ObservationType]struct{}, len(route.Inputs))
@@ -212,11 +215,11 @@ func (e *Engine) ApplyNodeState(now time.Time, state *orbitv1.NodeState) ([]*orb
 		return nil, errors.New("node state producer does not match node id")
 	}
 	if state.SeriesId != displaySeries ||
-		!((state.ModelId == oledModel && state.VariantId == ydVariant) || (state.ModelId == webModel && state.VariantId == webVariant)) {
+		!((state.ModelId == oledModel && state.VariantId == ydVariant) || (state.ModelId == webModel && state.VariantId == webVariant) || (state.ModelId == androidModel && state.VariantId == androidVariant)) {
 		return nil, fmt.Errorf("unsupported node product %s/%s/%s", state.SeriesId, state.ModelId, state.VariantId)
 	}
 	route := e.routeForNode(state.NodeId)
-	if route != nil && ((route.Profile == usageProfile && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel)) {
+	if route != nil && ((route.Profile == usageProfile && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel) || (route.Profile == androidProfile && state.ModelId != androidModel)) {
 		return nil, fmt.Errorf("node product %s does not match projection profile %s", state.ModelId, route.Profile)
 	}
 	producedAt, err := requiredTimestamp(state.Metadata.ProducedAt, "node produced_at")
@@ -449,7 +452,7 @@ func (e *Engine) projectNodeLocked(now time.Time, nodeID string) ([]*orbitv1.Dev
 		cost := usage.value.GetActualCostMicros()
 		tokens := usage.value.GetTokenCount()
 		tpm := usage.value.GetTpm()
-		if route.Profile == webProfile {
+		if route.Profile == webProfile || route.Profile == androidProfile {
 			view.Usage = &orbitv1.UsageView{
 				Freshness:        freshnessAt(now, usage.expiresAt),
 				FreshUntil:       timestamppb.New(usage.expiresAt),
