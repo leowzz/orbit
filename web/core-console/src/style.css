@@ -1938,3 +1938,56 @@ dt,
     transition: none;
   }
 }
+
+/* Keep the topology above the fold; counts are supporting navigation. */
+.overview-metrics {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  margin: -8px 0 28px;
+  padding: 16px 0;
+  border-top: 1px solid #e0e6d6;
+  border-bottom: 1px solid #e0e6d6;
+}
+.overview-metrics > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #58634c;
+  font-size: 14px;
+}
+.overview-metrics > a:hover {
+  color: #344927;
+}
+.overview-metrics strong {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  color: #35412c;
+  font-variant-numeric: tabular-nums;
+}
+.overview-metrics .badge {
+  margin-left: auto;
+}
+.overview-devices .device-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.overview-devices .device-row {
+  border-bottom: 0;
+  padding: 18px;
+}
+.overview-status-note {
+  margin: 12px 0 0;
+  color: #676f5c;
+  font-size: 13px;
+}
+@media (max-width: 760px) {
+  .overview-metrics {
+    gap: 16px;
+  }
+  .overview-metrics .badge {
+    margin-left: 0;
+  }
+}

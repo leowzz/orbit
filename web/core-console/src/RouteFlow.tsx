@@ -5,7 +5,13 @@ import type { NetworkState, RouteDocument } from "./api";
 import { profileName } from "./api";
 import { DeviceIcon, Empty } from "./components";
 
-type Edge = { key: string; path: string };
+type Edge = {
+  key: string;
+  path: string;
+  kind: string;
+  source?: string;
+  target?: string;
+};
 const sourceKey = (input: { agent_id: string; observation_type: string }) =>
   JSON.stringify([input.agent_id, input.observation_type]);
 
@@ -38,7 +44,7 @@ export default function RouteFlow({
     ];
   const layoutKey = JSON.stringify([
     sources.map(([id]) => id),
-    visible.map(([id]) => id),
+    visible.map(([id, route]) => [id, route.inputs]),
   ]);
 
   // Measure actual card edges so curves stay connected when labels wrap or the viewport changes.
@@ -62,10 +68,18 @@ export default function RouteFlow({
           (card) => {
             const rect = card.getBoundingClientRect();
             const incoming = card.dataset.flowSide === "source";
-            const cy = core.top + core.height / 2 - bounds.top;
+            const kind = card.dataset.flowKind!;
+            const cy =
+              core.top +
+              core.height / 2 -
+              bounds.top +
+              (kind === "usage" ? -12 : 12);
             const y = rect.top + rect.height / 2 - bounds.top;
             return {
               key: card.dataset.flowAnchor!,
+              kind,
+              source: card.dataset.flowSource,
+              target: card.dataset.flowTarget,
               path: incoming
                 ? curve(
                     rect.right - bounds.left,
@@ -76,7 +90,7 @@ export default function RouteFlow({
                 : curve(
                     core.right - bounds.left,
                     cy,
-                    rect.left - bounds.left,
+                    rect.left + rect.width / 2 - bounds.left,
                     y,
                   ),
             };
@@ -87,7 +101,9 @@ export default function RouteFlow({
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     element
-      .querySelectorAll<HTMLElement>("[data-flow-anchor], .topology-core")
+      .querySelectorAll<HTMLElement>(
+        "[data-flow-anchor], .topology-card, .topology-core",
+      )
       .forEach((card) => observer.observe(card));
     measure();
     return () => observer.disconnect();
@@ -122,10 +138,6 @@ export default function RouteFlow({
             <i />
             Codex
           </span>
-          <span className="output">
-            <i />
-            设备视图
-          </span>
         </div>
         <button
           type="button"
@@ -151,26 +163,26 @@ export default function RouteFlow({
         <div className="topology-canvas" ref={canvas}>
           <svg className="topology-wires" aria-hidden="true">
             {edges.map((edge) => {
-              const source = sources.find(
-                ([id]) => `source:${id}` === edge.key,
-              )?.[1];
-              const target = visible.find(
-                ([id]) => `target:${id}` === edge.key,
-              );
-              const fresh = source
-                ? isFresh(source)
-                : !!target &&
-                  !!nodes.get(target[0]) &&
-                  !document.publish_pending &&
-                  target[1].inputs.some(isFresh);
+              const source = sources.find(([id]) => id === edge.source)?.[1];
+              const target = edge.target
+                ? document.routes[edge.target]
+                : undefined;
+              const input =
+                source ??
+                target?.inputs.find((i) => i.observation_type === edge.kind);
+              const fresh =
+                !!input &&
+                isFresh(input) &&
+                (!edge.target ||
+                  (!!nodes.get(edge.target) && !document.publish_pending));
               const highlighted =
                 !selected ||
                 (source
                   ? selected.inputs.some(
                       (i) => sourceKey(i) === sourceKey(source),
                     )
-                  : target?.[0] === focused);
-              const kind = source?.observation_type ?? "output";
+                  : edge.target === focused);
+              const kind = edge.kind;
               return (
                 <g
                   key={edge.key}
@@ -195,6 +207,8 @@ export default function RouteFlow({
                   key={id}
                   data-flow-anchor={`source:${id}`}
                   data-flow-side="source"
+                  data-flow-source={id}
+                  data-flow-kind={input.observation_type}
                 >
                   <Server size={18} />
                   <div>
@@ -229,14 +243,24 @@ export default function RouteFlow({
                   className={`topology-card topology-target ${focused === id ? "is-selected" : ""}`}
                   key={id}
                   to="/routes"
-                  data-flow-anchor={`target:${id}`}
-                  data-flow-side="target"
                   onMouseEnter={() => setFocused(id)}
                   onMouseLeave={() => setFocused(null)}
                   onFocus={() => setFocused(id)}
                   onBlur={() => setFocused(null)}
                 >
-                  <i className="topology-port" />
+                  {route.inputs.map((input, index) => (
+                    <i
+                      key={input.observation_type}
+                      className={`topology-port ${input.observation_type}`}
+                      style={{
+                        top: `calc(50% + ${(index - (route.inputs.length - 1) / 2) * 24}px - 3px)`,
+                      }}
+                      data-flow-anchor={`target:${id}:${input.observation_type}`}
+                      data-flow-side="target"
+                      data-flow-target={id}
+                      data-flow-kind={input.observation_type}
+                    />
+                  ))}
                   <DeviceIcon
                     model={
                       node?.modelId ??

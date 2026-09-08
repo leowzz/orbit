@@ -36,56 +36,32 @@ export default function Overview({
           </Link>
         }
       />
-      <div className="overview-band">
-        <div className="network-summary">
-          <span className="eyebrow">NETWORK SNAPSHOT</span>
-          <h2>
-            {state.agents.length
-              ? `${fresh} 个 Agent 正在提供新鲜数据`
-              : "等待第一个 Agent 接入"}
-          </h2>
-          <p>
-            {unassigned
-              ? `${unassigned} 个已发现设备尚未配置转发规则。`
-              : "设备与规则已就绪，数据按配置流转。"}
-          </p>
-          <Badge tone={fresh ? "good" : "neutral"}>
-            {fresh ? "数据持续更新" : "等待数据"}
-          </Badge>
-        </div>
-        <div className="stat">
-          <span>
-            <Server size={15} />
-            数据来源
-          </span>
-          <strong>{String(state.agents.length).padStart(2, "0")}</strong>
-          <small>Agents</small>
-        </div>
-        <div className="stat">
-          <span>
-            <Radio size={15} />
-            接收设备
-          </span>
-          <strong>{String(state.nodes.length).padStart(2, "0")}</strong>
-          <small>Nodes</small>
-        </div>
-        <div className="stat">
-          <span>
-            <GitBranch size={15} />
-            转发规则
-          </span>
-          <strong>
-            {String(Object.keys(document.routes).length).padStart(2, "0")}
-          </strong>
-          <small>Projection routes</small>
-        </div>
+      <div className="overview-metrics" aria-label="网络指标">
+        <Link to="/agents">
+          <Server size={17} />
+          <span>数据来源</span>
+          <strong>{state.agents.length}</strong>
+        </Link>
+        <Link to="/nodes">
+          <Radio size={17} />
+          <span>接收设备</span>
+          <strong>{state.nodes.length}</strong>
+        </Link>
+        <Link to="/routes">
+          <GitBranch size={17} />
+          <span>转发规则</span>
+          <strong>{Object.keys(document.routes).length}</strong>
+        </Link>
+        <Badge tone={fresh ? "good" : "neutral"}>
+          {fresh ? `${fresh} 个来源数据新鲜` : "等待来源数据"}
+        </Badge>
       </div>
       <div className="overview-columns">
         <section>
           <SectionTitle title="数据流向" meta="LIVE ROUTING" link="/routes" />
           <RouteFlow state={state} document={document} />
         </section>
-        <section>
+        <section className="overview-devices">
           <SectionTitle
             title="设备一览"
             meta={String(state.nodes.length)}
@@ -111,14 +87,10 @@ export default function Overview({
               <Empty title="等待设备接入">设备发布自描述后会出现在这里。</Empty>
             )}
           </div>
-          <div className="note-card">
-            <span className="eyebrow">关于设备状态</span>
-            <p>已发现，不等于在线。</p>
-            <small>
-              设备列表来自最近收到的自描述。请结合 Agent
-              数据新鲜度判断当前状态。
-            </small>
-          </div>
+          <p className="overview-status-note">
+            {unassigned ? `${unassigned} 个设备尚未配置规则。` : ""}
+            已发现不等于在线，请结合来源数据新鲜度判断状态。
+          </p>
         </section>
       </div>
     </>
