@@ -1628,26 +1628,27 @@ dt,
   color: #bbc5b2;
 }
 
-/* Routing diagram: quiet tracks, directional pulses, readable node labels. */
+/* One Core aggregates observations and projects a view for each destination. */
+.overview-columns:has(.topology) {
+  grid-template-columns: minmax(0, 1fr);
+}
 .routing-map {
   --signal-usage: #58723b;
   --signal-codex: #4c7690;
-  --signal-output: #68734c;
-  container-type: inline-size;
+  --signal-output: #77875b;
   overflow: hidden;
 }
 .routing-toolbar,
 .routing-legend,
 .routing-motion,
 .routing-footer,
-.routing-route-meta,
-.routing-status,
 .routing-footer button {
   display: flex;
   align-items: center;
 }
 .routing-toolbar {
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 18px 22px;
   border-bottom: 1px solid #e8ecdf;
@@ -1668,11 +1669,17 @@ dt,
   border-radius: 2px;
   background: currentColor;
 }
-.routing-legend .usage {
-  color: var(--signal-usage);
+.usage {
+  --edge-color: var(--signal-usage);
 }
-.routing-legend .codex {
-  color: var(--signal-codex);
+.codex {
+  --edge-color: var(--signal-codex);
+}
+.output {
+  --edge-color: var(--signal-output);
+}
+.routing-legend span {
+  color: var(--edge-color);
 }
 .routing-motion,
 .routing-footer button {
@@ -1690,219 +1697,193 @@ dt,
 .routing-footer button:hover {
   background: #edf1e5;
 }
-.routing-columns {
+.topology-scroll {
+  overflow-x: auto;
+  padding: 24px;
+}
+.topology-head,
+.topology-canvas {
+  min-width: 640px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
-  padding: 18px 22px 4px;
-  font-size: 13px;
+  grid-template-columns: minmax(170px, 1fr) 100px minmax(200px, 1fr);
+  column-gap: clamp(40px, 6vw, 110px);
+}
+.topology-head {
   color: #69725c;
+  font-size: 13px;
   font-weight: 600;
+  margin-bottom: 24px;
 }
-.routing-columns span:nth-child(2) {
+.topology-head span:nth-child(2) {
   text-align: center;
-  white-space: nowrap;
 }
-.routing-columns span:last-child {
+.topology-head span:last-child {
   text-align: right;
 }
-.routing-routes {
-  padding: 8px;
-  background-image: radial-gradient(#86936c20 0.8px, transparent 0.8px);
+.topology-canvas {
+  position: relative;
+  align-items: center;
+  min-height: 250px;
+  padding: 18px 0;
+  background-image: radial-gradient(#86936c25 0.8px, transparent 0.8px);
   background-size: 14px 14px;
 }
-.routing-route {
-  display: block;
-  padding: 14px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: inherit;
-  transition:
-    background 180ms ease,
-    border-color 180ms ease,
-    opacity 180ms ease;
-}
-.routing-route + .routing-route {
-  border-top-color: #e8ecdf;
-}
-.routing-route:hover,
-.routing-route:focus-visible {
-  background: #f4f7ed;
-  border-color: #bdcaa9;
-  outline: 2px solid transparent;
-}
-.routing-route-meta {
-  gap: 9px;
-  margin-bottom: 17px;
-  font-size: 13px;
-  color: #69725c;
-}
-.routing-sequence {
-  font-family: monospace;
-  font-size: 13px;
-  color: #79816e;
-}
-.routing-status {
-  gap: 6px;
-  margin-left: auto;
-}
-.routing-status i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #949b87;
-}
-.routing-status.fresh {
-  color: #4c662f;
-}
-.routing-status.fresh i {
-  background: #6e8a4d;
-}
-.routing-chain {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 64px 38px minmax(0, 0.8fr);
-  align-items: center;
-  padding-bottom: 6px;
-}
-.routing-inputs {
-  position: relative;
-  grid-auto-rows: 1fr;
-  display: grid;
-  gap: 18px;
-  min-width: 0;
-}
-.routing-inputs:has(.routing-input:nth-child(2))::after {
-  content: "";
+.topology-wires {
   position: absolute;
-  right: 0;
-  top: calc(25% - 4.5px);
-  bottom: calc(25% - 4.5px);
-  border-right: 1px solid #a9b894;
-}
-.routing-input {
-  display: grid;
-  grid-template-columns: fit-content(70%) minmax(32px, 1fr);
-  align-items: center;
-}
-.routing-source,
-.routing-target {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-.routing-source {
-  padding: 8px;
-  border: 1px solid #dbe3cf;
-  border-radius: 7px;
-  background: #fafcf6;
-}
-.routing-source > div,
-.routing-target > div {
-  min-width: 0;
-}
-.routing-chain strong {
-  display: block;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-.routing-chain small {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: #626e53;
-  margin-top: 4px;
-  line-height: 1.5;
-}
-.routing-source-icon {
-  display: flex;
-  flex-shrink: 0;
-  padding: 7px;
-  border-radius: 6px;
-  background: #eef2e6;
-  color: var(--signal-usage);
-}
-.routing-input.codex .routing-source-icon {
-  background: #eaf0f3;
-  color: var(--signal-codex);
-}
-.routing-input.codex small {
-  color: #4c7187;
-}
-.routing-core {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  width: 64px;
-  height: 64px;
-  border: 1px solid #d0d9bf;
-  border-radius: 18px;
-  background: #f1f5e8;
-  color: #53683b;
-  isolation: isolate;
-}
-.routing-core small {
-  font: 600 10px/1 monospace;
-  letter-spacing: 1px;
-  color: #53683b;
-}
-.routing-core-ring {
-  position: absolute;
-  inset: -5px;
-  border: 1px solid #a7ba894d;
-  border-radius: 22px;
-  z-index: -1;
-}
-.has-fresh .routing-core-ring {
-  animation: core-breathe 3.2s ease-in-out infinite;
-}
-.route-signal {
-  display: block;
+  inset: 0;
   width: 100%;
-  height: 24px;
-  overflow: hidden;
-  color: var(--signal-output);
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
 }
-.route-signal.usage {
-  color: var(--signal-usage);
+.topology-edge {
+  color: var(--edge-color);
+  transition: opacity 180ms ease;
 }
-.route-signal.codex {
-  color: var(--signal-codex);
+.topology-edge.is-muted {
+  opacity: 0.18;
 }
-.route-signal path {
+.topology-edge path {
   fill: none;
   vector-effect: non-scaling-stroke;
 }
 .signal-track {
-  stroke: #a9b894;
-  stroke-width: 1;
-}
-.signal-arrow {
-  stroke: #a3b291;
-  stroke-width: 1.3;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  opacity: 0.45;
 }
 .signal-pulse {
   stroke: currentColor;
-  stroke-width: 2;
+  stroke-width: 2.5;
   stroke-linecap: round;
-  stroke-dasharray: 12 88;
+  stroke-dasharray: 8 92;
   opacity: 0;
 }
 .is-fresh .signal-pulse {
-  opacity: 0.85;
-  animation: route-travel 2.8s linear infinite;
+  opacity: 0.95;
+  animation: route-travel 3.2s linear infinite;
 }
 .codex.is-fresh .signal-pulse {
-  animation-delay: -1.4s;
+  animation-delay: -1.6s;
 }
 .output.is-fresh .signal-pulse {
-  animation-delay: -0.7s;
+  animation-delay: -0.8s;
 }
-.routing-route:nth-child(2n) .signal-pulse {
-  animation-delay: -1.9s;
+.topology-sources,
+.topology-targets {
+  display: grid;
+  gap: 26px;
+  min-width: 0;
+  z-index: 1;
+}
+.topology-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 13px;
+  min-width: 0;
+  border: 1px solid #dbe3cf;
+  border-radius: 9px;
+  background: #fafcf6;
+  color: #343e2b;
+}
+.topology-card > div {
+  min-width: 0;
+}
+.topology-card > svg {
+  flex-shrink: 0;
+  color: var(--edge-color);
+}
+.topology-card strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.topology-card small {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  margin-top: 3px;
+  color: #626e53;
+}
+.topology-source.codex {
+  background: #f4f8fa;
+  border-color: #d4e0e7;
+}
+.topology-source.codex small {
+  color: #4c7187;
+}
+.topology-target {
+  background: #fff;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.topology-target:hover,
+.topology-target:focus-visible {
+  border-color: #90a773;
+  box-shadow: 0 0 0 3px #a7ba891c;
+  outline: 2px solid transparent;
+}
+.topology-target .topology-input-label {
+  color: #52623d;
+}
+.topology-port {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #fafcf6;
+  border: 1.5px solid var(--edge-color, #77875b);
+  border-radius: 50%;
+  top: calc(50% - 3px);
+}
+.topology-source .topology-port {
+  right: -3px;
+}
+.topology-target .topology-port {
+  left: -3px;
+}
+.topology-core {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 8px;
+  width: 100px;
+  min-height: 112px;
+  border: 1px solid #b8c99e;
+  border-radius: 24px;
+  background: #edf3e3;
+  color: #53683b;
+}
+.topology-core strong {
+  font: 600 14px/1.5 monospace;
+  letter-spacing: 2px;
+  margin-top: 8px;
+}
+.topology-core small {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.routing-core-ring {
+  position: absolute;
+  inset: -7px;
+  border: 1px solid #a7ba8960;
+  border-radius: 30px;
+  pointer-events: none;
+}
+.has-fresh .routing-core-ring {
+  animation: core-breathe 3.2s ease-in-out infinite;
 }
 .routing-footer {
   justify-content: space-between;
@@ -1919,60 +1900,32 @@ dt,
 }
 @keyframes route-travel {
   from {
-    stroke-dashoffset: 112;
+    stroke-dashoffset: 108;
   }
   to {
-    stroke-dashoffset: 12;
+    stroke-dashoffset: 8;
   }
 }
 @keyframes core-breathe {
   0%,
   100% {
     opacity: 0.4;
-    transform: scale(0.96);
+    transform: scale(0.98);
   }
   50% {
     opacity: 1;
     transform: scale(1.04);
   }
 }
-@container (max-width: 480px) {
+@media (max-width: 760px) {
+  .topology-scroll {
+    padding: 20px 16px;
+  }
   .routing-toolbar {
-    padding: 14px;
+    padding: 14px 16px;
   }
-  .routing-columns {
-    padding: 14px 14px 4px;
-    grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
-  }
-  .routing-route {
-    padding: 12px 6px;
-  }
-  .routing-chain {
-    grid-template-columns: minmax(0, 1fr) 48px 22px minmax(0, 0.85fr);
-  }
-  .routing-input {
-    grid-template-columns: fit-content(75%) minmax(22px, 1fr);
-  }
-  .routing-core {
-    width: 48px;
-    height: 56px;
-    border-radius: 14px;
-  }
-  .routing-core-ring {
-    border-radius: 18px;
-    inset: -3px;
-  }
-  .routing-source,
-  .routing-target {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-  .routing-chain strong {
-    font-size: 14px;
-  }
-  .routing-footer {
-    padding: 12px 14px;
+  .routing-legend {
+    gap: 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -1980,7 +1933,8 @@ dt,
   .routing-map .routing-core-ring {
     animation: none;
   }
-  .routing-route {
+  .topology-edge,
+  .topology-target {
     transition: none;
   }
 }
