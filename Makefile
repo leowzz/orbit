@@ -93,7 +93,11 @@ build-go: build-console
 build-node:
 	$(MAKE) -C "$(NODE_DIR)" build CONFIG=config.example.yaml
 
-test: test-go
+test: test-go test-web
+
+.PHONY: test-web
+test-web:
+	node --test nodes/web/app.test.cjs
 
 test-go: build-console
 	$(GO) test ./...
@@ -116,7 +120,7 @@ proto-lint: $(BUF)
 generate: $(BUF) $(PROTOC_GEN_GO)
 	PATH="$(TOOLS_DIR):$$PATH" $(BUF) generate
 
-verify: fmt-check lint test-go proto-lint test-node build-go build-node
+verify: fmt-check lint test-go test-web proto-lint test-node build-go build-node
 
 # Bump patch in .env and create an annotated git tag. Override: make release V=v1.2.3
 release:

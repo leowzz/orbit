@@ -369,11 +369,52 @@ async function loadInitialState() {
 
 function connectEvents() {
   if (eventSource) eventSource.close();
-  eventSource = new EventSource("/api/events");
-  eventSource.addEventListener("open", () => setConnection("live", "实时连接"));
-  eventSource.addEventListener("message", (event) => render(JSON.parse(event.data)));
-  eventSource.addEventListener("reload", () => window.location.reload());
-  eventSource.addEventListener("error", () => setConnection("retrying", "正在重连"));
+  const source = new EventSource("/api/events");
+  eventSource = source;
+  let pending = false;
+  let refreshing = false;
+
+  async function refreshLatest() {
+    if (eventSource !== source) return;
+    pending = false;
+    let nextDelay = 100;
+    try {
+      const response = await fetchAPI("/api/state", { cache: "no-store" });
+      if (!response.ok) throw new Error(`request failed with status ${response.status}`);
+      const snapshot = response.status === 204 ? null : await response.json();
+      if (eventSource !== source) return;
+      if (snapshot) render(snapshot);
+      setConnection("live", "实时连接");
+    } catch (_) {
+      if (eventSource === source) {
+        setConnection("retrying", "正在重连");
+        pending = true;
+        nextDelay = 1000;
+      }
+    } finally {
+      refreshing = false;
+      if (pending && eventSource === source) scheduleRefresh(nextDelay);
+    }
+  }
+
+  function scheduleRefresh(delay = 100) {
+    if (eventSource !== source) return;
+    pending = true;
+    if (refreshing) return;
+    refreshing = true;
+    // Treat buffered events as invalidations, never replay their old snapshots.
+    // Bound both burst traffic and in-flight requests while reading the latest state.
+    window.setTimeout(refreshLatest, delay);
+  }
+
+  source.addEventListener("open", () => scheduleRefresh());
+  source.addEventListener("message", () => scheduleRefresh());
+  source.addEventListener("reload", () => {
+    if (eventSource === source) window.location.reload();
+  });
+  source.addEventListener("error", () => {
+    if (eventSource === source) setConnection("retrying", "正在重连");
+  });
 }
 
 async function submitAuth(event) {

@@ -344,7 +344,7 @@ func TestStaticPageReloadsFromConnectionStatus(t *testing.T) {
 	if !strings.Contains(string(markup), `<button class="connection" id="connection" type="button"`) {
 		t.Fatal("index.html does not expose the connection status as a button")
 	}
-	for _, fragment := range []string{`elements.connection.addEventListener("click"`, `eventSource.addEventListener("reload"`, `window.location.reload()`} {
+	for _, fragment := range []string{`elements.connection.addEventListener("click"`, `source.addEventListener("reload"`, `window.location.reload()`} {
 		if !strings.Contains(string(script), fragment) {
 			t.Errorf("app.js is missing %q", fragment)
 		}
