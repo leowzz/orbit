@@ -327,7 +327,11 @@ embeds its assets. The resulting binary needs no Node.js, pnpm, or external
 static files at runtime. Before using `go build` or `go test` directly, run
 `make build-console`; without built assets the console entry point returns 503.
 The Vite development server uses port 5173 and the same Core login. `make dev-core`
-starts both processes; edit React/TypeScript/CSS files to see hot updates without
+starts both processes with a fixed terminal header for the frontend URL and
+service status, plus tagged Core/Vite logs below. Either service exiting stops
+the other and its subprocesses. Redirected output and `make dev` use plain logs;
+set `ORBIT_DEV_PLAIN=1` to request plain logs explicitly.
+Edit React/TypeScript/CSS files to see hot updates without
 restarting Core. Stop them with Ctrl-C. Go changes still require a restart.
 For separate terminals, run `make dev-core-api` and `make dev-console`.
 Port 7620 serves the backend and any previously embedded assets, so use port

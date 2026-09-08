@@ -27,13 +27,14 @@ WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
 	proto-lint generate verify release
 
 dev:
-	$(MAKE) -j2 dev-agent dev-core
+	ORBIT_DEV_PLAIN=1 $(MAKE) -j2 dev-agent dev-core
 
 dev-agent:
 	$(GO) run ./cmd/orbit-agent -config "$(AGENT_CONFIG)"
 
+dev-core: export MAKE_BIN := $(MAKE)
 dev-core:
-	$(MAKE) -j2 dev-core-api dev-console
+	@GO="$(GO)" PNPM="$(PNPM)" CORE_CONFIG="$(CORE_CONFIG)" node scripts/dev-core.mjs
 
 dev-core-api:
 	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
@@ -96,9 +97,12 @@ build-go: build-console
 build-node:
 	$(MAKE) -C "$(NODE_DIR)" build CONFIG=config.example.yaml
 
-test: test-go test-web
+test: test-go test-web test-dev
 
-.PHONY: test-web
+.PHONY: test-web test-dev
+test-dev:
+	node --test scripts/dev-core.test.mjs
+
 test-web:
 	node --test nodes/web/app.test.cjs
 
@@ -123,7 +127,7 @@ proto-lint: $(BUF)
 generate: $(BUF) $(PROTOC_GEN_GO)
 	PATH="$(TOOLS_DIR):$$PATH" $(BUF) generate
 
-verify: fmt-check lint test-go test-web proto-lint test-node build-go build-node
+verify: fmt-check lint test-go test-web test-dev proto-lint test-node build-go build-node
 
 # Bump patch in .env and create an annotated git tag. Override: make release V=v1.2.3
 release:
