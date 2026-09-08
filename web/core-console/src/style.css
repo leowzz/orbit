@@ -1945,10 +1945,6 @@ dt,
   align-items: center;
   flex-wrap: wrap;
   gap: 12px 28px;
-  margin: -8px 0 28px;
-  padding: 16px 0;
-  border-top: 1px solid #e0e6d6;
-  border-bottom: 1px solid #e0e6d6;
 }
 .overview-metrics > a {
   display: inline-flex;
@@ -1967,9 +1963,6 @@ dt,
   color: #35412c;
   font-variant-numeric: tabular-nums;
 }
-.overview-metrics .badge {
-  margin-left: auto;
-}
 .overview-devices .device-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -1987,7 +1980,39 @@ dt,
   .overview-metrics {
     gap: 16px;
   }
-  .overview-metrics .badge {
+}
+
+.overview-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px 28px;
+  padding-bottom: 24px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid #e0e6d6;
+}
+.overview-header h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.overview-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-left: auto;
+}
+.overview-header .overview-metrics > a {
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .overview-header {
+    gap: 18px;
+  }
+  .overview-header-actions {
     margin-left: 0;
   }
 }

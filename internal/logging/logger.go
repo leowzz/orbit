@@ -27,7 +27,7 @@ func New(level string) (*zap.Logger, error) {
 		return nil, fmt.Errorf("parse logging level %q: %w", level, err)
 	}
 
-	core := zapcore.NewCore(newCLIEncoder(stdoutIsTerminal()), zapcore.Lock(os.Stdout), zapLevel)
+	core := zapcore.NewCore(newCLIEncoder(colorEnabled()), zapcore.Lock(os.Stdout), zapLevel)
 	return zap.New(core, zap.AddCaller()), nil
 }
 
@@ -94,6 +94,16 @@ func appendText(line *buffer.Buffer, color bool, style, text string) {
 	if color {
 		line.AppendString(ansiReset)
 	}
+}
+
+func colorEnabled() bool {
+	if os.Getenv("NO_COLOR") != "" {
+		return false
+	}
+	if force, ok := os.LookupEnv("FORCE_COLOR"); ok {
+		return force != "0"
+	}
+	return os.Getenv("TERM") != "dumb" && stdoutIsTerminal()
 }
 
 func stdoutIsTerminal() bool {

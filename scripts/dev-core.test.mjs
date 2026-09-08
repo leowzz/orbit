@@ -51,7 +51,7 @@ setInterval(() => {}, 1000);
 
 test("Ctrl-C stops both services and descendants; piped logs remain plain", {timeout:10000}, async t => {
   const run = await fixture(t);
-  for (let i = 0; i < 100 && !run.output().includes('[Vite] dev-console ready'); i++) await delay(20);
+  for (let i = 0; i < 100 && (!run.output().includes('[Vite] dev-console ready') || !run.output().includes('[Core] dev-core-api ready')); i++) await delay(20);
   assert.match(run.output(), /\[Core\] dev-core-api ready/);
   assert.match(run.output(), /http:\/\/127\.0\.0\.1:5173/);
   run.child.kill("SIGINT");
@@ -65,4 +65,14 @@ test("a failing service stops its sibling and preserves the exit status", {timeo
   assert.equal(await run.done, 7);
   assert.match(run.output(), /进程退出 \(7\)/);
   await run.assertDescendantsStopped();
+});
+
+
+test("log colors survive while terminal controls are removed", async () => {
+  const { sanitizeLog } = await import("./dev-log.mjs");
+  const styled = "\x1b[33m[W] 中文\x1b[0m \x1b[38;2;20;40;60mRGB\x1b[m";
+  assert.equal(sanitizeLog(styled, true), styled);
+  const controls = "\x1b[2J\x1b[H\x1b[?1049l\x1b]0;title\x07";
+  assert.equal(sanitizeLog(controls + styled, true), styled);
+  assert.equal(sanitizeLog(controls + styled, false), "[W] 中文 RGB");
 });

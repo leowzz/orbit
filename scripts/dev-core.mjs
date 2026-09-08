@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { stripVTControlCharacters } from "node:util";
+import { sanitizeLog } from "./dev-log.mjs";
 
 const output = process.stdout;
 const interactive = output.isTTY && process.env.TERM !== "dumb" && process.env.ORBIT_DEV_PLAIN !== "1";
+const color = output.isTTY && process.env.TERM !== "dumb" && !process.env.NO_COLOR && process.env.FORCE_COLOR !== "0";
 const children = [];
 const lines = [];
 let stopping = false;
@@ -27,7 +28,7 @@ function draw() {
   // Unicode cell widths. Only the body scrolls when wrapped lines overflow.
   const headerRows = header.slice(0, height);
   const bodyRows = Math.max(0, height - headerRows.length);
-  let frame = "\x1b[r\x1b[?7l\x1b[H\x1b[2J";
+  let frame = "\x1b[0m\x1b[r\x1b[?7l\x1b[H\x1b[2J";
   frame += headerRows.map((line, index) =>
     `\x1b[${index + 1};1H${line}`,
   ).join("");
@@ -43,7 +44,7 @@ function draw() {
 
 function log(name, value) {
   // Child output must not clear or reposition the terminal's fixed header.
-  const line = `[${name}] ${stripVTControlCharacters(value).replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "")}`;
+  const line = `[${name}] ${sanitizeLog(value, color)}${color ? "\x1b[0m" : ""}`;
   if (!interactive) { output.write(line + "\n"); return; }
   lines.push(line);
   if (lines.length > 500) lines.shift();
@@ -61,7 +62,7 @@ function finish() {
   clearTimeout(repaint);
   // A shell/go-run parent can exit before its descendants: clean up its group too.
   children.forEach(({ child }) => signalGroup(child, "SIGKILL"));
-  if (interactive) output.write("\x1b[r\x1b[?7h\x1b[?25h\x1b[?1049l");
+  if (interactive) output.write("\x1b[0m\x1b[r\x1b[?7h\x1b[?25h\x1b[?1049l");
   console.log(`Orbit 开发进程已停止。前端地址：${address}`);
   process.exit(exitCode);
 }
@@ -76,8 +77,16 @@ function stop(code) {
 }
 
 function start(name, target) {
+  const env = { ...process.env };
+  if (color) {
+    delete env.NO_COLOR;
+    env.FORCE_COLOR = "1";
+  } else {
+    delete env.FORCE_COLOR;
+    env.NO_COLOR = "1";
+  }
   const child = spawn(process.env.MAKE_BIN || "make", ["--no-print-directory", target], {
-    env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+    env,
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });

@@ -3,13 +3,7 @@ import { Link } from "react-router-dom";
 import type { NetworkState, RouteDocument } from "../api";
 import { modelName } from "../api";
 import RouteFlow from "../RouteFlow";
-import {
-  Badge,
-  DeviceIcon,
-  Empty,
-  PageHead,
-  SectionTitle,
-} from "../components";
+import { Badge, DeviceIcon, Empty, SectionTitle } from "../components";
 export default function Overview({
   state,
   document,
@@ -25,37 +19,34 @@ export default function Overview({
   ).length;
   return (
     <>
-      <PageHead
-        eyebrow="YOUR NETWORK, AT A GLANCE"
-        title="网络总览"
-        description="主机的状态，设备的去向，在这里串联起来。"
-        action={
-          <Link to="/routes" className="button">
-            管理转发规则
-            <ArrowUpRight size={16} />
+      <header className="overview-header">
+        <h1>网络总览</h1>
+        <div className="overview-metrics" aria-label="网络指标">
+          <Link to="/agents">
+            <Server size={17} />
+            <span>数据来源</span>
+            <strong>{state.agents.length}</strong>
           </Link>
-        }
-      />
-      <div className="overview-metrics" aria-label="网络指标">
-        <Link to="/agents">
-          <Server size={17} />
-          <span>数据来源</span>
-          <strong>{state.agents.length}</strong>
-        </Link>
-        <Link to="/nodes">
-          <Radio size={17} />
-          <span>接收设备</span>
-          <strong>{state.nodes.length}</strong>
-        </Link>
-        <Link to="/routes">
-          <GitBranch size={17} />
-          <span>转发规则</span>
-          <strong>{Object.keys(document.routes).length}</strong>
-        </Link>
-        <Badge tone={fresh ? "good" : "neutral"}>
-          {fresh ? `${fresh} 个来源数据新鲜` : "等待来源数据"}
-        </Badge>
-      </div>
+          <Link to="/nodes">
+            <Radio size={17} />
+            <span>接收设备</span>
+            <strong>{state.nodes.length}</strong>
+          </Link>
+          <Link to="/routes">
+            <GitBranch size={17} />
+            <span>转发规则</span>
+            <strong>{Object.keys(document.routes).length}</strong>
+          </Link>
+        </div>
+        <div className="overview-header-actions">
+          <Badge tone={fresh ? "good" : "neutral"}>
+            {fresh ? `${fresh} 个来源数据新鲜` : "等待来源数据"}
+          </Badge>
+          <Link to="/routes" className="button">
+            管理转发规则 <ArrowUpRight size={16} />
+          </Link>
+        </div>
+      </header>
       <div className="overview-columns">
         <section>
           <SectionTitle title="数据流向" meta="LIVE ROUTING" link="/routes" />
