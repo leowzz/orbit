@@ -352,6 +352,22 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
     appBar: AppBar(
       title: const Text('Orbit', style: TextStyle(fontWeight: FontWeight.w700)),
       backgroundColor: Colors.transparent,
+      actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: OutlinedButton.icon(
+            onPressed: busy || !loaded
+                ? null
+                : () => action(snapshot['active'] == true ? 'stop' : 'start'),
+            icon: Icon(
+              snapshot['active'] == true
+                  ? Icons.stop_circle_outlined
+                  : Icons.play_circle_outline,
+            ),
+            label: Text(snapshot['active'] == true ? '停止同步' : '开始同步'),
+          ),
+        ),
+      ],
     ),
     body: SafeArea(
       child: ListView(
@@ -491,18 +507,6 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
                     : () => action('save', args: config, validate: true),
                 icon: const Icon(Icons.save_outlined),
                 label: const Text('保存配置'),
-              ),
-              OutlinedButton.icon(
-                onPressed: busy || !loaded
-                    ? null
-                    : () =>
-                          action(snapshot['active'] == true ? 'stop' : 'start'),
-                icon: Icon(
-                  snapshot['active'] == true
-                      ? Icons.stop_circle_outlined
-                      : Icons.play_circle_outline,
-                ),
-                label: Text(snapshot['active'] == true ? '停止同步' : '开始同步'),
               ),
             ],
           ),
