@@ -21,7 +21,7 @@ PLUTIL ?= /usr/bin/plutil
 CORE_LAUNCHD_LABEL ?= com.leo.orbit.core.dev
 WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
 
-.PHONY: dev dev-agent dev-core dev-web install-agent stop-agent uninstall-agent \
+.PHONY: dev dev-agent dev-core dev-core-api dev-web install-agent stop-agent uninstall-agent \
 	kill kill-agent kill-core kill-web \
 	build build-go build-node test test-go test-node lint fmt fmt-check \
 	proto-lint generate verify release
@@ -32,7 +32,10 @@ dev:
 dev-agent:
 	$(GO) run ./cmd/orbit-agent -config "$(AGENT_CONFIG)"
 
-dev-core: build-console
+dev-core:
+	$(MAKE) -j2 dev-core-api dev-console
+
+dev-core-api:
 	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
 
 dev-web:

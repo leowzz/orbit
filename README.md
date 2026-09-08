@@ -248,7 +248,9 @@ The hardware wiring expected by this variant is:
 ## Core console and routing
 
 Set `console.password` in the existing Core YAML, then run `make dev-core` and
-open <http://127.0.0.1:7620>. The console has separate pages:
+open <http://127.0.0.1:5173> for the Vite development console with hot updates.
+The compiled Core serves its embedded console at <http://127.0.0.1:7620>.
+The console has separate pages:
 
 | Page | Contents |
 | --- | --- |
@@ -312,8 +314,9 @@ TypeScript project using Vite, Tailwind CSS, and pnpm, with its own dependencies
 and type checks.
 
 ```sh
-make dev-core       # build the frontend and start Core with its YAML
-make dev-console    # Vite; /api proxies to Core at 127.0.0.1:7620
+make dev-core       # start Core + Vite together; no frontend production build
+make dev-core-api   # start only the Go backend with its YAML
+make dev-console    # start only Vite; /api proxies to Core at 127.0.0.1:7620
 make build-console  # install locked frontend dependencies and build assets
 make build-core     # embed frontend assets into dist/orbit-core
 make build-go       # build frontend and compile all Go packages
@@ -323,7 +326,13 @@ make build-go       # build frontend and compile all Go packages
 embeds its assets. The resulting binary needs no Node.js, pnpm, or external
 static files at runtime. Before using `go build` or `go test` directly, run
 `make build-console`; without built assets the console entry point returns 503.
-The Vite development server defaults to port 5173 and uses the same Core login.
+The Vite development server uses port 5173 and the same Core login. `make dev-core`
+starts both processes; edit React/TypeScript/CSS files to see hot updates without
+restarting Core. Stop them with Ctrl-C. Go changes still require a restart.
+For separate terminals, run `make dev-core-api` and `make dev-console`.
+Port 7620 serves the backend and any previously embedded assets, so use port
+5173 to see frontend changes. Vite fails if its port is occupied rather than
+silently selecting another port.
 
 ## Automated checks
 

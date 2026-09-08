@@ -7,13 +7,29 @@
 
 要求 Node 22.12+（CI / Docker 使用 Node 24）与 pnpm 11.9.0。
 
+仓库根目录一条命令启动 Core 后端与 Vite，不执行前端生产构建：
+
 ```sh
-pnpm install --frozen-lockfile
-pnpm dev
+make dev-core
 ```
 
-先在仓库根目录运行 `make dev-core`，再访问 Vite 显示的地址（默认 5173）。
-API 代理目标在 `vite.config.ts`，默认为 `http://127.0.0.1:7620`。
+访问 `http://127.0.0.1:5173`，修改 React / TypeScript / CSS 即可热更新。
+Ctrl-C 停止开发进程；Go 代码修改仍需重启。`7620` 是后端及嵌入页面入口，
+开发时请访问 `5173`，避免看到旧的构建产物。
+
+也可以在两个终端分别启动：
+
+```sh
+# 仓库根目录：仅后端
+make dev-core-api
+
+# web/core-console 目录：仅前端
+pnpm install --frozen-lockfile
+pnpm dev  # 等价于 npm run dev，项目依赖仍由 pnpm 管理
+```
+
+API 代理目标在 `vite.config.ts`，默认为 `http://127.0.0.1:7620`，需与 Core YAML
+的监听地址一致。Vite 固定使用 5173，端口占用时直接报错。
 登录使用 Core YAML 的 `console.password`，不在前端存储密码或 Token。
 
 ## 构建
