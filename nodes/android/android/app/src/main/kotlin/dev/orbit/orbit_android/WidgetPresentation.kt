@@ -13,6 +13,17 @@ object WidgetPresentation {
         if (micros in 1..9999) return "<$symbol" + "0.01"
         return symbol + BigDecimal.valueOf(micros, 6).setScale(2, RoundingMode.DOWN).stripTrailingZeros().toPlainString()
     }
+    fun metric(value: Long): String {
+        val (divisor, suffix) = when {
+            value >= 1000000000000L -> 1000000000000L to "T"
+            value >= 1000000000L -> 1000000000L to "B"
+            value >= 1000000L -> 1000000L to "M"
+            value >= 1000L -> 1000L to "K"
+            else -> return value.toString()
+        }
+        return BigDecimal.valueOf(value).divide(BigDecimal.valueOf(divisor), 1, RoundingMode.DOWN)
+            .stripTrailingZeros().toPlainString() + suffix
+    }
     fun sessions(values: List<CodexSessionView>, limit: Int): List<CodexSessionView> = values.sortedWith(
         compareBy<CodexSessionView> { if (it.statusValue == 2) 0 else 1 }
             .thenByDescending { it.updatedAt.seconds }

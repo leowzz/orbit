@@ -1,7 +1,9 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
-    android:orientation="vertical" android:paddingHorizontal="14dp" android:paddingVertical="6dp"
+    android:orientation="horizontal" android:paddingHorizontal="14dp" android:paddingVertical="6dp"
     android:background="@drawable/widget_background">
+    <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="match_parent"
+        android:orientation="vertical">
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical">
         <TextView android:id="@+id/widget_label" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
             android:text="用量" android:textColor="#788379" android:textSize="10sp" android:maxLines="1" />
@@ -13,7 +15,9 @@
         android:textColor="#233B2E" android:textSize="28sp" android:fontFamily="sans-serif-medium"
         android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end"
         android:autoSizeTextType="uniform" android:autoSizeMinTextSize="14sp" android:autoSizeMaxTextSize="64sp" android:autoSizeStepGranularity="1sp" />
-    <TextView android:id="@+id/widget_metrics" android:layout_width="match_parent" android:layout_height="wrap_content"
-        android:textColor="#788379" android:textSize="11sp" android:includeFontPadding="false"
-        android:layout_marginTop="4dp" android:visibility="gone" android:maxLines="2" />
+    </LinearLayout>
+    <TextView android:id="@+id/widget_metrics" android:layout_width="80dp" android:layout_height="match_parent"
+        android:layout_marginStart="12dp" android:gravity="center_vertical" android:textColor="#788379"
+        android:textSize="11sp" android:includeFontPadding="false" android:maxLines="2"
+        android:autoSizeTextType="uniform" android:autoSizeMinTextSize="8sp" android:autoSizeMaxTextSize="11sp" android:autoSizeStepGranularity="1sp" />
 </LinearLayout>

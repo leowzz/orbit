@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Paint
 import android.os.Bundle
 import android.os.Build
 import android.util.SizeF
@@ -64,7 +65,12 @@ object OrbitWidgets {
                 var widgetHint = ""
                 fun render(size: SizeF): RemoteViews {
                     val layout = WidgetSizing.session(size.width, size.height, context.resources.configuration.fontScale)
-                    val views = RemoteViews(context.packageName, if (usage) R.layout.usage_widget else R.layout.session_widget)
+                    val sideMetrics = usage && size.width >= 180 && size.height <= 110
+                    val views = RemoteViews(context.packageName, when {
+                        sideMetrics -> R.layout.usage_widget_wide
+                        usage -> R.layout.usage_widget
+                        else -> R.layout.session_widget
+                    })
                     fun pixels(dp: Int) = (dp * context.resources.displayMetrics.density).toInt()
                     val vertical = if (usage) (size.height / 12).toInt().coerceIn(4, 18) else layout.padding
                     views.setViewPadding(R.id.widget_root, pixels(layout.padding), pixels(vertical), pixels(layout.padding), pixels(vertical))
@@ -78,6 +84,26 @@ object OrbitWidgets {
                         widgetHint = if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
                         views.setTextViewText(R.id.widget_amount, amount)
                         views.setTextViewText(R.id.widget_hint, widgetHint)
+                        val tok = "TOK  " + if (value?.hasTokenCount() == true) WidgetPresentation.metric(value.tokenCount) else "—"
+                        val tpm = "TPM  " + if (value?.hasTpm() == true) WidgetPresentation.metric(value.tpm) else "—"
+                        val inline = "$tok    $tpm"
+                        val metrics = context.resources.displayMetrics
+                        val paint = Paint().apply { textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11f, metrics) }
+                        val width = (size.width - layout.padding * 2) * metrics.density
+                        val lines = when {
+                            paint.measureText(inline) <= width -> 1
+                            maxOf(paint.measureText(tok), paint.measureText(tpm)) <= width -> 2
+                            else -> 0
+                        }
+                        // Reserve readable amount/header space before adding optional secondary metrics.
+                        val scale = context.resources.configuration.fontScale.coerceAtLeast(1f)
+                        val requiredHeight = vertical * 2 + (layout.textSize * 1.5f + 42f) * scale +
+                            (paint.fontSpacing / metrics.density) * lines + 4
+                        val showMetrics = value != null && (sideMetrics || (lines > 0 && size.height >= requiredHeight))
+                        val detail = if (showMetrics) { if (!sideMetrics && lines == 1) inline else "$tok\n$tpm" } else ""
+                        views.setViewVisibility(R.id.widget_metrics, if (showMetrics) View.VISIBLE else View.GONE)
+                        views.setTextViewText(R.id.widget_metrics, detail)
+                        key.add(detail)
                         key.add(amount)
                         key.add(widgetHint)
                     } else {
