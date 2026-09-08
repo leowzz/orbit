@@ -50,6 +50,10 @@ func (e *Engine) CommandForIntent(now time.Time, intent *orbitv1.Intent) (*orbit
 		if cached.fingerprint != fingerprint {
 			return nil, errors.New("intent id was reused with different content")
 		}
+		route := e.routeForNode(metadata.ProducerId)
+		if route == nil || route.Profile != webProfile || !routeHasInput(*route, cached.command.TargetAgentId, orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
+			return nil, errors.New("intent route has changed")
+		}
 		return proto.Clone(cached.command).(*orbitv1.Command), nil
 	}
 

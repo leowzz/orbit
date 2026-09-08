@@ -562,3 +562,35 @@ are also kept in
 ### Android 桌面组件
 
 [Flutter Android Node](nodes/android/README.md) 提供「用量」「Session 状态」两个桌面小组件，应用内支持 MQTT 地址、认证配置、连接测试与后台同步。Core 使用 `overview-android` 路由；构建和接入方式见该目录 README。
+
+## Core 网页控制台
+
+在原 Core YAML 中设置 `console.password` 后，`make dev-core` 同时启动内置控制台，默认访问 <http://127.0.0.1:7620>。
+控制台展示 MQTT 已发现的 Agents / Nodes、版本、Source 健康状态和 usage / codex
+数据新鲜度，每 5 秒刷新。当前实现没有发布 Presence，已发现不等于当前在线。
+
+在“转发分流”中为 Node 选择 `usage-oled-128x32`、`overview-web` 或
+`overview-android`，分别填写 usage / codex 来源 Agent；支持新增、修改和删除。
+每个 Node 一条规则，每种 Observation 最多一个来源；OLED 仅支持 usage。
+尚未发现的 Agent / Node 也可预配置。相关 `observation_policies` 仍在 YAML 中设置。
+
+```yaml
+console:
+  listen: 127.0.0.1:7620
+  database: data/core.sqlite
+  password: your-password
+```
+
+数据库路径相对 Core YAML 所在目录，默认是 `configs/data/core.sqlite`。
+SQLite 首次初始化导入 YAML `projection_routes`；此后以数据库为准，删除所有规则
+也不会重新导入。网页保存采用版本检查，冲突时重新载入；保存后立即切换运行规则，
+投递失败的设备视图由 Core 重试。修改来源或删除规则会发送清空旧数据的过期视图。
+配置持久化，设备发现和 Canonical State 由 MQTT 重新获取，不把历史记录伪装成在线设备。
+
+控制台始终要求设置 `console.password`，浏览器使用 HTTP Basic 登录
+（用户名任意）。远程访问建议通过 SSH 隧道或 HTTPS 反向代理。控制台与 `orbit-web`
+设备视图是两个独立入口。
+
+Docker 使用 `deploy/docker-compose.yml` 的 `orbit-core-data` 持久卷：设置
+`console.database: /app/data/core.sqlite`、`console.listen: 0.0.0.0:7620` 和密码。
+宿主机仅映射 `127.0.0.1:7620`，升级时保留该卷。

@@ -10,6 +10,13 @@ services:
 
   orbit-core:
     <<: *orbit-service
+    # Set console.listen: 0.0.0.0:7620, console.database: /app/data/core.sqlite
+    # and console.password in core.local.yaml.
+    ports:
+      - "127.0.0.1:7620:7620"
+    volumes:
+      - ../configs:/app/configs:ro
+      - orbit-core-data:/app/data
     image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-core:${version:?set version in .env}
 
   orbit-web:
@@ -17,3 +24,6 @@ services:
     image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-web:${version:?set version in .env}
     ports:
       - "7621:7621"
+
+volumes:
+  orbit-core-data:

@@ -3,6 +3,13 @@
 core:
   id: core-local
 
+# Core's built-in control console. Relative database paths use this YAML's directory.
+# Manage projection routes in the console; deployment settings remain in this YAML.
+console:
+  password: change-me  # Required; replace before running.
+  # listen: 127.0.0.1:7620
+  # database: data/core.sqlite
+
 # Optional application-level NTP calibration. Defaults are shown below.
 # ntp:
 #   server: ntp.aliyun.com
@@ -23,32 +30,8 @@ mqtt:
     username_file: secrets/core-mqtt-username
     password_file: secrets/core-mqtt-password
 
-# Every route needs a matching observation policy for each input type.
-# Replace agent-local with the configured or macOS-derived Agent ID.
-projection_routes:
-  desk-oled-01:
-    profile: usage-oled-128x32
-    inputs:
-      - agent_id: agent-local
-        observation_type: usage
-
-  # Optional Web projection. Uncomment it together with the codex policy below.
-  # desk-web-01:
-  #   profile: overview-web
-  #   inputs:
-  #     - agent_id: agent-local
-  #       observation_type: usage
-  #     - agent_id: agent-local
-  #       observation_type: codex
-
-  # Optional Android home-screen widgets. Enable the codex policy below too.
-  # android-phone:
-  #   profile: overview-android
-  #   inputs:
-  #     - agent_id: agent-local
-  #       observation_type: usage
-  #     - agent_id: agent-local
-  #       observation_type: codex
+# Projection routes are now managed in the Core console and stored in SQLite.
+# Existing projection_routes in older YAML files are imported only at first startup.
 
 observation_policies:
   usage:
@@ -56,10 +39,9 @@ observation_policies:
     # Optional; defaults to 0s.
     # max_future_skew: 10s
 
-  # Required only when a route consumes codex observations.
-  # codex:
-  #   max_ttl: 1m
-  #   max_future_skew: 10s
+  codex:
+    max_ttl: 1m
+    max_future_skew: 10s
 
 # Optional; defaults to info. Supported values: debug, info, warn, error.
 # logging:

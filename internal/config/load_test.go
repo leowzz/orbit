@@ -433,7 +433,9 @@ logging:
   level: info
 `
 
-const validCoreYAML = `core:
+const validCoreYAML = `console:
+  password: test-console-password
+core:
   id: core-local
 mqtt:
   url: mqtts://broker.example.com:8883
@@ -459,7 +461,9 @@ logging:
   level: info
 `
 
-const validWebCoreYAML = `core:
+const validWebCoreYAML = `console:
+  password: test-console-password
+core:
   id: core-local
 mqtt:
   url: mqtts://broker.example.com:8883
@@ -521,5 +525,14 @@ func TestLoadCoreAcceptsAndroidProjection(t *testing.T) {
 	}
 	if route := cfg.ProjectionRoutes["desk-web-01"]; route.Profile != "overview-android" || len(route.Inputs) != 2 {
 		t.Fatalf("unexpected android route: %#v", route)
+	}
+}
+
+func TestCoreConsoleRequiresAuthentication(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	_, err := LoadCore(writeConfig(t, dir, "core.yaml", strings.Replace(validCoreYAML, "  password: test-console-password", "  password: ''", 1)))
+	if err == nil || !strings.Contains(err.Error(), "console.password is required") {
+		t.Fatalf("missing authentication accepted: %v", err)
 	}
 }

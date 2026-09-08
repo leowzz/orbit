@@ -46,6 +46,7 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
   bool busy = false;
   bool loaded = false;
   bool hidden = true;
+  bool showSettings = false;
   String? message;
 
   @override
@@ -118,7 +119,7 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
       final result = await channel.invokeMethod<Object?>(method, args);
       if (!mounted) return;
       if (method == 'pin') {
-        if (result == true) {
+        if (result == 'requested') {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text('请在系统弹窗中确认添加'),
@@ -137,7 +138,7 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
             ),
           );
         } else {
-          await showPinHelp(false);
+          await showPinHelp(false, unsupported: result == 'unsupported');
         }
         return;
       }
@@ -160,6 +161,7 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
 
   Future<void> showQuickConfig() async {
     if (busy) return;
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       busy = true;
       message = null;
@@ -181,62 +183,10 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
     try {
       final urls = await server.start();
       if (!mounted) return;
-      var selected = urls.first;
       await showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => StatefulBuilder(
-          builder: (context, update) => AlertDialog(
-            title: const Text('扫码快捷配置'),
-            content: SizedBox(
-              width: 300,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('用手机扫描二维码，在网页配置和测试 MQTT。两台设备需连接同一局域网，请保持此弹窗打开。'),
-                    const SizedBox(height: 16),
-                    Container(
-                      color: Colors.white,
-                      padding: const EdgeInsets.all(12),
-                      child: QrImageView(data: selected, size: 230),
-                    ),
-                    if (urls.length > 1)
-                      DropdownButton<String>(
-                        isExpanded: true,
-                        value: selected,
-                        items: urls
-                            .map(
-                              (url) => DropdownMenuItem(
-                                value: url,
-                                child: Text(Uri.parse(url).host),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (url) => update(() => selected = url!),
-                      ),
-                    const SizedBox(height: 12),
-                    SelectableText(
-                      selected,
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      '关闭后链接失效。仅在可信局域网使用。',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('完成并关闭'),
-              ),
-            ],
-          ),
-        ),
+        builder: (context) => QuickConfigDialog(urls: urls),
       );
     } catch (error) {
       if (mounted) {
@@ -253,27 +203,31 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> showPinHelp(bool requested) async {
+  Future<void> showPinHelp(bool requested, {bool unsupported = false}) async {
     // Some launchers accept the request but silently block it behind their own
     // shortcut permission. A true result does not prove that a widget was added.
     final openSettings = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('桌面快捷方式权限'),
+        title: Text(unsupported ? '请从桌面添加组件' : '添加桌面组件'),
+        scrollable: true,
         content: Text(
-          '${requested ? '请在系统弹窗中确认添加。如果没有弹窗，可能尚未允许创建桌面快捷方式。' : '未能请求添加桌面组件，可能是桌面不支持或权限受限。'}\n\n'
-          '前往应用信息 → 其他权限（或权限管理），开启「创建桌面快捷方式」，然后返回重试。'
-          '\n\n也可以长按桌面，从小部件列表中添加 Orbit。',
+          unsupported
+              ? '当前桌面不支持从应用内一键添加组件，这不是 Orbit 缺少运行时权限。\n\n'
+                    '请返回桌面，长按空白处进入编辑，打开「小部件」或「添加小部件」，在应用小部件中选择 Orbit 的「用量」或「Session 状态」。'
+              : '${requested ? '添加请求已交给桌面，但尚未确认组件已添加。' : '桌面未接受添加请求。'}\n\n'
+                    '可以返回桌面，长按空白处，从小部件列表中手动添加 Orbit。部分厂商另有「创建桌面快捷方式」开关；仅在系统提供该开关时检查它，普通应用权限页可能显示未请求权限。',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('关闭'),
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('去应用信息'),
-          ),
+          if (!unsupported)
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('去应用信息'),
+            ),
         ],
       ),
     );
@@ -293,11 +247,16 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  Widget statusCard(String section, String label, IconData icon) => Card(
+  Widget statusCard(
+    String section,
+    String label,
+    IconData icon, {
+    bool compact = false,
+  }) => Card(
     color: const Color(0xff102827),
     margin: const EdgeInsets.only(bottom: 14),
     child: Padding(
-      padding: const EdgeInsets.all(22),
+      padding: EdgeInsets.all(compact ? 12 : 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -348,180 +307,386 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
   );
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Orbit', style: TextStyle(fontWeight: FontWeight.w700)),
-      backgroundColor: Colors.transparent,
-      actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 16),
-          child: OutlinedButton.icon(
-            onPressed: busy || !loaded
-                ? null
-                : () => action(snapshot['active'] == true ? 'stop' : 'start'),
-            icon: Icon(
-              snapshot['active'] == true
-                  ? Icons.stop_circle_outlined
-                  : Icons.play_circle_outline,
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width >= 600 && size.height < 500;
+    final overview = <Widget>[
+      if (!compact)
+        const Text(
+          '你的工作状态，一眼可见。',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+        ),
+      const SizedBox(height: 10),
+      Text(
+        snapshot['connection'] as String? ?? '未连接',
+        style: const TextStyle(color: Color(0xff24634c)),
+      ),
+      Text(
+        snapshot['updated'] as String? ?? '尚未接收数据',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      const SizedBox(height: 20),
+      if (compact)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: statusCard('usage', '用量', Icons.data_usage, compact: true),
             ),
-            label: Text(snapshot['active'] == true ? '停止同步' : '开始同步'),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: statusCard(
+                'session',
+                'SESSION 状态',
+                Icons.terminal,
+                compact: true,
+              ),
+            ),
+          ],
+        )
+      else ...[
+        statusCard('usage', '用量', Icons.data_usage),
+        statusCard('session', 'SESSION 状态', Icons.terminal),
+      ],
+      const Text('点击卡片右上角，将两个组件分别添加到 Android 桌面。'),
+      const SizedBox(height: 28),
+    ];
+    final settings = <Widget>[
+      const Text(
+        'MQTT 连接',
+        style: TextStyle(fontSize: 21, fontWeight: FontWeight.w600),
+      ),
+      const SizedBox(height: 8),
+      const Text('亮屏时同步，息屏时暂停。用量约每分钟更新，Session 状态变化及时更新，可随时停止。'),
+      const SizedBox(height: 18),
+      Form(
+        key: form,
+        child: Column(
+          children: [
+            TextFormField(
+              controller: uri,
+              enabled: loaded && !busy,
+              autocorrect: false,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'MQTT 服务地址',
+                hintText: 'ssl://mqtt.example.com:8883',
+                helperText: 'TLS 使用 mqtts:// 或 ssl://，需填写端口',
+              ),
+              validator: (value) {
+                final parsed = Uri.tryParse(value?.trim() ?? '');
+                if (parsed == null ||
+                    !['ssl', 'tcp', 'mqtts', 'mqtt'].contains(parsed.scheme) ||
+                    parsed.host.isEmpty ||
+                    !parsed.hasPort ||
+                    parsed.port < 1 ||
+                    parsed.port > 65535 ||
+                    parsed.userInfo.isNotEmpty ||
+                    parsed.path.isNotEmpty ||
+                    parsed.hasQuery ||
+                    parsed.hasFragment) {
+                  return '请输入完整地址，例如 ssl://mqtt.example.com:8883';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: nodeId,
+              enabled: loaded && !busy,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                labelText: 'Node ID',
+                helperText: '与 Core 的 projection_routes 中 node_id 一致',
+              ),
+              validator: (value) =>
+                  RegExp(r'^[A-Za-z0-9_-]{1,64}$').hasMatch(value?.trim() ?? '')
+                  ? null
+                  : '使用 1–64 位字母、数字、下划线或短横线',
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: username,
+              enabled: loaded && !busy,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: '用户名（可选）'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: password,
+              enabled: loaded && !busy,
+              obscureText: hidden,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(
+                labelText: '密码（可选）',
+                suffixIcon: IconButton(
+                  tooltip: hidden ? '显示密码' : '隐藏密码',
+                  onPressed: () => setState(() => hidden = !hidden),
+                  icon: Icon(
+                    hidden
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
+                ),
+              ),
+              validator: (_) =>
+                  password.text.isNotEmpty && username.text.trim().isEmpty
+                  ? '使用密码时需要用户名'
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    ];
+    final controls = Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [
+        OutlinedButton.icon(
+          onPressed: busy || !loaded
+              ? null
+              : () => action('test', args: config, validate: true),
+          icon: const Icon(Icons.network_check),
+          label: const Text('测试连接'),
+        ),
+        OutlinedButton.icon(
+          onPressed: busy || !loaded ? null : showQuickConfig,
+          icon: const Icon(Icons.qr_code),
+          label: const Text('二维码'),
+        ),
+        FilledButton.icon(
+          onPressed: busy || !loaded
+              ? null
+              : () => action('save', args: config, validate: true),
+          icon: const Icon(Icons.save_outlined),
+          label: const Text('保存配置'),
         ),
       ],
-    ),
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
-        children: [
-          const Text(
-            '你的工作状态，一眼可见。',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            snapshot['connection'] as String? ?? '未连接',
-            style: const TextStyle(color: Color(0xff24634c)),
-          ),
-          Text(
-            snapshot['updated'] as String? ?? '尚未接收数据',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 20),
-          statusCard('usage', '用量', Icons.data_usage),
-          statusCard('session', 'SESSION 状态', Icons.terminal),
-          const Text('点击卡片右上角，将两个组件分别添加到 Android 桌面。'),
-          const SizedBox(height: 28),
-          const Text(
-            'MQTT 连接',
-            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          const Text('亮屏时同步，息屏时暂停。用量约每分钟更新，Session 状态变化及时更新，可随时停止。'),
-          const SizedBox(height: 18),
-          Form(
-            key: form,
-            child: Column(
-              children: [
-                TextFormField(
-                  controller: uri,
-                  enabled: loaded && !busy,
-                  autocorrect: false,
-                  keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'MQTT 服务地址',
-                    hintText: 'ssl://mqtt.example.com:8883',
-                    helperText: 'TLS 使用 mqtts:// 或 ssl://，需填写端口',
-                  ),
-                  validator: (value) {
-                    final parsed = Uri.tryParse(value?.trim() ?? '');
-                    if (parsed == null ||
-                        ![
-                          'ssl',
-                          'tcp',
-                          'mqtts',
-                          'mqtt',
-                        ].contains(parsed.scheme) ||
-                        parsed.host.isEmpty ||
-                        !parsed.hasPort ||
-                        parsed.port < 1 ||
-                        parsed.port > 65535 ||
-                        parsed.userInfo.isNotEmpty ||
-                        parsed.path.isNotEmpty ||
-                        parsed.hasQuery ||
-                        parsed.hasFragment) {
-                      return '请输入完整地址，例如 ssl://mqtt.example.com:8883';
-                    }
-                    return null;
-                  },
+    );
+    final feedback = <Widget>[
+      if (busy)
+        const Padding(
+          padding: EdgeInsets.only(top: 18),
+          child: LinearProgressIndicator(),
+        ),
+      if (message != null)
+        Padding(padding: const EdgeInsets.only(top: 16), child: Text(message!)),
+    ];
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Orbit',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        toolbarHeight: compact ? 48 : kToolbarHeight,
+        backgroundColor: Colors.transparent,
+        actions: [
+          if (compact) ...[
+            TextButton(
+              onPressed: () => setState(() => showSettings = false),
+              child: Text(
+                '状态',
+                style: TextStyle(
+                  fontWeight: !showSettings
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: nodeId,
-                  enabled: loaded && !busy,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Node ID',
-                    helperText: '与 Core 的 projection_routes 中 node_id 一致',
-                  ),
-                  validator: (value) =>
-                      RegExp(
-                        r'^[A-Za-z0-9_-]{1,64}$',
-                      ).hasMatch(value?.trim() ?? '')
-                      ? null
-                      : '使用 1–64 位字母、数字、下划线或短横线',
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() => showSettings = true),
+              child: Text(
+                '配置',
+                style: TextStyle(
+                  fontWeight: showSettings
+                      ? FontWeight.bold
+                      : FontWeight.normal,
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: username,
-                  enabled: loaded && !busy,
-                  autocorrect: false,
-                  decoration: const InputDecoration(labelText: '用户名（可选）'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: password,
-                  enabled: loaded && !busy,
-                  obscureText: hidden,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: InputDecoration(
-                    labelText: '密码（可选）',
-                    suffixIcon: IconButton(
-                      tooltip: hidden ? '显示密码' : '隐藏密码',
-                      onPressed: () => setState(() => hidden = !hidden),
-                      icon: Icon(
-                        hidden
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
-                    ),
-                  ),
-                  validator: (_) =>
-                      password.text.isNotEmpty && username.text.trim().isEmpty
-                      ? '使用密码时需要用户名'
-                      : null,
-                ),
-              ],
+              ),
+            ),
+            IconButton(
+              tooltip: '扫码快捷配置',
+              onPressed: busy || !loaded ? null : showQuickConfig,
+              icon: const Icon(Icons.qr_code),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: OutlinedButton.icon(
+              onPressed: busy || !loaded
+                  ? null
+                  : () => action(snapshot['active'] == true ? 'stop' : 'start'),
+              icon: Icon(
+                snapshot['active'] == true
+                    ? Icons.stop_circle_outlined
+                    : Icons.play_circle_outline,
+              ),
+              label: Text(snapshot['active'] == true ? '停止同步' : '开始同步'),
             ),
           ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
+        ],
+      ),
+      body: SafeArea(
+        child: compact
+            ? Column(
+                children: [
+                  Expanded(
+                    child: ListView(
+                      key: ValueKey(showSettings),
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      children: showSettings ? settings : overview,
+                    ),
+                  ),
+                  if (showSettings)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: controls,
+                      ),
+                    ),
+                  if (feedback.isNotEmpty)
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 64),
+                      child: SingleChildScrollView(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(children: feedback),
+                        ),
+                      ),
+                    ),
+                ],
+              )
+            : ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                children: [
+                  ...overview,
+                  ...settings,
+                  const SizedBox(height: 18),
+                  controls,
+                  ...feedback,
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class QuickConfigDialog extends StatefulWidget {
+  const QuickConfigDialog({super.key, required this.urls});
+  final List<String> urls;
+
+  @override
+  State<QuickConfigDialog> createState() => _QuickConfigDialogState();
+}
+
+class _QuickConfigDialogState extends State<QuickConfigDialog> {
+  late String selected = widget.urls.first;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final compact = size.width >= 600 && size.height < 500;
+    final details = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('用手机扫描二维码，在网页配置和测试 MQTT。两台设备需连接同一局域网，请保持此弹窗打开。'),
+        if (widget.urls.length > 1)
+          DropdownButton<String>(
+            isExpanded: true,
+            value: selected,
+            items: widget.urls
+                .map(
+                  (url) => DropdownMenuItem(
+                    value: url,
+                    child: Text(Uri.parse(url).host),
+                  ),
+                )
+                .toList(),
+            onChanged: (url) => setState(() => selected = url!),
+          ),
+        const SizedBox(height: 12),
+        SelectableText(selected, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 8),
+        const Text('关闭后链接失效。仅在可信局域网使用。', style: TextStyle(fontSize: 12)),
+      ],
+    );
+    Widget qr(double side) => Container(
+      color: Colors.white,
+      padding: const EdgeInsets.all(8),
+      child: QrImageView(data: selected, size: side),
+    );
+    if (compact) {
+      return Dialog.fullscreen(
+        child: SafeArea(
+          child: Column(
             children: [
-              OutlinedButton.icon(
-                onPressed: busy || !loaded
-                    ? null
-                    : () => action('test', args: config, validate: true),
-                icon: const Icon(Icons.network_check),
-                label: const Text('测试连接'),
+              SizedBox(
+                height: 48,
+                child: Row(
+                  children: [
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Text(
+                        '扫码快捷配置',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('完成并关闭'),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
               ),
-              OutlinedButton.icon(
-                onPressed: busy || !loaded ? null : showQuickConfig,
-                icon: const Icon(Icons.qr_code),
-                label: const Text('二维码'),
-              ),
-              FilledButton.icon(
-                onPressed: busy || !loaded
-                    ? null
-                    : () => action('save', args: config, validate: true),
-                icon: const Icon(Icons.save_outlined),
-                label: const Text('保存配置'),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final side = (constraints.maxHeight - 24).clamp(0.0, 280.0);
+                    return Row(
+                      children: [
+                        const SizedBox(width: 16),
+                        qr(side),
+                        const SizedBox(width: 24),
+                        Expanded(child: SingleChildScrollView(child: details)),
+                        const SizedBox(width: 20),
+                      ],
+                    );
+                  },
+                ),
               ),
             ],
           ),
-          if (busy)
-            const Padding(
-              padding: EdgeInsets.only(top: 18),
-              child: LinearProgressIndicator(),
-            ),
-          if (message != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Text(message!),
-            ),
-        ],
+        ),
+      );
+    }
+    return AlertDialog(
+      title: const Text('扫码快捷配置'),
+      content: SizedBox(
+        width: 300,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [qr(230), const SizedBox(height: 16), details],
+          ),
+        ),
       ),
-    ),
-  );
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('完成并关闭'),
+        ),
+      ],
+    );
+  }
 }

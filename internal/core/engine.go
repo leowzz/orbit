@@ -89,6 +89,7 @@ type Engine struct {
 	mu sync.Mutex
 
 	config          Config
+	agentDetails    map[string]*orbitv1.AgentState
 	agents          map[string]participantState
 	nodes           map[string]participantState
 	nodeProducts    map[string]*orbitv1.NodeState
@@ -148,6 +149,7 @@ func New(config Config) (*Engine, error) {
 	}
 	return &Engine{
 		config:         config,
+		agentDetails:   make(map[string]*orbitv1.AgentState),
 		agents:         make(map[string]participantState),
 		nodes:          make(map[string]participantState),
 		nodeProducts:   make(map[string]*orbitv1.NodeState),
@@ -200,6 +202,7 @@ func (e *Engine) ApplyAgentState(state *orbitv1.AgentState) error {
 			delete(e.codex, state.AgentId)
 		}
 	}
+	e.agentDetails[state.AgentId] = proto.Clone(state).(*orbitv1.AgentState)
 	e.agents[state.AgentId] = participantState{epoch: state.AgentEpoch, revision: state.Metadata.Revision, producedAt: producedAt}
 	return nil
 }
@@ -241,6 +244,9 @@ func (e *Engine) ApplyNodeState(now time.Time, state *orbitv1.NodeState) ([]*orb
 	e.nodeProducts[state.NodeId] = proto.Clone(state).(*orbitv1.NodeState)
 	// A reconnect always receives the current canonical snapshot, even during coalescing.
 	delete(e.lastAndroid, state.NodeId)
+	if route == nil {
+		return []*orbitv1.DeviceView{e.emptyNodeViewLocked(now, state.NodeId)}, nil
+	}
 	return e.projectNodeLocked(now, state.NodeId)
 }
 
@@ -672,4 +678,18 @@ func formatMetric(value uint64) string {
 		return fmt.Sprintf("%d.%d%s", whole, decimal, unit.suffix)
 	}
 	return fmt.Sprintf("%d", value)
+}
+
+// emptyNodeViewLocked also clears retained views after a restart when a Node no
+// longer has a persisted route. Caller holds e.mu.
+func (e *Engine) emptyNodeViewLocked(now time.Time, id string) *orbitv1.DeviceView {
+	e.viewRevision[id]++
+	until := now.Add(e.config.RetainFor)
+	return &orbitv1.DeviceView{
+		Metadata: &orbitv1.Metadata{MessageId: newID(), ProducerId: e.config.CoreID, Revision: e.viewRevision[id], ProducedAt: timestamppb.New(now), ExpiresAt: timestamppb.New(until)},
+		NodeId:   id, CoreEpoch: e.config.CoreEpoch, Freshness: orbitv1.Freshness_FRESHNESS_STALE, FreshUntil: timestamppb.New(now), RetainUntil: timestamppb.New(until),
+		Primary: &orbitv1.DisplaySlot{Text: "--"}, Secondary: &orbitv1.DisplaySlot{Text: "--"}, Footer: &orbitv1.DisplaySlot{Text: "--"},
+		Usage: &orbitv1.UsageView{Freshness: orbitv1.Freshness_FRESHNESS_STALE, FreshUntil: timestamppb.New(now)},
+		Codex: &orbitv1.CodexView{Freshness: orbitv1.Freshness_FRESHNESS_STALE, FreshUntil: timestamppb.New(now)},
+	}
 }

@@ -40,3 +40,8 @@ certs/
 # Runtime output
 *.log
 *.tmp
+
+# Core console local database
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

@@ -57,6 +57,7 @@ func LoadAgent(path string) (*AgentConfig, error) {
 
 func LoadCore(path string) (*CoreConfig, error) {
 	cfg := CoreConfig{
+		Console: ConsoleConfig{Listen: "127.0.0.1:7620", Database: "data/core.sqlite"},
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
 		NTP:     defaultNTPConfig(),
 		Logging: LoggingConfig{Level: "info"},
@@ -153,11 +154,29 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	if err := cfg.MQTT.validate(baseDir); err != nil {
 		return fmt.Errorf("mqtt: %w", err)
 	}
-	if len(cfg.ProjectionRoutes) == 0 {
-		return errors.New("projection_routes must contain at least one route")
+	host, port, err := net.SplitHostPort(cfg.Console.Listen)
+	if err != nil || host == "" || port == "" {
+		return errors.New("console.listen must be a host:port address")
 	}
+	if strings.TrimSpace(cfg.Console.Password) == "" {
+		return errors.New("console.password is required")
+	}
+	if strings.TrimSpace(cfg.Console.Database) == "" {
+		return errors.New("console.database is required")
+	}
+	if !filepath.IsAbs(cfg.Console.Database) {
+		cfg.Console.Database = filepath.Join(baseDir, cfg.Console.Database)
+	}
+	if err := cfg.ValidateRoutes(cfg.ProjectionRoutes); err != nil {
+		return err
+	}
+	return validateLogLevel(cfg.Logging.Level)
+}
 
-	for nodeID, route := range cfg.ProjectionRoutes {
+// ValidateRoutes checks editable routing against deployment observation policies.
+func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
+
+	for nodeID, route := range routes {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
@@ -186,7 +205,7 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	}
 
 	requiredPolicies := make(map[string]struct{})
-	for _, route := range cfg.ProjectionRoutes {
+	for _, route := range routes {
 		for _, input := range route.Inputs {
 			requiredPolicies[input.ObservationType] = struct{}{}
 		}
@@ -208,7 +227,7 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 			return fmt.Errorf("observation_policies contains unsupported type %q", name)
 		}
 	}
-	return validateLogLevel(cfg.Logging.Level)
+	return nil
 }
 
 func (cfg *WebNodeConfig) validate(baseDir string) error {

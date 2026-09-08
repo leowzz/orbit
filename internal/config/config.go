@@ -102,6 +102,7 @@ type CodexPrivacyConfig struct {
 }
 
 type CoreConfig struct {
+	Console             ConsoleConfig                `yaml:"console"`
 	Core                CoreIdentity                 `yaml:"core"`
 	NTP                 NTPConfig                    `yaml:"ntp"`
 	MQTT                MQTTConfig                   `yaml:"mqtt"`
@@ -132,18 +133,24 @@ type WebAuthConfig struct {
 	SessionTTL Duration `yaml:"session_ttl"`
 }
 
+type ConsoleConfig struct {
+	Listen   string `yaml:"listen"`
+	Database string `yaml:"database"`
+	Password string `yaml:"password"`
+}
+
 type CoreIdentity struct {
 	ID string `yaml:"id"`
 }
 
 type ProjectionRoute struct {
-	Profile string            `yaml:"profile"`
-	Inputs  []ProjectionInput `yaml:"inputs"`
+	Profile string            `yaml:"profile" json:"profile"`
+	Inputs  []ProjectionInput `yaml:"inputs" json:"inputs"`
 }
 
 type ProjectionInput struct {
-	AgentID         string `yaml:"agent_id"`
-	ObservationType string `yaml:"observation_type"`
+	AgentID         string `yaml:"agent_id" json:"agent_id"`
+	ObservationType string `yaml:"observation_type" json:"observation_type"`
 }
 
 type ObservationPolicy struct {

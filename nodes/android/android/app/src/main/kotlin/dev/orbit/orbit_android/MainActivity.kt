@@ -45,9 +45,13 @@ class MainActivity : FlutterActivity() {
                         val provider = if (call.arguments == "usage") UsageWidget::class.java else SessionWidget::class.java
                         val manager = getSystemService(AppWidgetManager::class.java)
                         try {
-                            result.success(manager.isRequestPinAppWidgetSupported && manager.requestPinAppWidget(ComponentName(this, provider), null, null))
+                            result.success(when {
+                                !manager.isRequestPinAppWidgetSupported -> "unsupported"
+                                manager.requestPinAppWidget(ComponentName(this, provider), null, null) -> "requested"
+                                else -> "rejected"
+                            })
                         } catch (_: SecurityException) {
-                            result.success(false)
+                            result.success("rejected")
                         }
                     }
                     "appSettings" -> {

@@ -18,7 +18,8 @@ RUN case "$BINARY" in orbit-agent|orbit-core|orbit-web) ;; *) exit 2 ;; esac \
 
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata \
+    && mkdir -p /app/data && chown 65532:65532 /app/data
 
 ENV TZ=Asia/Shanghai
 
