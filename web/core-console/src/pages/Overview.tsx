@@ -1,13 +1,8 @@
-import {
-  ArrowRight,
-  ArrowUpRight,
-  GitBranch,
-  Server,
-  Radio,
-} from "lucide-react";
+import { ArrowUpRight, GitBranch, Server, Radio } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { NetworkState, RouteDocument } from "../api";
-import { modelName, profileName } from "../api";
+import { modelName } from "../api";
+import RouteFlow from "../RouteFlow";
 import {
   Badge,
   DeviceIcon,
@@ -88,59 +83,7 @@ export default function Overview({
       <div className="overview-columns">
         <section>
           <SectionTitle title="数据流向" meta="LIVE ROUTING" link="/routes" />
-          <div className="panel flow-list">
-            {Object.entries(document.routes)
-              .slice(0, 5)
-              .map(([id, r]) => (
-                <div className="flow" key={id}>
-                  <div className="flow-inputs">
-                    {r.inputs.map((input) => (
-                      <div key={input.observation_type}>
-                        <span className="source-glyph">
-                          {input.observation_type === "usage" ? "U" : "C"}
-                        </span>
-                        <div>
-                          <strong>
-                            {state.agents.find((a) => a.id === input.agent_id)
-                              ?.state.hostLabel ?? input.agent_id}
-                          </strong>
-                          <small>{input.observation_type.toUpperCase()}</small>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flow-line">
-                    <i />
-                    <ArrowRight size={15} />
-                  </div>
-                  <div className="flow-destination">
-                    <DeviceIcon
-                      model={
-                        state.nodes.find((n) => n.nodeId === id)?.modelId ??
-                        "oled-128x32"
-                      }
-                    />
-                    <div>
-                      <strong>{id}</strong>
-                      <small>{profileName(r.profile)}</small>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            {!Object.keys(document.routes).length && (
-              <Empty
-                title="还没有数据流向"
-                action={
-                  <Link className="button" to="/routes">
-                    创建第一条规则
-                    <ArrowRight size={15} />
-                  </Link>
-                }
-              >
-                选择来源 Agent，把数据送到你的设备。
-              </Empty>
-            )}
-          </div>
+          <RouteFlow state={state} document={document} />
         </section>
         <section>
           <SectionTitle
