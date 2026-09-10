@@ -10,6 +10,7 @@ const elements = {
   connection: document.querySelector("#connection"),
   connectionLabel: document.querySelector("#connection-label"),
   updatedAt: document.querySelector("#updated-at"),
+  calendarDate: document.querySelector("#calendar-date"),
   cost: document.querySelector("#cost"),
   currency: document.querySelector("#currency"),
   tokens: document.querySelector("#tokens"),
@@ -224,6 +225,29 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatCalendarDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const weekday = new Intl.DateTimeFormat("zh-CN", { weekday: "long" }).format(date);
+  try {
+    const lunar = new Intl.DateTimeFormat("zh-CN-u-ca-chinese", { month: "long", day: "numeric" });
+    // Older WebViews may silently fall back to the Gregorian calendar.
+    if (lunar.resolvedOptions().calendar !== "chinese") return weekday;
+    const parts = lunar.formatToParts(date);
+    const month = parts.find(part => part.type === "month").value;
+    const day = Number(parts.find(part => part.type === "day").value);
+    const digits = "一二三四五六七八九十";
+    const lunarDay = day <= 10 ? `初${digits[day - 1]}`
+      : day < 20 ? `十${digits[day - 11]}`
+      : day === 20 ? "二十"
+      : day < 30 ? `廿${digits[day - 21]}` : "三十";
+    return `${weekday} · 农历${month}${lunarDay}`;
+  } catch (_) {
+    return weekday;
+  }
+}
+
 function fitMetric(element) {
   element.style.fontSize = "";
   let size = Number.parseFloat(getComputedStyle(element).fontSize);
@@ -345,6 +369,7 @@ function render(snapshot) {
   }
   latestSnapshot = snapshot;
   elements.updatedAt.textContent = formatDate(snapshot.produced_at || snapshot.received_at);
+  elements.calendarDate.textContent = formatCalendarDate(snapshot.produced_at || snapshot.received_at);
   elements.nodeID.textContent = `Node ${snapshot.node_id}`;
   elements.revision.textContent = `Revision ${snapshot.revision}`;
 

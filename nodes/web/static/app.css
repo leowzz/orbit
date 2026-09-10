@@ -327,6 +327,21 @@ body {
   white-space: nowrap;
 }
 
+.topbar-calendar {
+  display: none;
+}
+
+@media (min-width: 768px) and (orientation: landscape) {
+  .topbar-time {
+    max-width: calc(100% - 360px);
+  }
+
+  .topbar-calendar:not(:empty) {
+    display: inline;
+    margin-left: 12px;
+  }
+}
+
 .connection,
 .view-meta,
 footer {

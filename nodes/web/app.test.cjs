@@ -46,6 +46,37 @@ function client() {
   };
 }
 
+test("calendar labels include the weekday, lunar day boundaries, and leap months", () => {
+  const { context } = client();
+  const cases = [
+    [[2026, 8, 10], "星期四 · 农历七月廿九"],
+    [[2025, 6, 25], "星期五 · 农历闰六月初一"],
+    [[2026, 1, 17], "星期二 · 农历正月初一"],
+    [[2026, 1, 26], "星期四 · 农历正月初十"],
+    [[2026, 1, 27], "星期五 · 农历正月十一"],
+    [[2026, 2, 7], "星期六 · 农历正月十九"],
+    [[2026, 2, 8], "星期日 · 农历正月二十"],
+    [[2026, 2, 9], "星期一 · 农历正月廿一"],
+    [[2026, 2, 18], "星期三 · 农历正月三十"],
+  ];
+  for (const [date, expected] of cases) {
+    assert.equal(vm.runInContext(`formatCalendarDate(new Date(${date.join(",")}, 12))`, context), expected);
+  }
+  assert.equal(vm.runInContext('formatCalendarDate("")', context), "");
+  assert.equal(vm.runInContext('formatCalendarDate("invalid")', context), "");
+});
+
+test("unsupported lunar calendars retain the weekday without mislabeling Gregorian dates", () => {
+  const { context } = client();
+  vm.runInContext(`
+    const OriginalDateTimeFormat = Intl.DateTimeFormat;
+    Intl.DateTimeFormat = function(locale, options) {
+      return new OriginalDateTimeFormat("zh-CN", options);
+    };
+  `, context);
+  assert.equal(vm.runInContext("formatCalendarDate(new Date(2026, 8, 10, 12))", context), "星期四");
+});
+
 test("a buffered burst skips all historical snapshots and fetches the current state once", async () => {
   const c = client();
   for (let revision = 1; revision <= 1000; revision++) c.sources[0].emit("message", revision);

@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light" />
     <title>Orbit 实时状态</title>
     <link rel="icon" type="image/svg+xml" href="/orbit-icon.svg?v=20260904-icon1" />
-    <link rel="stylesheet" href="/app.css?v=20260904-icon1" />
+    <link rel="stylesheet" href="/app.css?v=20260910-calendar1" />
   </head>
   <body>
     <div class="auth-gate" id="auth-gate">
@@ -29,7 +29,9 @@
         </svg>
         <span>Orbit</span>
       </button>
-      <time class="topbar-time" id="updated-at">--</time>
+      <div class="topbar-time">
+        <time id="updated-at">--</time><span class="topbar-calendar" id="calendar-date"></span>
+      </div>
       <div class="topbar-actions">
         <button
           class="theme-toggle"
@@ -108,6 +110,6 @@
       <span id="node-id">Node --</span>
       <span id="revision">Revision --</span>
     </footer>
-    <script src="/app.js?v=20260904-theme1" defer></script>
+    <script src="/app.js?v=20260910-calendar1" defer></script>
   </body>
 </html>
