@@ -537,7 +537,17 @@ accepted" and "device view published" from Core, and "node state accepted"
 after the node connects.
 
 After startup, each enabled source is polled immediately and then at its own
-configured interval. A successful live chain has these messages in the broker:
+configured interval. Agent publishes observations only when business fields change,
+ignoring message metadata, collection timestamps, Codex session update timestamps,
+and session ordering. Usage day windows remain business fields. Unchanged
+observations are refreshed on the last scheduled poll before their TTL expires;
+with a TTL of at most two polling intervals, this can still require every poll.
+Agent state is published only when identity, source health, or error codes change;
+`last_success_at` alone does not trigger a message and reflects the latest success
+at the time the state was published. Failed publishes are retried on the next
+successful poll. Deduplication is per source and resets when the Agent restarts.
+
+A successful live chain has these messages in the broker:
 
 | Topic | Publisher | Consumer | Retained |
 | --- | --- | --- | --- |
