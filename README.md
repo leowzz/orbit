@@ -549,3 +549,9 @@ The Go service contracts and routing rules are described in the source and
 [docs/design.md](docs/design.md). The OLED-specific build and hardware notes
 are also kept in
 [nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md](nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md).
+
+The next App milestone is described in the
+[App Node and personal inbox implementation handoff](docs/app-node-handoff.md)
+(Chinese, 2026-10-07). It covers Android first, future macOS/Windows clients,
+durable messages, attachments, and foreground synchronization. These are planned
+capabilities; the handoff distinguishes them from the current V1 implementation.
