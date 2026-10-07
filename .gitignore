@@ -2,6 +2,7 @@
 .DS_Store
 .idea/
 .vscode/
+*.iml
 *.swp
 *.swo
 
@@ -14,6 +15,21 @@ coverage-*.out
 *.test
 *.prof
 
+# JavaScript and TypeScript tooling
+node_modules/
+*.tsbuildinfo
+
+# Flutter and Android tooling
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+.gradle/
+/nodes/android/android/local.properties
+/nodes/android/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+
 # Python and PlatformIO tooling
 .venv/
 __pycache__/
@@ -23,6 +39,7 @@ __pycache__/
 
 # Repository-local tools
 .tools/
+.tmp/
 
 # Local environment, configuration, and credentials
 .env
@@ -38,5 +55,6 @@ certs/
 *.pfx
 
 # Runtime output
+/configs/data/
 *.log
 *.tmp
