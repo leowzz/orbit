@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -16,6 +18,109 @@ import (
 	"orbit/internal/config"
 	"orbit/internal/inbox"
 )
+
+func TestDeleteSeededDevicesPreservesMessagesAndSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	store, err := inbox.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	token := strings.Repeat("d", 32)
+	digest := sha256.Sum256([]byte(token))
+	cfg := config.AppConfig{DataDir: dir, Devices: map[string]config.AppDevice{
+		"seed":    {TokenSHA256: hex.EncodeToString(digest[:])},
+		"retired": {TokenSHA256: strings.Repeat("a", 64), Revoked: true},
+	}}
+	s, err := New(store, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.Apply(context.Background(), "seed", inbox.Operation{ID: uuid.NewString(), ItemID: uuid.NewString(), Type: "create", Kind: "text", Body: "keep this message"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	public := httptest.NewServer(s.Handler())
+	defer public.Close()
+	req, _ := http.NewRequest("GET", public.URL+"/api/v1/events", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	stream, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
+	reader := bufio.NewReader(stream.Body)
+	if line, _ := reader.ReadString('\n'); line != "event: sync\n" {
+		t.Fatal(line)
+	}
+	for _, id := range []string{"seed", "retired"} {
+		w := httptest.NewRecorder()
+		s.AdminHandler().ServeHTTP(w, httptest.NewRequest("DELETE", "/api/app/devices/"+id, nil))
+		if w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	done := make(chan struct{})
+	go func() { _, _ = io.Copy(io.Discard, reader); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("deleted device SSE remained open")
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := inbox.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	restarted, err := New(reopened, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, api := range []*Server{s, restarted} {
+		listed := httptest.NewRecorder()
+		api.AdminHandler().ServeHTTP(listed, httptest.NewRequest("GET", "/api/app/devices", nil))
+		if !bytes.Contains(listed.Body.Bytes(), []byte(`"devices":[]`)) {
+			t.Fatal("deleted device returned", listed.Body.String())
+		}
+		for _, cookie := range []bool{false, true} {
+			r := httptest.NewRequest("GET", "/api/v1/status", nil)
+			if cookie {
+				r.AddCookie(&http.Cookie{Name: browserCookie, Value: token})
+			} else {
+				r.Header.Set("Authorization", "Bearer "+token)
+			}
+			w := httptest.NewRecorder()
+			api.Handler().ServeHTTP(w, r)
+			if w.Code != 401 {
+				t.Fatal("deleted credential accepted", w.Code)
+			}
+		}
+	}
+	page, err := reopened.Snapshot(context.Background(), "", nil, "", 100)
+	if err != nil || len(page.Items) != 1 || page.Items[0].ID != item.ID || page.Items[0].DeletedAt != "" {
+		t.Fatal("device deletion changed shared messages", err)
+	}
+}
+
+func TestDeleteDeviceStorageFailureKeepsAuthorization(t *testing.T) {
+	store, err := inbox.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(store, config.AppConfig{Devices: map[string]config.AppDevice{"seed": {Label: "keep"}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+	w := httptest.NewRecorder()
+	s.AdminHandler().ServeHTTP(w, httptest.NewRequest("DELETE", "/api/app/devices/seed", nil))
+	if w.Code != 503 || s.devices["seed"].Label != "keep" {
+		t.Fatal("failed persistence removed the device", w.Code)
+	}
+}
 
 func TestAdminDevicesPersistRotateRevokeAndSync(t *testing.T) {
 	dir := t.TempDir()

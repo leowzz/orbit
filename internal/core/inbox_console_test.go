@@ -70,6 +70,18 @@ func TestInboxConsoleWithoutMQTTKeepsAuthorizationBoundaries(t *testing.T) {
 	if w := call("GET", "/api/app/devices", "", nil, device["token"]); w.Code != 401 {
 		t.Fatal("device authorized admin API", w.Code)
 	}
+	if w := call("DELETE", "/api/app/devices/"+device["id"], "", nil, device["token"]); w.Code != 401 {
+		t.Fatal("device token authorized deletion", w.Code)
+	}
+	if w := call("DELETE", "/api/app/devices/"+device["id"], "", cookie, ""); w.Code != 200 {
+		t.Fatal("admin deletion failed", w.Code)
+	}
+	if w := call("GET", "/api/v1/status", "", nil, device["token"]); w.Code != 401 {
+		t.Fatal("deleted device still authorized", w.Code)
+	}
+	if w := call("DELETE", "/api/app/devices/"+device["id"], "", cookie, ""); w.Code != 404 {
+		t.Fatal("missing device deletion", w.Code)
+	}
 	if w := call("GET", "/inbox/", "", nil, ""); w.Code != 200 {
 		t.Fatal(w.Code)
 	}

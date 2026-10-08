@@ -222,6 +222,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	}
 	mux.Handle("GET /api/app/", admin)
 	mux.Handle("POST /api/app/", admin)
+	mux.Handle("DELETE /api/app/", admin)
 	mux.Handle("GET /", coreconsole.Handler())
 	mux.HandleFunc("POST /api/auth/login", auth.login)
 	mux.HandleFunc("POST /api/auth/logout", auth.logout)

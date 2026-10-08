@@ -48,6 +48,7 @@ func (s *Server) AdminHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/app/devices", s.listDevices)
 	mux.HandleFunc("POST /api/app/devices", s.createDevice)
+	mux.HandleFunc("DELETE /api/app/devices/{id}", s.deleteDevice)
 	mux.HandleFunc("POST /api/app/devices/{id}/{action}", s.changeDevice)
 	mux.HandleFunc("GET /api/app/items", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -184,4 +185,35 @@ func (s *Server) changeDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	s.notify()
 	write(w, 200, map[string]string{"id": id, "token": token})
+}
+
+func (s *Server) deleteDevice(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	s.mu.Lock()
+	if _, ok := s.devices[id]; !ok {
+		s.mu.Unlock()
+		failure(w, &inbox.Fault{Code: "not_found"})
+		return
+	}
+	next := make(map[string]config.AppDevice, len(s.devices)-1)
+	for key, device := range s.devices {
+		if key != id {
+			next[key] = device
+		}
+	}
+	raw, err := json.Marshal(next)
+	if err == nil {
+		err = s.store.SaveDevices(r.Context(), raw)
+	}
+	if err == nil {
+		s.devices = next
+		delete(s.activity, id)
+	}
+	s.mu.Unlock()
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	s.notify()
+	write(w, 200, map[string]string{"id": id})
 }

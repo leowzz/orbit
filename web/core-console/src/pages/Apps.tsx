@@ -51,11 +51,14 @@ export default function Apps() {
     [secret, setSecret] = useState<{ id: string; token: string } | null>(null),
     [editor, setEditor] = useState<{ item?: Item } | null>(null);
   const [deviceError, setDeviceError] = useState("");
+  const devicesRequest = useRef(0);
   const itemsRequest = useRef(0);
   const refreshDevices = useCallback(async () => {
+    const request = ++devicesRequest.current;
     const d = await api<{ enabled: boolean; devices: AppDevice[] }>(
       "/app/devices",
     );
+    if (request !== devicesRequest.current) return;
     setEnabled(d.enabled);
     setDevices(d.devices ?? []);
   }, []);
@@ -114,12 +117,17 @@ export default function Apps() {
       setBusy(false);
     }
   }
-  async function deviceAction(d: AppDevice, action: string) {
+  async function deviceAction(
+    d: AppDevice,
+    action: "revoke" | "rotate" | "delete",
+  ) {
     if (
       !window.confirm(
-        action === "revoke"
-          ? `撤销「${d.label}」的访问？此设备将立即断开，已有收件箱内容会保留。`
-          : `为「${d.label}」生成新令牌？旧令牌将立即失效。`,
+        action === "delete"
+          ? `删除设备「${d.label || d.id}」？此设备将立即失去访问权限，已有消息会保留。再次使用需重新添加设备。`
+          : action === "revoke"
+            ? `撤销「${d.label}」的访问？此设备将立即断开，已有收件箱内容会保留。`
+            : `为「${d.label}」生成新令牌？旧令牌将立即失效。`,
       )
     )
       return;
@@ -127,8 +135,8 @@ export default function Apps() {
     setError("");
     try {
       const result = await api<{ id: string; token: string }>(
-        `/app/devices/${d.id}/${action}`,
-        { method: "POST" },
+        `/app/devices/${encodeURIComponent(d.id)}${action === "delete" ? "" : `/${action}`}`,
+        { method: action === "delete" ? "DELETE" : "POST" },
       );
       if (result.token) setSecret(result);
       await refreshDevices();
@@ -292,6 +300,13 @@ export default function Apps() {
                         撤销访问
                       </button>
                     )}
+                    <button
+                      className="button secondary danger"
+                      disabled={busy}
+                      onClick={() => deviceAction(d, "delete")}
+                    >
+                      删除设备
+                    </button>
                   </div>
                 </article>
               ))}

@@ -189,7 +189,13 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, node string) {
 	digest := hex.EncodeToString(hash[:])
 	s.touchLocked(node).Connections++
 	s.mu.Unlock()
-	defer func() { s.mu.Lock(); s.touchLocked(node).Connections--; s.mu.Unlock() }()
+	defer func() {
+		s.mu.Lock()
+		if activity := s.activity[node]; activity != nil {
+			activity.Connections--
+		}
+		s.mu.Unlock()
+	}()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("X-Accel-Buffering", "no")
 	rc := http.NewResponseController(w)
