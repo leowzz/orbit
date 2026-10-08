@@ -90,7 +90,7 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 1 {
+	if version > 2 {
 		return errors.New("inbox database is newer than this Core")
 	}
 	tx, err := s.db.Begin()
@@ -105,7 +105,8 @@ func (s *Store) migrate() error {
  CREATE INDEX IF NOT EXISTS changes_item_seq ON changes(item_id,seq);
  CREATE TABLE IF NOT EXISTS receipts (node_id TEXT NOT NULL, operation_id TEXT NOT NULL, digest TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(node_id,operation_id));
  CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, owner TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, created_at INTEGER NOT NULL);
- PRAGMA user_version=1;`)
+ CREATE TABLE IF NOT EXISTS app_registry (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
+ PRAGMA user_version=2;`)
 	if err != nil {
 		return err
 	}

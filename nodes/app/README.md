@@ -1,5 +1,9 @@
 # Orbit App
 
+Android 统一显示为 **Orbit**。底部「收件箱」管理文本、待办和图片；「状态与组件」提供用量/Session 预览、桌面组件、MQTT 连接测试、二维码配置和后台同步。
+
+沿用 `dev.orbit.orbit_android` 应用身份，可覆盖升级原 Android 版本并保留 MQTT 配置与已放置的小组件。收件箱与组件分别使用 HTTPS 设备令牌和原 MQTT 配置，后台省电策略沿用组件实现。`nodes/android` 作为共享功能模块复用，正式 APK 从本目录构建。
+
 Android 优先的个人收件箱。顶部用量和会话摘要独立更新；下方浏览、复制、编辑文本，
 完成/撤销待办，发送和查看图片。打开应用后同步，后台通知尚未提供。
 
@@ -14,7 +18,7 @@ Android 优先的个人收件箱。顶部用量和会话摘要独立更新；下
 本次使用 Flutter 3.44.8 / Dart 3.12.2；实际插件版本锁定在 pubspec.lock：
 ChangeNotifier、sqflite（Windows 使用 sqflite_common_ffi）、flutter_secure_storage、
 image_picker。Flutter 工程共享 Android/macOS/Windows，首版验收以 Android 为主。
-Android minSdk 使用 Flutter 默认值 24；本次在 Android 8 / API 26 ARM64 模拟器验证。
+Android 最低 Android 8 / API 26，以支持原有桌面组件和前台同步服务。
 
 ```sh
 cd nodes/app
@@ -41,6 +45,10 @@ Java 17，安装锁定依赖后执行 `make test-app` 和 `make build-app`。
 
 ## 连接服务
 
+在管理台「App 与收件箱」添加设备（或重置令牌）后，使用 Android App 连接页的
+「扫码填写」扫描弹窗二维码，地址和令牌会自动填入，检查后点击「连接」。二维码仅在
+此次凭据弹窗中显示；不要分享。相机权限只在扫码时申请，也可随时返回手动填写。
+
 首次打开填写服务地址和**这台设备独立的令牌**。生产只接受 HTTPS；debug 构建允许
 localhost、127.0.0.1、10.0.2.2（Android 模拟器宿主机）和 ::1 的 HTTP 测试地址。
 令牌保存在系统安全存储。每个“服务地址 + 令牌”使用独立的缓存和队列；切换连接
@@ -57,7 +65,7 @@ openssl rand -hex 32 > configs/secrets/phone-01-token
 python3 -c 'import hashlib,pathlib; print(hashlib.sha256(pathlib.Path("configs/secrets/phone-01-token").read_text().strip().encode()).hexdigest())'
 ```
 
-把最后输出的摘要填入 `app.devices.phone-01.token_sha256`，令牌本身通过私有渠道输入 App。
+以上手动配置仅用于首次导入。日常使用可直接在管理台「App 与收件箱 → 添加设备」生成令牌，将地址与令牌填入 App。更换令牌与撤销访问即时生效。
 撤销设备：设置 `revoked: true` 或删除设备配置并重启 Core。不要将令牌放进 URL、日志或仓库。
 仅收件箱可省略 projection_routes/observation_policies；管理台仍需设置 console.password。
 状态摘要在 Core 管理台新增对应设备的 `overview-app` 路由并选择数据源。

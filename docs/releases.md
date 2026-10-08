@@ -48,7 +48,7 @@ is required. Repository/package policy must allow the workflow to write packages
 
 For a local signed APK, export `ANDROID_KEYSTORE_PATH` (absolute path),
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`, then
-run `flutter build apk --release` from `nodes/android`. Release builds fail without
+run `flutter build apk --release` from `nodes/app`. Release builds fail without
 these values; debug builds need no release credentials.
 
 ## Verify downloads and images

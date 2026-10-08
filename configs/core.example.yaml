@@ -7,6 +7,7 @@ core:
 # Manage projection routes in the console; deployment settings remain in this YAML.
 console:
   password: change-me  # Required; replace before running.
+  # session_hours: 72  # Login lifetime in hours; defaults to 3 days. Restart Core after changing.
   # listen: 127.0.0.1:7620
   # database: data/core.sqlite
 
@@ -49,8 +50,9 @@ observation_policies:
 
 # Optional personal inbox API. Terminate HTTPS at your reverse proxy.
 # Each installation receives its own random token (at least 32 characters).
-# Store ONLY its SHA-256 hex digest here. Removing/revoking a device takes effect
-# after restarting Core and closes its existing SSE connection.
+# Devices below are imported once when the App registry is first created.
+# Afterwards, add devices and rotate/revoke tokens in the Core console.
+# Only SHA-256 digests are persisted; new tokens are shown once.
 # app:
 #   listen: 0.0.0.0:7622
 #   data_dir: ../data/app

@@ -149,7 +149,7 @@ dev-app:
 	cd nodes/app && $(FLUTTER) run
 
 test-app:
-	cd nodes/app && $(FLUTTER) analyze && $(FLUTTER) test
+	cd nodes/app && $(FLUTTER) analyze && $(FLUTTER) test test ../android/test
 
 build-app:
 	cd nodes/app && $(FLUTTER) build apk --debug

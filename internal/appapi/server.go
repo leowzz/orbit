@@ -21,16 +21,32 @@ import (
 )
 
 type Server struct {
-	store   *inbox.Store
-	devices map[string]config.AppDevice
-	status  func(string) json.RawMessage
-	files   string
-	mu      sync.Mutex
-	wake    chan struct{}
+	store    *inbox.Store
+	devices  map[string]config.AppDevice
+	activity map[string]*deviceActivity
+	status   func(string) json.RawMessage
+	files    string
+	mu       sync.Mutex
+	wake     chan struct{}
 }
 
-func New(store *inbox.Store, cfg config.AppConfig, status func(string) json.RawMessage) *Server {
-	return &Server{store: store, devices: cfg.Devices, status: status, files: cfg.DataDir + "/attachments", wake: make(chan struct{})}
+func New(store *inbox.Store, cfg config.AppConfig, status func(string) json.RawMessage) (*Server, error) {
+	seed, err := json.Marshal(cfg.Devices)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := store.DeviceRegistry(context.Background(), seed)
+	if err != nil {
+		return nil, err
+	}
+	devices := map[string]config.AppDevice{}
+	if err := json.Unmarshal(raw, &devices); err != nil {
+		return nil, err
+	}
+	if devices == nil {
+		devices = map[string]config.AppDevice{}
+	}
+	return &Server{store: store, devices: devices, activity: map[string]*deviceActivity{}, status: status, files: cfg.DataDir + "/attachments", wake: make(chan struct{})}, nil
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -39,7 +55,10 @@ func (s *Server) Handler() http.Handler {
 		if s.status != nil {
 			value = s.status(node)
 		}
-		write(w, 200, map[string]any{"node_id": node, "label": s.devices[node].Label, "view": value})
+		s.mu.Lock()
+		label := s.devices[node].Label
+		s.mu.Unlock()
+		write(w, 200, map[string]any{"node_id": node, "label": label, "view": value})
 	}))
 	mux.HandleFunc("POST /api/v1/operations", s.auth(s.operation))
 	mux.HandleFunc("GET /api/v1/sync/snapshot", s.auth(s.snapshot))
@@ -60,17 +79,22 @@ func (s *Server) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 			return
 		}
 		digest := sha256.Sum256([]byte(token))
+		s.mu.Lock()
 		for node, device := range s.devices {
 			want, err := hex.DecodeString(device.TokenSHA256)
 			if err == nil && subtle.ConstantTimeCompare(digest[:], want) == 1 {
 				if device.Revoked {
+					s.mu.Unlock()
 					failure(w, &inbox.Fault{Code: "device_revoked"})
 					return
 				}
+				s.touchLocked(node).LastSeen = time.Now().UTC().Format(time.RFC3339)
+				s.mu.Unlock()
 				next(w, r, node)
 				return
 			}
 		}
+		s.mu.Unlock()
 		failure(w, &inbox.Fault{Code: "unauthenticated"})
 	}
 }
@@ -96,7 +120,7 @@ func (s *Server) operation(w http.ResponseWriter, r *http.Request, node string) 
 	s.notify()
 	write(w, 200, item)
 }
-func (s *Server) snapshot(w http.ResponseWriter, r *http.Request, _ string) {
+func (s *Server) snapshot(w http.ResponseWriter, r *http.Request, node string) {
 	q := r.URL.Query()
 	var at *int64
 	if q.Has("at") {
@@ -113,9 +137,10 @@ func (s *Server) snapshot(w http.ResponseWriter, r *http.Request, _ string) {
 		failure(w, err)
 		return
 	}
+	s.recordSync(node, strconv.FormatInt(page.Cursor, 10))
 	write(w, 200, page)
 }
-func (s *Server) changes(w http.ResponseWriter, r *http.Request, _ string) {
+func (s *Server) changes(w http.ResponseWriter, r *http.Request, node string) {
 	q := r.URL.Query()
 	after, err := strconv.ParseInt(q.Get("after"), 10, 64)
 	if err != nil {
@@ -128,6 +153,7 @@ func (s *Server) changes(w http.ResponseWriter, r *http.Request, _ string) {
 		failure(w, err)
 		return
 	}
+	s.recordSync(node, strconv.FormatInt(page.Cursor, 10))
 	write(w, 200, page)
 }
 func (s *Server) notify() {
@@ -137,7 +163,13 @@ func (s *Server) notify() {
 	s.wake = make(chan struct{})
 }
 func (s *Server) subscribe() <-chan struct{} { s.mu.Lock(); defer s.mu.Unlock(); return s.wake }
-func (s *Server) events(w http.ResponseWriter, r *http.Request, _ string) {
+func (s *Server) events(w http.ResponseWriter, r *http.Request, node string) {
+	s.mu.Lock()
+	hash := sha256.Sum256([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")))
+	digest := hex.EncodeToString(hash[:])
+	s.touchLocked(node).Connections++
+	s.mu.Unlock()
+	defer func() { s.mu.Lock(); s.touchLocked(node).Connections--; s.mu.Unlock() }()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("X-Accel-Buffering", "no")
 	rc := http.NewResponseController(w)
@@ -147,6 +179,12 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, _ string) {
 		// Subscribe before reading the watermark. Notifications never acknowledge
 		// client data; each connection/heartbeat triggers an incremental catch-up.
 		wake := s.subscribe()
+		s.mu.Lock()
+		device := s.devices[node]
+		s.mu.Unlock()
+		if device.Revoked || device.TokenSHA256 != digest {
+			return
+		}
 		generation, cursor, err := s.store.Watermark(r.Context())
 		if err != nil {
 			return

@@ -21,9 +21,8 @@ export default function Nodes({
   return (
     <>
       <PageHead
-        eyebrow="02 / CONNECTED DEVICES"
-        title="Nodes"
-        description="每一块屏幕，每一个工作台。查看设备身份与当前的数据来源。"
+        title="接收设备"
+        description="查看接收数据的设备，以及当前使用的转发规则。"
       />
       <div className="toolbar">
         <div className="tabs">

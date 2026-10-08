@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqlite;
@@ -10,6 +11,9 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'inbox_controller.dart';
 import 'inbox_screen.dart';
 import 'local_store.dart';
+import 'orbit_home.dart';
+import 'connection_config.dart';
+import 'scan_connection_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -129,6 +133,10 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
       ),
       scaffoldBackgroundColor: const Color(0xfffafbf9),
       appBarTheme: const AppBarTheme(
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarIconBrightness: Brightness.dark,
+          statusBarBrightness: Brightness.light,
+        ),
         backgroundColor: Color(0xfffafbf9),
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
@@ -166,13 +174,16 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
               ),
             ),
           )
-        : controller == null
-        ? ConnectionScreen(onConnect: _connect)
-        : Builder(
-            builder: (context) => InboxScreen(
-              controller: controller!,
-              onSettings: () => _settings(context),
-            ),
+        : OrbitHome(
+            widgetsEnabled: Platform.isAndroid,
+            inbox: controller == null
+                ? ConnectionScreen(onConnect: _connect)
+                : Builder(
+                    builder: (context) => InboxScreen(
+                      controller: controller!,
+                      onSettings: () => _settings(context),
+                    ),
+                  ),
           ),
   );
 }
@@ -198,19 +209,11 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
   }
 
   Future<void> connect() async {
-    final url = Uri.tryParse(server.text.trim());
-    final local =
-        kDebugMode &&
-        url != null &&
-        ['localhost', '127.0.0.1', '10.0.2.2', '::1'].contains(url.host);
-    if (url == null ||
-        url.host.isEmpty ||
-        (url.scheme != 'https' && !(local && url.scheme == 'http')) ||
-        url.userInfo.isNotEmpty ||
-        url.hasQuery ||
-        url.hasFragment ||
-        token.text.trim().length < 32) {
-      setState(() => error = '请输入 HTTPS 服务地址和有效的设备令牌');
+    late final ConnectionConfig config;
+    try {
+      config = ConnectionConfig.parse(server.text, token.text);
+    } on FormatException catch (e) {
+      setState(() => error = e.message);
       return;
     }
     setState(() {
@@ -218,15 +221,25 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
       error = null;
     });
     try {
-      await widget.onConnect({
-        'server': url.toString().replaceFirst(RegExp(r'/+$'), ''),
-        'token': token.text.trim(),
-      });
+      await widget.onConnect(config.toJson());
     } catch (_) {
       if (mounted) setState(() => error = '无法保存连接，请重试');
     } finally {
       if (mounted) setState(() => saving = false);
     }
+  }
+
+  Future<void> scan() async {
+    FocusScope.of(context).unfocus();
+    final config = await Navigator.of(context).push<ConnectionConfig>(
+      MaterialPageRoute(builder: (_) => const ScanConnectionScreen()),
+    );
+    if (!mounted || config == null) return;
+    setState(() {
+      server.text = config.server;
+      token.text = config.token;
+      error = null;
+    });
   }
 
   @override
@@ -251,6 +264,14 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               style: TextStyle(height: 1.6),
             ),
             const SizedBox(height: 32),
+            if (defaultTargetPlatform == TargetPlatform.android) ...[
+              OutlinedButton.icon(
+                onPressed: saving ? null : scan,
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('扫码填写'),
+              ),
+              const SizedBox(height: 20),
+            ],
             TextField(
               controller: server,
               keyboardType: TextInputType.url,

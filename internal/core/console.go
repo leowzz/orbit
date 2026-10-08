@@ -199,10 +199,22 @@ func (e *Engine) consoleState(now time.Time) map[string]any {
 	return map[string]any{"core_id": e.config.CoreID, "core_epoch": e.config.CoreEpoch, "agents": agents, "nodes": nodes, "now": now}
 }
 
-func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig) http.Handler {
-	auth := newConsoleAuth(cfg.Console.Password)
+func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, app ...http.Handler) http.Handler {
+	auth := newConsoleAuth(cfg.Console.Password, time.Duration(cfg.Console.SessionHours)*time.Hour)
 	startedAt := time.Now().UTC()
 	mux := http.NewServeMux()
+	admin := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" && r.URL.Path == "/api/app/devices" {
+			writeConsoleJSON(w, map[string]any{"enabled": false})
+			return
+		}
+		http.Error(w, "App service is disabled", http.StatusServiceUnavailable)
+	}))
+	if len(app) > 0 && app[0] != nil {
+		admin = app[0]
+	}
+	mux.Handle("GET /api/app/", admin)
+	mux.Handle("POST /api/app/", admin)
 	mux.Handle("GET /", coreconsole.Handler())
 	mux.HandleFunc("POST /api/auth/login", auth.login)
 	mux.HandleFunc("POST /api/auth/logout", auth.logout)
@@ -214,7 +226,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig) h
 		for kind, policy := range cfg.ObservationPolicies {
 			policies[kind] = map[string]string{"max_ttl": policy.MaxTTL.Duration.String(), "max_future_skew": policy.MaxFutureSkew.Duration.String()}
 		}
-		writeConsoleJSON(w, map[string]any{"started_at": startedAt, "policies": policies, "session_hours": 24})
+		writeConsoleJSON(w, map[string]any{"started_at": startedAt, "policies": policies, "session_hours": cfg.Console.SessionHours})
 	})
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {
 		writeConsoleJSON(w, runner.engine.consoleState(runner.now()))

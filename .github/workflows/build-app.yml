@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/build-app.yml"
       - "nodes/app/**"
+      - "nodes/android/**"
+      - "proto/**"
       - "Makefile"
   push:
     branches:
@@ -14,6 +16,8 @@ on:
     paths:
       - ".github/workflows/build-app.yml"
       - "nodes/app/**"
+      - "nodes/android/**"
+      - "proto/**"
       - "Makefile"
   workflow_dispatch:
 
@@ -49,6 +53,7 @@ jobs:
             nodes/app/android/gradle.properties
             nodes/app/android/gradle/wrapper/gradle-wrapper.properties
             nodes/app/pubspec.lock
+            nodes/android/android/**/*.gradle.kts
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -66,6 +71,10 @@ jobs:
 
       - name: Build debug APK
         run: make build-app
+
+      - name: Test widget service
+        working-directory: nodes/app/android
+        run: ./gradlew :app:testDebugUnitTest
 
       - name: Upload Android APK
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

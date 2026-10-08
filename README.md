@@ -271,10 +271,13 @@ console:
   listen: 127.0.0.1:7620
   database: data/core.sqlite
   password: replace-with-your-password
+  session_hours: 72  # Optional; defaults to 3 days.
 ```
 
-The password is required. The login page creates a 24-hour HttpOnly session
-Cookie; logout invalidates the session, and Core restart requires a new login.
+The password is required. `console.session_hours` sets the login lifetime in
+hours (a positive integer), defaulting to 72 hours (3 days). Restart Core after
+changing it. Both the HttpOnly session Cookie and server-side expiry use this
+duration; logout invalidates the session, and Core restart requires a new login.
 The Core frontend stores neither passwords nor tokens in local storage. Basic
 Auth is not accepted. Use HTTPS or an SSH tunnel for remote access.
 
@@ -689,7 +692,8 @@ proto/orbit/v1/         versioned wire schemas
 gen/go/                 generated Go Protobuf bindings
 nodes/display/          shared display firmware and model/variant delivery units
 nodes/web/              browser display node, HTTP/SSE server, and static UI
-nodes/android/          Flutter Android app and home screen widgets
+nodes/app/              Unified Flutter inbox and Android widgets app
+nodes/android/          Shared Android widget service, settings UI, and tests
 web/core-console/       independent React/TypeScript console and Go embed bridge
 deploy/                 published-image Compose deployment
 configs/                non-sensitive host configuration examples

@@ -46,6 +46,52 @@ void main() {
       final composer = tester.getRect(find.byType(TextField));
       expect(summary.top, lessThan(100));
       expect(composer.bottom, greaterThan(680));
+      final message = find.text('整理本周的想法与待办');
+      final position = tester.getRect(message);
+      for (final operation in ['set_completed', 'update', 'delete']) {
+        await tester.runAsync(
+          () => c.submit(
+            operation,
+            item: c.items.single,
+            completed: operation == 'set_completed' ? true : null,
+            body: operation == 'update' ? '修改后的内容' : null,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.getRect(message), position);
+        expect(find.text('待发送'), findsNothing);
+        expect(find.textContaining('待同步'), findsOneWidget);
+        expect(
+          tester.widget<Checkbox>(find.byType(Checkbox)).onChanged,
+          isNull,
+        );
+        if (operation == 'set_completed') {
+          expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+        }
+        // Simulate acknowledgment: the temporary state must disappear in place.
+        await tester.runAsync(() async {
+          await local.acknowledge(c.pending.single['id'], c.items.single);
+          await c.load();
+        });
+        await tester.pumpAndSettle();
+        expect(tester.getRect(message), position);
+        expect(find.textContaining('待同步'), findsNothing);
+      }
+      // Errors still expose the preserved draft and its recovery action.
+      await tester.runAsync(() async {
+        await c.submit('update', item: c.items.single, body: '保留失败草稿');
+        await local.mark(
+          c.pending.single['id'],
+          'failed',
+          error: 'invalid_fields',
+        );
+        await c.load();
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('保留失败草稿'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+      await tester.runAsync(() => c.discard(c.pending.single));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '离线时也能记下来');
       await tester.tap(find.text('发送'));
       await tester.runAsync(() async {

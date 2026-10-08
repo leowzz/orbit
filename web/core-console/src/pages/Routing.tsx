@@ -45,7 +45,6 @@ export default function Routing({ state, document, onChange }: Props) {
   return (
     <>
       <PageHead
-        eyebrow="03 / PROJECTION ROUTES"
         title="转发规则"
         description="为每个 Node 选择视图，并决定 usage、codex 分别来自哪台主机。"
         action={

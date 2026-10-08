@@ -69,7 +69,7 @@ app:
             else:
                 raise RuntimeError('Core did not start')
             # A newly created emulator may not have this package installed yet.
-            subprocess.run(['adb', '-s', args.emulator, 'shell', 'pm', 'clear', 'com.leo.orbit.orbit_app'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['adb', '-s', args.emulator, 'shell', 'pm', 'clear', 'dev.orbit.orbit_android'], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run([args.flutter, 'test', 'integration_test/foreground_test.dart', '-d', args.emulator], cwd=root / 'nodes/app', env={**os.environ, 'CI':'true'}, check=True)
         finally:
             core.terminate()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -136,7 +137,7 @@ func TestConsoleRoutesValidationConflictAuthAndHotApply(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	cfg := &config.CoreConfig{Console: config.ConsoleConfig{Password: "test-password"}, ObservationPolicies: map[string]config.ObservationPolicy{"usage": {MaxTTL: config.Duration{Duration: time.Minute}}}}
+	cfg := &config.CoreConfig{Console: config.ConsoleConfig{Password: "test-password", SessionHours: 72}, ObservationPolicies: map[string]config.ObservationPolicy{"usage": {MaxTTL: config.Duration{Duration: time.Minute}}}}
 	handler := ConsoleHandler(runner, store, cfg)
 	request := func(method, path, body, password, origin string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -308,5 +309,40 @@ func TestUnroutedNodeDiscoveryClearsOldRetainedView(t *testing.T) {
 	views, err := e.ApplyNodeState(now, testNodeState(now))
 	if err != nil || len(views) != 1 || views[0].Codex == nil || views[0].Usage == nil || views[0].Freshness != orbitv1.Freshness_FRESHNESS_STALE {
 		t.Fatalf("unrouted node not cleared: %v %v", views, err)
+	}
+}
+
+func TestAppAdminUsesConsoleAuthenticationAndOriginChecks(t *testing.T) {
+	engine := newTestEngine(t)
+	runner, _ := NewRunner(engine, &fakeTransport{}, nil, time.Now)
+	handler := ConsoleHandler(runner, nil, &config.CoreConfig{Console: config.ConsoleConfig{Password: "test-password", SessionHours: 72}}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+	for _, path := range []string{"/api/app/devices", "/api/app/operations", "/api/app/attachments/file"} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 401 {
+			t.Fatal(path, w.Code)
+		}
+	}
+	login := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{"password":"test-password"}`))
+	login.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, login)
+	cookies := w.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("missing login")
+	}
+	for _, origin := range []string{"", "https://attacker.example"} {
+		r := httptest.NewRequest("POST", "/api/app/devices", strings.NewReader(`{}`))
+		r.AddCookie(cookies[0])
+		r.Header.Set("Origin", origin)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		want := 204
+		if origin != "" {
+			want = 403
+		}
+		if w.Code != want {
+			t.Fatal(origin, w.Code)
+		}
 	}
 }

@@ -33,6 +33,8 @@ pnpm dev  # 等价于 npm run dev，项目依赖仍由 pnpm 管理
 API 代理目标在 `vite.config.ts`，默认为 `http://127.0.0.1:7620`，需与 Core YAML
 的监听地址一致。Vite 固定使用 5173，端口占用时直接报错。
 登录使用 Core YAML 的 `console.password`，不在前端存储密码或 Token。
+会话有效期通过 `console.session_hours` 配置（正整数，单位小时），默认 72 小时（3 天）；
+修改后重启 Core 生效。「系统信息」显示实际时长；退出登录或 Core 重启仍会使原会话失效。
 
 ## 构建
 

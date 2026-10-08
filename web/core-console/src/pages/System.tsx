@@ -20,7 +20,6 @@ export default function System({
   return (
     <>
       <PageHead
-        eyebrow="04 / UNDER THE HOOD"
         title="系统信息"
         description="运行身份、数据策略与访问方式。让网络的边界清楚可见。"
       />
@@ -79,7 +78,7 @@ export default function System({
             </div>
             <div>
               <dt>会话有效期</dt>
-              <dd>{info?.session_hours ?? 24} 小时</dd>
+              <dd>{info ? `${info.session_hours} 小时` : "—"}</dd>
             </div>
             <div>
               <dt>密码来源</dt>

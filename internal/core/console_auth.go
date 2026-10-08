@@ -16,7 +16,6 @@ import (
 )
 
 const consoleCookie = "orbit_core_session"
-const consoleSessionTTL = 24 * time.Hour
 
 type loginAttempts struct {
 	count int
@@ -26,13 +25,14 @@ type consoleAuth struct {
 	mu         sync.Mutex
 	password   [32]byte
 	configured bool
+	sessionTTL time.Duration
 	sessions   map[string]time.Time
 	attempts   map[string]loginAttempts
 	now        func() time.Time
 }
 
-func newConsoleAuth(password string) *consoleAuth {
-	return &consoleAuth{password: sha256.Sum256([]byte(password)), configured: strings.TrimSpace(password) != "", sessions: make(map[string]time.Time), attempts: make(map[string]loginAttempts), now: time.Now}
+func newConsoleAuth(password string, sessionTTL time.Duration) *consoleAuth {
+	return &consoleAuth{password: sha256.Sum256([]byte(password)), configured: strings.TrimSpace(password) != "", sessionTTL: sessionTTL, sessions: make(map[string]time.Time), attempts: make(map[string]loginAttempts), now: time.Now}
 }
 func (a *consoleAuth) valid(r *http.Request) bool {
 	cookie, err := r.Cookie(consoleCookie)
@@ -118,9 +118,9 @@ func (a *consoleAuth) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := hex.EncodeToString(bytes[:])
-	until := now.Add(consoleSessionTTL)
+	until := now.Add(a.sessionTTL)
 	a.sessions[token] = until
-	cookie := sessionCookie(r, token, int(consoleSessionTTL.Seconds()))
+	cookie := sessionCookie(r, token, int(a.sessionTTL.Seconds()))
 	cookie.Expires = until
 	http.SetCookie(w, cookie)
 	writeConsoleJSON(w, map[string]bool{"authenticated": true})

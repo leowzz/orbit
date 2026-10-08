@@ -58,7 +58,7 @@ func LoadAgent(path string) (*AgentConfig, error) {
 
 func LoadCore(path string) (*CoreConfig, error) {
 	cfg := CoreConfig{
-		Console: ConsoleConfig{Listen: "127.0.0.1:7620", Database: "data/core.sqlite"},
+		Console: ConsoleConfig{Listen: "127.0.0.1:7620", Database: "data/core.sqlite", SessionHours: DefaultConsoleSessionHours},
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
 		NTP:     defaultNTPConfig(),
 		Logging: LoggingConfig{Level: "info"},
@@ -183,6 +183,9 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	}
 	if strings.TrimSpace(cfg.Console.Password) == "" {
 		return errors.New("console.password is required")
+	}
+	if cfg.Console.SessionHours <= 0 || cfg.Console.SessionHours > int((1<<63-1)/time.Hour) {
+		return errors.New("console.session_hours must be between 1 and 2562047 hours")
 	}
 	if strings.TrimSpace(cfg.Console.Database) == "" {
 		return errors.New("console.database is required")

@@ -1,4 +1,6 @@
-# Orbit Android Node
+# Orbit Android 组件模块
+
+旧版功能已整合到 [统一 Orbit App](../app/README.md)。安装包统一从 `nodes/app` 构建；本目录保留供其复用的 Flutter 页面、原生服务和测试。下列组件使用说明继续适用；本目录 `make build/install/run` 已转向统一 App。
 
 Flutter Android 应用，包含两个可独立添加、可缩放的桌面小组件：**用量**和 **Session 状态**。最低 Android 8.0（API 26）。
 

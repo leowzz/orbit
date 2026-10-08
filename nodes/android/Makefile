@@ -6,7 +6,8 @@ ADB ?= adb
 DEVICE ?=
 SMOKE_CONFIG ?=
 APP_ID := dev.orbit.orbit_android
-DEBUG_APK := build/app/outputs/flutter-apk/app-debug.apk
+APP_DIR := ../app
+DEBUG_APK := ../app/build/app/outputs/flutter-apk/app-debug.apk
 
 .PHONY: help deps devices doctor run build build-release install open logs \
 	test test-native smoke analyze fmt fmt-check verify clean check-device
@@ -48,13 +49,13 @@ check-device:
 	@test -n "$(DEVICE)" || { echo '请指定 DEVICE，例如 DEVICE=fa7b189f' >&2; exit 2; }
 
 run: check-device
-	$(FLUTTER) run -d "$(DEVICE)"
+	cd "$(APP_DIR)" && $(FLUTTER) run -d "$(DEVICE)"
 
 build:
-	$(FLUTTER) build apk --debug
+	cd "$(APP_DIR)" && $(FLUTTER) build apk --debug
 
 build-release:
-	$(FLUTTER) build apk --release
+	cd "$(APP_DIR)" && $(FLUTTER) build apk --release
 
 install: check-device
 	$(MAKE) build

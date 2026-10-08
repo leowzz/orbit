@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowRight, Eye, EyeOff, LockKeyhole } from "lucide-react";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { api, APIError } from "../api";
 import { Mark } from "../components";
 export default function Login({ onLogin }: { onLogin: () => void }) {
@@ -33,50 +33,14 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
   }
   return (
     <div className="login">
-      <section className="login-story">
-        <div className="wordmark">
-          <Mark />
-          orbit<span> / core</span>
-        </div>
-        <div className="story-content">
-          <div className="eyebrow">A SMALL NETWORK. YOUR WORLD.</div>
-          <h1>
-            让每一份状态，
-            <br />
-            抵达对的设备。
-          </h1>
-          <p>
-            连接主机与设备，组织数据的去向。
-            <br />
-            一个安静、有序的个人设备网络。
-          </p>
-          <div className="network-art" aria-hidden>
-            <div className="orbit-ring ring-one" />
-            <div className="orbit-ring ring-two" />
-            <div className="art-center">
-              <Mark />
-            </div>
-            <span className="art-point point-one" />
-            <span className="art-point point-two" />
-            <span className="art-point point-three" />
-            <span className="art-label label-one">OBSERVE</span>
-            <span className="art-label label-two">CONNECT</span>
-            <span className="art-label label-three">PROJECT</span>
-          </div>
-        </div>
-        <div className="story-footer">
-          <span>ORBIT NETWORK</span>
-          <span>01 — CONTROL PLANE</span>
-        </div>
-      </section>
       <section className="login-panel">
         <div className="login-form">
-          <span className="login-icon">
-            <LockKeyhole size={22} strokeWidth={1.4} />
-          </span>
-          <div className="eyebrow">CORE CONSOLE</div>
-          <h2>欢迎回来。</h2>
-          <p>登录，查看你的网络。</p>
+          <div className="wordmark">
+            <Mark small />
+            Orbit
+          </div>
+          <h1>登录控制台</h1>
+          <p>管理设备、转发规则与收件箱。</p>
           <form onSubmit={submit}>
             <label htmlFor="password">控制台密码</label>
             <div className="password-field">
@@ -112,9 +76,8 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
               <ArrowRight size={17} />
             </button>
           </form>
-          <p className="login-note">仅限授权访问 · 登录会话有效期 24 小时</p>
+          <p className="login-note">仅限授权访问 · 会话有效期由管理员配置</p>
         </div>
-        <div className="login-bottom">你的网络，始终由你掌控。</div>
       </section>
     </div>
   );

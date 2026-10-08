@@ -49,7 +49,7 @@ export default function Overview({
       </header>
       <div className="overview-columns">
         <section>
-          <SectionTitle title="数据流向" meta="LIVE ROUTING" link="/routes" />
+          <SectionTitle title="数据流向" link="/routes" />
           <RouteFlow state={state} document={document} />
         </section>
         <section className="overview-devices">

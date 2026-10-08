@@ -119,14 +119,14 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	synchronizedClock.Start(ctx)
 
 	if cfg.App.Listen == "" {
-		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now)
+		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, nil)
 	}
 	inboxStore, err := inbox.Open(cfg.App.DataDir)
 	if err != nil {
 		return err
 	}
 	defer inboxStore.Close()
-	api := appapi.New(inboxStore, cfg.App, func(node string) json.RawMessage {
+	api, err := appapi.New(inboxStore, cfg.App, func(node string) json.RawMessage {
 		view := engine.AppView(synchronizedClock.Now(), node)
 		if view == nil {
 			return json.RawMessage(`null`)
@@ -134,6 +134,9 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 		raw, _ := protojson.Marshal(view)
 		return raw
 	})
+	if err != nil {
+		return err
+	}
 	listener, err := net.Listen("tcp", cfg.App.Listen)
 	if err != nil {
 		return err
@@ -143,7 +146,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	go func() { serverErr <- server.Serve(listener) }()
 	go api.Sweep(ctx)
 	go func() {
-		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now); err != nil && ctx.Err() == nil {
+		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, api.AdminHandler()); err != nil && ctx.Err() == nil {
 			logger.Error("MQTT stopped; App inbox remains available", zap.Error(err))
 		}
 	}()
@@ -162,7 +165,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	return err
 }
 
-func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time) error {
+func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time, admin http.Handler) error {
 	client, err := mqtt.Connect(ctx, mqtt.Config{
 		URL:      cfg.MQTT.URL,
 		ClientID: "orbit-core-" + cfg.Core.ID,
@@ -187,7 +190,7 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 	if err != nil {
 		return fmt.Errorf("listen core console: %w", err)
 	}
-	server := &http.Server{Handler: core.ConsoleHandler(runner, store, cfg), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Handler: core.ConsoleHandler(runner, store, cfg, admin), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	defer func() {
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

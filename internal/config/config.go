@@ -150,10 +150,13 @@ type WebAuthConfig struct {
 }
 
 type ConsoleConfig struct {
-	Listen   string `yaml:"listen"`
-	Database string `yaml:"database"`
-	Password string `yaml:"password"`
+	Listen       string `yaml:"listen"`
+	Database     string `yaml:"database"`
+	Password     string `yaml:"password"`
+	SessionHours int    `yaml:"session_hours"`
 }
+
+const DefaultConsoleSessionHours = 72
 
 type CoreIdentity struct {
 	ID string `yaml:"id"`

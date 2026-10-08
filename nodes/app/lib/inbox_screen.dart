@@ -62,9 +62,15 @@ class _InboxScreenState extends State<InboxScreen> {
 
   void notice(String message) {
     if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(message),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
     }
   }
 
@@ -258,6 +264,15 @@ class _InboxScreenState extends State<InboxScreen> {
       final visible = c.items
           .where((i) => filter == 'all' || i['kind'] == filter)
           .toList();
+      // New drafts are content; routine changes belong to the existing item.
+      final drafts = c.pending
+          .where(
+            (entry) =>
+                entry['state'] == 'conflict' ||
+                entry['state'] == 'failed' ||
+                (jsonDecode(entry['payload']) as Json)['type'] == 'create',
+          )
+          .toList();
       final scheme = Theme.of(context).colorScheme;
       return Scaffold(
         appBar: AppBar(
@@ -355,8 +370,8 @@ class _InboxScreenState extends State<InboxScreen> {
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                         children: [
-                          for (final entry in c.pending) _pending(entry),
-                          if (visible.isEmpty && c.pending.isEmpty)
+                          for (final entry in drafts) _pending(entry),
+                          if (visible.isEmpty && drafts.isEmpty)
                             Padding(
                               padding: const EdgeInsets.symmetric(vertical: 60),
                               child: Column(
@@ -557,9 +572,21 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Widget _item(Json item) {
+    final entry = c.pending
+        .where((p) => p['item_id'] == item['id'])
+        .firstOrNull;
+    final op = entry == null ? null : jsonDecode(entry['payload']) as Json;
+    final waiting = entry != null && entry['state'] == 'pending';
     final todo = item['kind'] == 'todo',
-        completed = item['completed'] == true,
-        busy = c.isPending(item['id']);
+        completed = waiting && op?['type'] == 'set_completed'
+            ? op!['completed'] == true
+            : item['completed'] == true,
+        busy = entry != null;
+    final state = waiting
+        ? '待同步'
+        : busy
+        ? '需要处理'
+        : '已保存';
     final stamp = DateTime.tryParse(item['created_at'])?.toLocal();
     final time = stamp == null
         ? ''
@@ -590,7 +617,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '$time  ·  已保存',
+                    '$time  ·  $state',
                     style: const TextStyle(color: Colors.black54, fontSize: 12),
                   ),
                 ),

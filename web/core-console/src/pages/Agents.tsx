@@ -20,9 +20,8 @@ export default function Agents({
   return (
     <>
       <PageHead
-        eyebrow="01 / DATA SOURCES"
-        title="Agents"
-        description="运行在可信主机上的数据来源。了解每个 Source 的健康与新鲜度。"
+        title="数据来源"
+        description="查看已连接的主机，以及各项数据的状态与更新时间。"
       />
       <div className="toolbar">
         <div className="tabs">

@@ -32,7 +32,10 @@ func TestAuthenticatedTwoDeviceFlow(t *testing.T) {
 		d := sha256.Sum256([]byte(token))
 		devices[id] = config.AppDevice{TokenSHA256: hex.EncodeToString(d[:]), Revoked: id == "revoked"}
 	}
-	api := New(store, config.AppConfig{Devices: devices, DataDir: t.TempDir()}, nil)
+	api, err := New(store, config.AppConfig{Devices: devices, DataDir: t.TempDir()}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewServer(api.Handler())
 	defer server.Close()
 	request := func(method, path, node string, body []byte) (int, []byte) {

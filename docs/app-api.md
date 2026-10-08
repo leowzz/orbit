@@ -4,9 +4,10 @@ Core 可选开启 `app.listen`；公网接入由反向代理提供 HTTPS。API �
 所有条目在本人已授权设备间共享。每次请求（含图片与 SSE）携带
 `Authorization: Bearer <device token>`；查询参数不接受令牌。身份只从令牌解析。
 
-设备在 `app.devices` 配置中登记 `node_id`、label、platform、token_sha256、revoked。
+管理台「App 与收件箱」登记设备并生成独立令牌；令牌只显示一次。
+首次启动时从 `app.devices` 导入已有设备，之后以持久化的设备登记为准。
 令牌至少 32 字符，建议生成 32 随机字节；服务端配置仅保存 SHA-256 十六进制摘要。
-移除设备或设置 `revoked: true` 后重启 Core 即生效，也会关闭原有 SSE。
+在管理台撤销访问或更换令牌立即生效，并断开旧 SSE 连接；配置文件不会覆盖这些变更。
 设备的状态路由使用 `overview-app`，缺少路由时仍可收发条目，状态为 `null`。
 
 ## 条目与操作
@@ -103,3 +104,28 @@ SSE 仅提示追赶，不能推进本地 applied_cursor；相同 cursor 的心�
 
 暂时失败保留同一 operation_id 重试；冲突/字段错误保留本地草稿供用户处理。
 首版同一条目只允许一个未确认操作，等待保存或处理冲突后继续编辑。
+
+## 管理台接口
+
+以下路径仅在管理台监听器开放，复用管理台登录会话、Origin 和跨站请求检查；App 的 Bearer 令牌不能调用。
+
+- `GET /api/app/devices`：启用状态、设备名称/系统/撤销状态，以及本次进程的连接数、最近访问、最近成功同步请求时间与返回游标；不返回令牌或摘要。
+- `POST /api/app/devices`：`{label, platform}`（android/macos/windows），生成设备 ID 与随机令牌，只在本次响应返回明文。
+- `POST /api/app/devices/{id}/rotate`：替换令牌并恢复授权；`.../revoke`：撤销访问，保留内容。
+- `GET /api/app/items?after=...&kind=...&q=...`：当前未删除条目，每页 50 条，返回 `items` 和下一页 `next`；按稳定 ID 分页。
+- `POST /api/app/operations`：复用 App 操作契约、版本冲突与幂等回执，以保留身份 `@console` 作为操作来源，触发相同同步通知。
+- `POST /api/app/attachments` 与 `GET /api/app/attachments/{id}`：上传和读取共享图片，支持缩略图。未引用图片仍仅其上传来源可读。
+
+连接状态只描述服务端观察，返回游标不等于设备已落盘游标。最近访问与同步请求时间在 Core 重启后重新统计。
+
+### App 连接二维码
+
+管理台在添加设备或轮换令牌后，本地生成 JSON 二维码，不调用外部二维码服务：
+
+```json
+{"type":"orbit-app","version":1,"server":"https://orbit.example.com","token":"<device-token>"}
+```
+
+`server` 使用当前管理台的 origin（部署时同域反代 App API）。二维码只在明文令牌
+弹窗存续期间展示，不额外持久化。Android 校验类型、版本及与手动输入相同的地址/
+令牌约束；识别后仅填入表单，用户点击连接才保存，不会直接访问二维码中的地址。

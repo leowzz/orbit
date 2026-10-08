@@ -132,8 +132,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TAG: ${{ github.ref_name }}
-      # Must match the hosted source recorded in nodes/android/pubspec.lock.
-      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      # Must match the hosted source recorded in nodes/app/pubspec.lock.
+      PUB_HOSTED_URL: https://pub.dev
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -156,11 +156,11 @@ jobs:
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/orbit-release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/orbit-release.jks" >> "$GITHUB_ENV"
       - name: Check and build signed APK
-        working-directory: nodes/android
+        working-directory: nodes/app
         run: |
           flutter pub get --enforce-lockfile
           flutter analyze
-          flutter test
+          flutter test test ../android/test
           flutter build apk --release --build-name "${TAG#v}" --build-number "$GITHUB_RUN_NUMBER"
           apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)"
           "$apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk

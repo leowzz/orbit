@@ -16,12 +16,10 @@ export function Mark({ small = false }: { small?: boolean }) {
   );
 }
 export function PageHead({
-  eyebrow,
   title,
   description,
   action,
 }: {
-  eyebrow: string;
   title: string;
   description: string;
   action?: ReactNode;
@@ -29,7 +27,6 @@ export function PageHead({
   return (
     <div className="page-head">
       <div>
-        <div className="eyebrow">{eyebrow}</div>
         <h1>{title}</h1>
         <p>{description}</p>
       </div>

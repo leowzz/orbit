@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import {
   ArrowLeftRight,
+  Smartphone,
   Boxes,
   LayoutDashboard,
   LogOut,
@@ -26,12 +27,14 @@ import Agents from "./pages/Agents";
 import Nodes from "./pages/Nodes";
 import Routing from "./pages/Routing";
 import System from "./pages/System";
+import Apps from "./pages/Apps";
 const navigation = [
-  { path: "/", label: "总览", sub: "Overview", icon: LayoutDashboard },
-  { path: "/agents", label: "Agents", sub: "数据来源", icon: Server },
-  { path: "/nodes", label: "Nodes", sub: "接收设备", icon: Boxes },
-  { path: "/routes", label: "转发规则", sub: "Routing", icon: ArrowLeftRight },
-  { path: "/system", label: "系统信息", sub: "System", icon: Settings2 },
+  { path: "/", label: "总览", icon: LayoutDashboard },
+  { path: "/agents", label: "数据来源", icon: Server },
+  { path: "/nodes", label: "接收设备", icon: Boxes },
+  { path: "/routes", label: "转发规则", icon: ArrowLeftRight },
+  { path: "/apps", label: "App 与收件箱", icon: Smartphone },
+  { path: "/system", label: "系统信息", icon: Settings2 },
 ];
 export default function App() {
   const [auth, setAuth] = useState<"checking" | "in" | "out" | "error">(
@@ -160,7 +163,7 @@ export default function App() {
       >
         <div className="wordmark">
           <Mark small />
-          orbit<span> / core</span>
+          Orbit<span>控制台</span>
           <button
             className="mobile-close icon-button"
             onClick={() => setMenu(false)}
@@ -172,8 +175,8 @@ export default function App() {
         <div className="workspace">
           <span className="workspace-dot" />
           <div>
-            <strong>{state?.core_id ?? "Orbit Network"}</strong>
-            <small>PERSONAL NETWORK</small>
+            <strong>{state?.core_id ?? "Orbit"}</strong>
+            <small>个人工作空间</small>
           </div>
         </div>
         <div className="nav-label">工作空间</div>
@@ -271,6 +274,7 @@ export default function App() {
                 path="/system"
                 element={<System state={state} document={routes} />}
               />
+              <Route path="/apps" element={<Apps />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           ) : (
@@ -278,8 +282,7 @@ export default function App() {
           )}
         </main>
         <footer className="app-footer">
-          <span>ORBIT / CORE CONSOLE</span>
-          <span>观察 · 连接 · 投影</span>
+          <span>Orbit 控制台</span>
         </footer>
       </div>
     </div>

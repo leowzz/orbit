@@ -537,6 +537,38 @@ func TestCoreConsoleRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestCoreConsoleSessionHours(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{
+		{"", 72}, {"1", 1}, {"12", 12}, {"96", 96},
+		{"0", 0}, {"-1", 0}, {"2562048", 0}, {"invalid", 0},
+	} {
+		t.Run("hours="+tc.value, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFixtureFiles(t, dir, false)
+			body := validCoreYAML
+			if tc.value != "" {
+				body = strings.Replace(body, "console:\n", "console:\n  session_hours: "+tc.value+"\n", 1)
+			}
+			cfg, err := LoadCore(writeConfig(t, dir, "core.yaml", body))
+			if tc.want == 0 {
+				if err == nil {
+					t.Fatal("invalid session lifetime accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Console.SessionHours != tc.want {
+				t.Fatalf("got %d, want %d", cfg.Console.SessionHours, tc.want)
+			}
+		})
+	}
+}
+
 func TestAppDeviceConfiguration(t *testing.T) {
 	dir := t.TempDir()
 	writeFixtureFiles(t, dir, false)
