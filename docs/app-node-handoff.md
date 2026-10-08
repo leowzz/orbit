@@ -308,3 +308,13 @@ make build-go
 - 管理台路由数据库与 App 收件箱分别存储；管理台支持 `overview-app` 路由编辑，已保存路由即时影响 App 摘要。
 - 管理台鉴权配置 `console.password` 必填；App 设备仍使用独立令牌，MQTT 不发布 App 路由。
 - 验证：管理台生产构建、Go 全量测试/vet、Core/config/App API/inbox race 检查、Web/dev 测试、Flutter analyze 与 7 个测试、Actions 静态检查通过。
+
+### 2026-10-08 — 更新 tx 实例
+
+- 部署代码：合并提交 `1ee0ee8`；Core/Web 本地构建镜像标签 `app-1ee0ee8`，未发布到镜像仓库。
+- HTTPS：`https://orbit-core.wleo.cn` 保留管理台，`/api/v1/*` 转发 App API。服务器回环端口为 `17622`，容器内仍为 `7622`（宿主机 `7622` 已被其他服务占用）。
+- 原有 5 条路由保留；新增 `phone-01` App 路由，沿用 tx Web 节点的 macOS 用量/session 数据源。摘要已收到两类数据。
+- 私有令牌文件：tx `/srv/orbit-deploy/private/app-phone-01.json`；本地副本 `configs/secrets/tx-app-phone-01.json`（Git 忽略，权限 0600）。
+- 停机备份：tx `/srv/orbit-deploy/backups/app-20261008T033758Z`，含原配置、Caddyfile、完整数据。旧 `v0.2.5` 镜像保留。
+- 线上验证通过：Core/Web HTTPS、管理台登录与路由、App 未授权拒绝、认证访问、SSE、创建/幂等重试/完成/删除、Core 重启后条目与 generation 保留、两个 SQLite 完整性检查。自检条目已删除。
+- 部署目录 `/srv/orbit-deploy` 使用本机镜像；当前重建命令为 `docker compose up -d --pull never orbit-core orbit-web`，不要对未发布的此标签执行 `pull`。
