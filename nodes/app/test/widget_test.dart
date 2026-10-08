@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,9 +43,14 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('整理本周的想法与待办'), findsOneWidget);
-      final summary = tester.getRect(find.byType(StatusSummary));
       final composer = tester.getRect(find.byType(TextField));
-      expect(summary.top, lessThan(100));
+      expect(find.text('周期用量'), findsNothing);
+      expect(find.byType(ExpansionTile), findsNothing);
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(
+        tester.getRect(find.byType(Switch)).top,
+        greaterThanOrEqualTo(composer.bottom),
+      );
       expect(composer.bottom, greaterThan(680));
       final message = find.text('整理本周的想法与待办');
       final position = tester.getRect(message);
@@ -67,15 +73,54 @@ void main() {
         );
         if (operation == 'set_completed') {
           expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+          expect(
+            tester.widget<Text>(message).style?.decoration,
+            isNot(TextDecoration.lineThrough),
+          );
         }
         // Simulate acknowledgment: the temporary state must disappear in place.
         await tester.runAsync(() async {
-          await local.acknowledge(c.pending.single['id'], c.items.single);
+          await local.acknowledge(c.pending.single['id'], {
+            ...c.items.single,
+            'revision': '${int.parse(c.items.single['revision']) + 1}',
+            if (operation == 'set_completed') 'completed': true,
+          });
           await c.load();
         });
         await tester.pumpAndSettle();
         expect(tester.getRect(message), position);
         expect(find.textContaining('待同步'), findsNothing);
+        expect(
+          tester.widget<Text>(message).style?.decoration,
+          isNot(TextDecoration.lineThrough),
+        );
+      }
+      for (final kind in ['text', 'todo']) {
+        await tester.tap(find.byTooltip('更多操作'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(kind == 'todo' ? '设为待办' : '改为文本'));
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await tester.pumpAndSettle();
+        final operation = jsonDecode(c.pending.single['payload']);
+        expect(operation['type'], 'set_kind');
+        expect(operation['kind'], kind);
+        expect(
+          find.byType(Checkbox),
+          kind == 'todo' ? findsOneWidget : findsNothing,
+        );
+        expect(find.text('待发送'), findsNothing);
+        await tester.runAsync(() async {
+          await local.acknowledge(c.pending.single['id'], {
+            ...c.items.single,
+            'revision': '${int.parse(c.items.single['revision']) + 1}',
+            'kind': kind,
+            'completed': false,
+          });
+          await c.load();
+        });
+        await tester.pumpAndSettle();
       }
       // Errors still expose the preserved draft and its recovery action.
       await tester.runAsync(() async {
@@ -98,14 +143,197 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 100));
       });
       await tester.pumpAndSettle();
-      expect(find.text('待发送'), findsOneWidget);
+      expect(find.text('待发送'), findsNothing);
+      expect(find.text('离线时也能记下来'), findsNothing);
+      expect(tester.getRect(message), position);
       expect((await tester.runAsync(local.pending))!.length, 1);
+      expect(jsonDecode(c.pending.single['payload'])['kind'], 'text');
+      // Upload progress stays quiet; only failures expose the preserved draft.
+      c.uploadingID = c.pending.single['id'];
+      await tester.runAsync(c.load);
+      await tester.pumpAndSettle();
+      expect(find.text('正在上传图片'), findsNothing);
+      for (final state in ['failed', 'conflict', 'pending']) {
+        await tester.runAsync(() async {
+          await local.mark(
+            c.pending.single['id'],
+            state,
+            error: 'invalid_fields',
+          );
+          await c.load();
+        });
+        await tester.pumpAndSettle();
+        expect(
+          find.text('离线时也能记下来'),
+          state == 'pending' ? findsNothing : findsOneWidget,
+        );
+        expect(
+          find.text('重试'),
+          state == 'failed' ? findsOneWidget : findsNothing,
+        );
+        expect(
+          find.text('处理'),
+          state == 'conflict' ? findsOneWidget : findsNothing,
+        );
+      }
+      c.uploadingID = null;
+      await tester.runAsync(() => c.discard(c.pending.single));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '只把这一条设为待办');
+      await tester.tap(find.byType(Switch));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('只把这一条设为待办'), findsOneWidget);
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      await tester.tap(find.text('发送'));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(jsonDecode(c.pending.single['payload'])['kind'], 'todo');
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      // A new screen and database connection must restore the preference.
+      await tester.runAsync(() async {
+        await c.close();
+        local = await LocalStore.open(
+          databaseFactoryFfi,
+          '${dir.path}/cache.sqlite',
+        );
+        c = InboxController(local, 'https://example.test', 'token', dir.path);
+        await c.load();
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InboxScreen(controller: c, onSettings: () {}),
+        ),
+      );
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      await tester.tap(find.byType(Switch));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      });
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(await tester.runAsync(() => local.meta('composer_kind')), 'text');
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(() async {
         await c.close();
         await dir.delete(recursive: true);
       });
+    });
+  }
+
+  for (final width in [280.0, 800.0]) {
+    testWidgets('message collapses after eight rendered lines at $width', (
+      tester,
+    ) async {
+      const style = TextStyle(fontSize: 16, height: 1.5);
+      Future<void> show(String body) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: SizedBox(
+                  width: width,
+                  child: InboxMessageBody(
+                    body,
+                    key: ValueKey(body),
+                    style: style,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await show(List.filled(8, '一行正文').join('\n'));
+      expect(find.text('展开'), findsNothing);
+      await show(List.filled(9, '一行正文').join('\n'));
+      expect(find.text('展开'), findsOneWidget);
+      final collapsed = tester.getSize(find.byType(InboxMessageBody)).height;
+      await tester.tap(find.text('展开'));
+      await tester.pumpAndSettle();
+      expect(find.text('收起'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(InboxMessageBody)).height,
+        greaterThan(collapsed),
+      );
+      await tester.tap(find.text('收起'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(find.byType(InboxMessageBody)).height, collapsed);
+      // Long paragraphs wrap even when they contain no explicit newline.
+      await show(List.filled(100, '自动换行也计入行数。').join());
+      expect(find.text('展开'), findsOneWidget);
+      expect(tester.widget<Text>(find.byType(Text).first).maxLines, 8);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final mode in ['short', 'collapsed', 'expanded']) {
+    testWidgets('swiping $mode message text scrolls the inbox', (tester) async {
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+      final body = List.filled(
+        mode == 'short' ? 6 : 12,
+        '滑动正文应该滚动消息列表',
+      ).join('\n');
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.android),
+          home: Scaffold(
+            body: ListView(
+              controller: scroll,
+              children: [
+                const SizedBox(height: 80),
+                InboxMessageBody(
+                  body,
+                  style: const TextStyle(fontSize: 16, height: 1.5),
+                ),
+                const SizedBox(height: 1600),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (mode == 'expanded') {
+        await tester.tap(find.text('展开'));
+        await tester.pumpAndSettle();
+      }
+      final message = find.byType(InboxMessageBody);
+      await tester.dragFrom(
+        tester.getTopLeft(message) + const Offset(40, 70),
+        const Offset(0, -80),
+      );
+      await tester.pumpAndSettle();
+      expect(scroll.offset, greaterThan(40));
+      final offset = scroll.offset;
+      await tester.dragFrom(
+        tester.getTopLeft(message) + const Offset(40, 100),
+        const Offset(0, 60),
+      );
+      await tester.pumpAndSettle();
+      expect(scroll.offset, lessThan(offset));
+      if (mode != 'collapsed') {
+        scroll.jumpTo(0);
+        await tester.pumpAndSettle();
+        await tester.longPressAt(
+          tester.getTopLeft(message) + const Offset(40, 12),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Copy'), findsOneWidget);
+      }
+      expect(tester.takeException(), isNull);
     });
   }
 }

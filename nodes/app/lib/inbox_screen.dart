@@ -2,10 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'inbox_controller.dart';
 import 'local_store.dart';
+
+class InboxReadingNotification extends Notification {
+  final bool reading;
+  const InboxReadingNotification(this.reading);
+}
 
 class InboxScreen extends StatefulWidget {
   final InboxController controller;
@@ -22,8 +28,27 @@ class InboxScreen extends StatefulWidget {
 class _InboxScreenState extends State<InboxScreen> {
   final text = TextEditingController();
   String kind = 'text', filter = 'all';
-  bool sending = false;
+  bool sending = false, composerReady = false, reading = false;
   InboxController get c => widget.controller;
+
+  void setReading(bool value) {
+    if (reading == value) return;
+    if (value) FocusScope.of(context).unfocus();
+    setState(() => reading = value);
+    InboxReadingNotification(value).dispatch(context);
+  }
+
+  bool onListScroll(UserScrollNotification notification) {
+    if (notification.depth != 0) return false;
+    if (notification.direction == ScrollDirection.forward) {
+      setReading(false);
+    } else if (notification.direction == ScrollDirection.reverse &&
+        notification.metrics.maxScrollExtent > 0) {
+      setReading(true);
+    }
+    return false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -35,13 +60,21 @@ class _InboxScreenState extends State<InboxScreen> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != c) {
       text.clear();
+      composerReady = false;
       _draft();
     }
   }
 
   Future<void> _draft() async {
-    final draft = await c.local.meta('draft');
-    if (mounted && text.text.isEmpty) text.text = draft ?? '';
+    final owner = c;
+    final draft = await owner.local.meta('draft');
+    final savedKind = await owner.local.meta('composer_kind');
+    if (!mounted || c != owner) return;
+    if (text.text.isEmpty) text.text = draft ?? '';
+    setState(() {
+      kind = savedKind == 'todo' ? 'todo' : 'text';
+      composerReady = true;
+    });
     if (Platform.isAndroid) {
       try {
         final lost = await ImagePicker().retrieveLostData();
@@ -51,6 +84,29 @@ class _InboxScreenState extends State<InboxScreen> {
       } catch (_) {
         notice('未能恢复所选图片，请重新选择');
       }
+    }
+  }
+
+  Future<void> setComposerKind(bool todo) async {
+    final owner = c;
+    final value = todo ? 'todo' : 'text';
+    try {
+      await owner.local.setMeta('composer_kind', value);
+      if (mounted && c == owner) setState(() => kind = value);
+    } catch (_) {
+      notice('未能保存待办设置，请重试');
+    }
+  }
+
+  Future<void> toggleKind(Json item) async {
+    try {
+      await c.submit(
+        'set_kind',
+        item: item,
+        kind: item['kind'] == 'todo' ? 'text' : 'todo',
+      );
+    } catch (_) {
+      notice('未能保存修改，请重试');
     }
   }
 
@@ -80,7 +136,11 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 
   Future<void> send({String? photo}) async {
-    if (sending || (photo == null && text.text.trim().isEmpty)) return;
+    if (!composerReady ||
+        sending ||
+        (photo == null && text.text.trim().isEmpty)) {
+      return;
+    }
     setState(() => sending = true);
     try {
       // Store locally before clearing the composer; network work continues separately.
@@ -163,7 +223,7 @@ class _InboxScreenState extends State<InboxScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除这条内容？'),
-        content: const Text('删除后会同步到所有设备，无法撤销。'),
+        content: const Text('删除后会从所有设备隐藏，可在控制台的「已删除」中恢复。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -205,6 +265,8 @@ class _InboxScreenState extends State<InboxScreen> {
                           ? '删除内容'
                           : op['completed'] == true
                           ? '完成待办'
+                          : op['type'] == 'set_kind'
+                          ? (op['kind'] == 'todo' ? '设为待办' : '改为文本')
                           : '撤销完成'),
                 ),
                 const SizedBox(height: 20),
@@ -264,13 +326,11 @@ class _InboxScreenState extends State<InboxScreen> {
       final visible = c.items
           .where((i) => filter == 'all' || i['kind'] == filter)
           .toList();
-      // New drafts are content; routine changes belong to the existing item.
+      // Only failed operations need a separate notice in the message list.
       final drafts = c.pending
           .where(
             (entry) =>
-                entry['state'] == 'conflict' ||
-                entry['state'] == 'failed' ||
-                (jsonDecode(entry['payload']) as Json)['type'] == 'create',
+                entry['state'] == 'conflict' || entry['state'] == 'failed',
           )
           .toList();
       final scheme = Theme.of(context).colorScheme;
@@ -291,6 +351,24 @@ class _InboxScreenState extends State<InboxScreen> {
             ],
           ),
           actions: [
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: filter,
+                icon: const Icon(Icons.expand_more_rounded, size: 20),
+                borderRadius: BorderRadius.circular(12),
+                style: TextStyle(color: scheme.onSurface, fontSize: 14),
+                items: const [
+                  DropdownMenuItem(value: 'all', child: Text('全部')),
+                  DropdownMenuItem(value: 'todo', child: Text('待办')),
+                  DropdownMenuItem(value: 'image', child: Text('图片')),
+                ],
+                onChanged: (value) {
+                  if (value == null) return;
+                  setState(() => filter = value);
+                  setReading(false);
+                },
+              ),
+            ),
             IconButton(
               tooltip: '同步',
               onPressed: c.syncing ? null : c.sync,
@@ -317,7 +395,6 @@ class _InboxScreenState extends State<InboxScreen> {
               constraints: const BoxConstraints(maxWidth: 900),
               child: Column(
                 children: [
-                  StatusSummary(view: c.view, online: c.online),
                   if (c.error != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
@@ -338,160 +415,137 @@ class _InboxScreenState extends State<InboxScreen> {
                         ],
                       ),
                     ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                    child: Row(
-                      children: [
-                        Text(
-                          '收件箱',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const Spacer(),
-                        ...[('all', '全部'), ('todo', '待办'), ('image', '图片')].map(
-                          (f) => Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: ChoiceChip(
-                              label: Text(f.$2),
-                              selected: filter == f.$1,
-                              showCheckmark: false,
-                              onSelected: (_) => setState(() => filter = f.$1),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: c.sync,
-                      child: ListView(
-                        key: const PageStorageKey('inbox'),
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                        children: [
-                          for (final entry in drafts) _pending(entry),
-                          if (visible.isEmpty && drafts.isEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 60),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.inbox_outlined,
-                                    size: 42,
-                                    color: scheme.outline,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    c.syncing
-                                        ? '正在同步…'
-                                        : filter == 'all'
-                                        ? (c.error == null
-                                              ? '收件箱很清爽'
-                                              : '暂未取得消息')
-                                        : '还没有${filter == 'todo' ? '待办' : '图片'}',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  const Text(
-                                    '记下一段文字、待办，或发送一张图片。',
-                                    style: TextStyle(color: Colors.black54),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          for (final item in visible) _item(item),
-                          if (c.items.length >= c.limit)
-                            TextButton(
-                              onPressed: c.loadMore,
-                              child: const Text('加载更多'),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      border: Border(top: BorderSide(color: Color(0xffe6eae7))),
-                    ),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextField(
-                          controller: text,
-                          enabled: !sending,
-                          minLines: 1,
-                          maxLines: 4,
-                          maxLength: 4000,
-                          onChanged: (value) => c.local.setMeta('draft', value),
-                          decoration: InputDecoration(
-                            hintText: kind == 'todo' ? '添加一件待办…' : '写点什么，留给自己…',
-                            counterText: '',
-                            filled: false,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                          ),
-                        ),
-                        Row(
+                    child: NotificationListener<UserScrollNotification>(
+                      onNotification: onListScroll,
+                      child: RefreshIndicator(
+                        onRefresh: c.sync,
+                        child: ListView(
+                          key: const PageStorageKey('inbox'),
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                           children: [
-                            PopupMenuButton<String>(
-                              tooltip: '内容类型',
-                              initialValue: kind,
-                              onSelected: (value) =>
-                                  setState(() => kind = value),
-                              itemBuilder: (_) => [
-                                const PopupMenuItem(
-                                  value: 'text',
-                                  child: Text('文本'),
+                            for (final entry in drafts) _failedDraft(entry),
+                            if (visible.isEmpty && c.pending.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 60,
                                 ),
-                                const PopupMenuItem(
-                                  value: 'todo',
-                                  child: Text('待办'),
-                                ),
-                              ],
-                              child: Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: Row(
+                                child: Column(
                                   children: [
                                     Icon(
-                                      kind == 'todo'
-                                          ? Icons.check_box_outlined
-                                          : Icons.notes_rounded,
-                                      size: 20,
+                                      Icons.inbox_outlined,
+                                      size: 42,
+                                      color: scheme.outline,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(kind == 'todo' ? '待办' : '文本'),
-                                    const Icon(Icons.expand_more, size: 18),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      c.syncing
+                                          ? '正在同步…'
+                                          : filter == 'all'
+                                          ? (c.error == null
+                                                ? '收件箱很清爽'
+                                                : '暂未取得消息')
+                                          : '还没有${filter == 'todo' ? '待办' : '图片'}',
+                                      style: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      '记下一段文字、待办，或发送一张图片。',
+                                      style: TextStyle(color: Colors.black54),
+                                    ),
                                   ],
                                 ),
                               ),
-                            ),
-                            IconButton(
-                              tooltip: '发送图片',
-                              onPressed: sending ? null : pickImage,
-                              icon: const Icon(Icons.image_outlined),
-                            ),
-                            const Spacer(),
-                            FilledButton.icon(
-                              onPressed: sending ? null : send,
-                              icon: const Icon(
-                                Icons.arrow_upward_rounded,
-                                size: 18,
+                            for (final item in visible) _item(item),
+                            if (c.items.length >= c.limit)
+                              TextButton(
+                                onPressed: c.loadMore,
+                                child: const Text('加载更多'),
                               ),
-                              label: Text(sending ? '保存中…' : '发送'),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    alignment: Alignment.bottomCenter,
+                    child: Visibility(
+                      visible: !reading,
+                      maintainState: true,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          border: Border(
+                            top: BorderSide(color: Color(0xffe6eae7)),
+                          ),
+                        ),
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextField(
+                              controller: text,
+                              enabled: !sending,
+                              minLines: 1,
+                              maxLines: 4,
+                              maxLength: 4000,
+                              onChanged: (value) =>
+                                  c.local.setMeta('draft', value),
+                              decoration: InputDecoration(
+                                hintText: kind == 'todo'
+                                    ? '添加一件待办…'
+                                    : '写点什么，留给自己…',
+                                counterText: '',
+                                filled: false,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 6,
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                const Text('待办'),
+                                const SizedBox(width: 6),
+                                Semantics(
+                                  label: '设为待办',
+                                  child: Switch(
+                                    value: kind == 'todo',
+                                    onChanged: sending || !composerReady
+                                        ? null
+                                        : setComposerKind,
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: '发送图片',
+                                  onPressed: sending || !composerReady
+                                      ? null
+                                      : pickImage,
+                                  icon: const Icon(Icons.image_outlined),
+                                ),
+                                const Spacer(),
+                                FilledButton.icon(
+                                  onPressed: sending || !composerReady
+                                      ? null
+                                      : send,
+                                  icon: const Icon(
+                                    Icons.arrow_upward_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(sending ? '保存中…' : '发送'),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ],
@@ -503,18 +557,13 @@ class _InboxScreenState extends State<InboxScreen> {
     },
   );
 
-  Widget _pending(Json entry) {
+  Widget _failedDraft(Json entry) {
     final op = jsonDecode(entry['payload']) as Json;
     final conflict = entry['state'] == 'conflict',
         failed = entry['state'] == 'failed';
-    final state = conflict
-        ? '冲突 · 草稿已保留'
-        : failed
-        ? message(entry['error'] ?? '')
-        : entry['id'] == c.uploadingID
-        ? '正在上传图片'
-        : '待发送';
+    final state = conflict ? '冲突 · 草稿已保留' : message(entry['error'] ?? '');
     return Container(
+      key: ValueKey(entry['id']),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -526,7 +575,7 @@ class _InboxScreenState extends State<InboxScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.schedule_rounded, size: 17),
+              const Icon(Icons.error_outline_rounded, size: 17),
               const SizedBox(width: 7),
               Expanded(
                 child: Text(
@@ -555,16 +604,17 @@ class _InboxScreenState extends State<InboxScreen> {
               ],
             ],
           ),
-          Text(
+          InboxMessageBody(
             op['body']?.isNotEmpty == true
                 ? op['body']
                 : op['type'] == 'delete'
                 ? '删除内容'
                 : op['type'] == 'set_completed'
                 ? (op['completed'] == true ? '完成待办' : '撤销完成')
+                : op['type'] == 'set_kind'
+                ? (op['kind'] == 'todo' ? '设为待办' : '改为文本')
                 : '图片',
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 14),
           ),
         ],
       ),
@@ -577,8 +627,11 @@ class _InboxScreenState extends State<InboxScreen> {
         .firstOrNull;
     final op = entry == null ? null : jsonDecode(entry['payload']) as Json;
     final waiting = entry != null && entry['state'] == 'pending';
-    final todo = item['kind'] == 'todo',
-        completed = waiting && op?['type'] == 'set_completed'
+    final changingKind = waiting && op?['type'] == 'set_kind';
+    final todo = (changingKind ? op!['kind'] : item['kind']) == 'todo',
+        completed = changingKind
+            ? false
+            : waiting && op?['type'] == 'set_completed'
             ? op!['completed'] == true
             : item['completed'] == true,
         busy = entry != null;
@@ -592,6 +645,7 @@ class _InboxScreenState extends State<InboxScreen> {
         ? ''
         : '${stamp.month}月${stamp.day}日 · ${stamp.hour.toString().padLeft(2, '0')}:${stamp.minute.toString().padLeft(2, '0')}';
     return Container(
+      key: ValueKey(item['id']),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -627,6 +681,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     if (action == 'copy') copy(item['body']);
                     if (action == 'edit') edit(item);
                     if (action == 'delete') remove(item);
+                    if (action == 'kind') toggleKind(item);
                   },
                   itemBuilder: (_) => [
                     if ((item['body'] as String).isNotEmpty)
@@ -636,6 +691,12 @@ class _InboxScreenState extends State<InboxScreen> {
                       enabled: !busy,
                       child: const Text('编辑'),
                     ),
+                    if (item['kind'] == 'text' || item['kind'] == 'todo')
+                      PopupMenuItem(
+                        value: 'kind',
+                        enabled: !busy,
+                        child: Text(todo ? '改为文本' : '设为待办'),
+                      ),
                     PopupMenuItem(
                       value: 'delete',
                       enabled: !busy,
@@ -686,7 +747,7 @@ class _InboxScreenState extends State<InboxScreen> {
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.only(right: 8),
-                      child: SelectableText(
+                      child: InboxMessageBody(
                         item['body'],
                         style: TextStyle(
                           fontSize: 16,
@@ -694,9 +755,6 @@ class _InboxScreenState extends State<InboxScreen> {
                           color: completed
                               ? Colors.black45
                               : const Color(0xff26352f),
-                          decoration: completed
-                              ? TextDecoration.lineThrough
-                              : null,
                         ),
                       ),
                     ),
@@ -710,155 +768,51 @@ class _InboxScreenState extends State<InboxScreen> {
   }
 }
 
-class StatusSummary extends StatelessWidget {
-  final Json? view;
-  final bool online;
-  const StatusSummary({super.key, required this.view, required this.online});
-  @override
-  Widget build(BuildContext context) {
-    final usage = view?['usage'] as Json?, codex = view?['codex'] as Json?;
-    final expiry = DateTime.tryParse(view?['freshUntil'] ?? '');
-    final stale =
-        !online ||
-        expiry == null ||
-        expiry.isBefore(DateTime.now()) ||
-        view?['freshness'] != 'FRESHNESS_FRESH';
-    final cost = int.tryParse('${usage?['actualCostMicros']}');
-    final tokens = int.tryParse('${usage?['tokenCount']}');
-    final sessions = (codex?['sessions'] as List?) ?? [];
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 6, 20, 6),
-      child: Material(
-        color: const Color(0xffeef3ef),
-        borderRadius: BorderRadius.circular(18),
-        child: Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-            childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-            title: Row(
-              children: [
-                Expanded(
-                  child: _metric(
-                    '周期用量',
-                    cost == null
-                        ? '—'
-                        : '\$${(cost / 1000000).toStringAsFixed(2)}',
-                  ),
-                ),
-                Expanded(
-                  child: _metric(
-                    'Tokens',
-                    tokens == null
-                        ? '—'
-                        : tokens >= 1000000
-                        ? '${(tokens / 1000000).toStringAsFixed(1)}M'
-                        : tokens >= 1000
-                        ? '${(tokens / 1000).toStringAsFixed(1)}K'
-                        : '$tokens',
-                  ),
-                ),
-                Expanded(
-                  child: _metric('运行会话', '${codex?['runningCount'] ?? '—'}'),
-                ),
-              ],
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 2),
-              child: Text(
-                !online
-                    ? '离线 · 显示本机缓存'
-                    : view == null
-                    ? '等待状态更新'
-                    : stale
-                    ? '状态已过期 · 等待更新'
-                    : '状态已更新',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: stale
-                      ? const Color(0xff876c43)
-                      : const Color(0xff35705d),
-                ),
-              ),
-            ),
-            children: [
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 160),
-                child: sessions.isEmpty
-                    ? const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Padding(
-                          padding: EdgeInsets.only(top: 8),
-                          child: Text(
-                            '暂无会话',
-                            style: TextStyle(color: Colors.black54),
-                          ),
-                        ),
-                      )
-                    : ListView(
-                        shrinkWrap: true,
-                        children: sessions
-                            .map(
-                              (s) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 7,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      s['processAlive'] == true
-                                          ? Icons.circle
-                                          : Icons.circle_outlined,
-                                      size: 9,
-                                      color: const Color(0xff508d72),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        s['displayName']?.isNotEmpty == true
-                                            ? s['displayName']
-                                            : s['projectName']?.isNotEmpty ==
-                                                  true
-                                            ? s['projectName']
-                                            : 'Codex 会话',
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      s['processAlive'] == true ? '运行中' : '已结束',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.black54,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+class InboxMessageBody extends StatefulWidget {
+  final String body;
+  final TextStyle style;
+  const InboxMessageBody(this.body, {super.key, required this.style});
 
-  Widget _metric(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-      const SizedBox(height: 5),
-      Text(
-        value,
-        style: const TextStyle(
-          fontSize: 21,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -.5,
-        ),
-      ),
-    ],
+  @override
+  State<InboxMessageBody> createState() => _InboxMessageBodyState();
+}
+
+class _InboxMessageBodyState extends State<InboxMessageBody> {
+  bool expanded = false;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final style = DefaultTextStyle.of(context).style.merge(widget.style);
+      final painter = TextPainter(
+        text: TextSpan(text: widget.body, style: style),
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.maybeLocaleOf(context),
+        maxLines: 8,
+      )..layout(maxWidth: constraints.maxWidth);
+      final overflowing = painter.didExceedMaxLines;
+      painter.dispose();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (overflowing && !expanded)
+            Text(
+              widget.body,
+              style: style,
+              maxLines: 8,
+              overflow: TextOverflow.ellipsis,
+            )
+          else
+            SelectionArea(child: Text(widget.body, style: style)),
+          if (overflowing)
+            TextButton(
+              onPressed: () => setState(() => expanded = !expanded),
+              child: Text(expanded ? '收起' : '展开'),
+            ),
+        ],
+      );
+    },
   );
 }
 

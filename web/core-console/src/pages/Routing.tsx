@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -11,30 +11,66 @@ import {
   X,
 } from "lucide-react";
 import { api, errorText, profileName } from "../api";
-import type { NetworkState, Route, RouteDocument } from "../api";
+import type { AppDevice, NetworkState, Route, RouteDocument } from "../api";
 import { Badge, Empty, PageHead } from "../components";
 interface Props {
   state: NetworkState;
   document: RouteDocument;
   onChange: (d: RouteDocument) => void;
 }
+type Target = { id: string; label: string; profile: string; revoked?: boolean };
 export default function Routing({ state, document, onChange }: Props) {
   const [params, setParams] = useSearchParams(),
     [editing, setEditing] = useState<{ id: string; route?: Route } | null>(
       null,
     ),
     [message, setMessage] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [appDevices, setAppDevices] = useState<AppDevice[] | null>(null),
+    [deviceError, setDeviceError] = useState("");
+  const loadDevices = useCallback(async () => {
+    try {
+      const result = await api<{ devices?: AppDevice[] }>("/app/devices");
+      setAppDevices(result.devices ?? []);
+      setDeviceError("");
+    } catch {
+      setDeviceError("未能加载 App 设备，请重试。");
+    }
+  }, []);
+  useEffect(() => {
+    void loadDevices();
+  }, [loadDevices]);
+  const targets: Target[] = [
+    ...state.nodes
+      .filter((n) => !appDevices?.some((d) => d.id === n.nodeId))
+      .map((n) => ({
+        id: n.nodeId,
+        label: n.nodeId,
+        profile:
+          {
+            web: "overview-web",
+            android: "overview-android",
+            "oled-128x32": "usage-oled-128x32",
+          }[n.modelId] ?? "overview-web",
+      })),
+    ...(appDevices ?? []).map((d) => ({
+      id: d.id,
+      label: d.label || d.id,
+      profile: "overview-app",
+      revoked: d.revoked,
+    })),
+  ];
   const requested = params.get("node");
   useEffect(() => {
-    if (requested) {
+    if (requested && appDevices !== null) {
       setEditing({ id: requested, route: document.routes[requested] });
       setParams({}, { replace: true });
     }
-  }, [requested, document.routes, setParams]);
+  }, [requested, document.routes, setParams, appDevices]);
   async function reload() {
     try {
       onChange(await api<RouteDocument>("/routes"));
+      await loadDevices();
       setError("");
       setMessage("已载入最新规则。");
     } catch (e) {
@@ -50,6 +86,7 @@ export default function Routing({ state, document, onChange }: Props) {
         action={
           <button
             className="button primary"
+            disabled={appDevices === null}
             onClick={() => setEditing({ id: "" })}
           >
             <Plus size={16} />
@@ -57,6 +94,12 @@ export default function Routing({ state, document, onChange }: Props) {
           </button>
         }
       />
+      {deviceError && (
+        <div className="banner error" role="alert">
+          {deviceError}
+          <button onClick={loadDevices}>重试</button>
+        </div>
+      )}
       {message && (
         <div className="banner success" role="status">
           <Check size={16} />
@@ -95,11 +138,15 @@ export default function Routing({ state, document, onChange }: Props) {
         {entries.map(([id, r]) => (
           <div className="route-table-row" key={id}>
             <div>
-              <strong>{id}</strong>
+              <strong>{targets.find((t) => t.id === id)?.label ?? id}</strong>
               <small>
-                {state.nodes.some((n) => n.nodeId === id)
-                  ? "已发现设备"
-                  : "预配置 · 等待设备接入"}
+                {appDevices?.some((d) => d.id === id)
+                  ? appDevices.find((d) => d.id === id)?.revoked
+                    ? "App 设备 · 已撤销"
+                    : "App 设备"
+                  : state.nodes.some((n) => n.nodeId === id)
+                    ? "已发现设备"
+                    : "预配置 · 等待设备接入"}
               </small>
             </div>
             <div>
@@ -127,7 +174,11 @@ export default function Routing({ state, document, onChange }: Props) {
           <Empty
             title="从一条规则开始"
             action={
-              <button className="button" onClick={() => setEditing({ id: "" })}>
+              <button
+                className="button"
+                disabled={appDevices === null}
+                onClick={() => setEditing({ id: "" })}
+              >
                 <Plus size={15} />
                 新建规则
               </button>
@@ -146,11 +197,12 @@ export default function Routing({ state, document, onChange }: Props) {
         </p>
         <Badge>本地持久化</Badge>
       </div>
-      {editing && (
+      {editing && appDevices !== null && (
         <Editor
           key={editing.id}
           editing={editing}
           state={state}
+          targets={targets}
           document={document}
           onClose={() => setEditing(null)}
           onSaved={(d) => {
@@ -171,12 +223,14 @@ export default function Routing({ state, document, onChange }: Props) {
 function Editor({
   editing,
   state,
+  targets,
   document,
   onClose,
   onSaved,
 }: {
   editing: { id: string; route?: Route };
   state: NetworkState;
+  targets: Target[];
   document: RouteDocument;
   onClose: () => void;
   onSaved: (d: RouteDocument) => void;
@@ -184,13 +238,11 @@ function Editor({
   const dialog = useRef<HTMLDialogElement>(null);
   const [id, setId] = useState(editing.id),
     [profile, setProfile] = useState(
-      editing.route?.profile ??
-        {
-          web: "overview-web",
-          android: "overview-android",
-          "oled-128x32": "usage-oled-128x32",
-        }[state.nodes.find((n) => n.nodeId === editing.id)?.modelId ?? ""] ??
-        "overview-web",
+      targets.find((t) => t.id === editing.id)?.profile === "overview-app"
+        ? "overview-app"
+        : (editing.route?.profile ??
+            targets.find((t) => t.id === editing.id)?.profile ??
+            "overview-web"),
     ),
     [usage, setUsage] = useState(
       editing.route?.inputs.find((i) => i.observation_type === "usage")
@@ -295,25 +347,42 @@ function Editor({
           <div className="drawer-body">
             <div className="form-section">
               <span className="step-label">01 / 接收端</span>
-              <label htmlFor="node-id">Node ID</label>
+              <label htmlFor="target-device">接收设备</label>
+              <select
+                id="target-device"
+                autoFocus
+                value={targets.some((t) => t.id === id) ? id : ""}
+                disabled={!!editing.route}
+                onChange={(e) => {
+                  setId(e.target.value);
+                  setProfile(
+                    targets.find((t) => t.id === e.target.value)?.profile ??
+                      "overview-web",
+                  );
+                  setDirty(true);
+                }}
+              >
+                <option value="">手动填写设备 ID</option>
+                {targets.map((t) => (
+                  <option key={t.id} value={t.id} disabled={t.revoked}>
+                    {t.label} · {t.revoked ? "已撤销" : profileName(t.profile)}
+                  </option>
+                ))}
+              </select>
+              <label htmlFor="node-id">设备 ID</label>
               <input
                 id="node-id"
-                list="known-nodes"
-                autoFocus
                 value={id}
                 disabled={!!editing.route}
                 onChange={(e) => {
                   setId(e.target.value);
+                  const target = targets.find((t) => t.id === e.target.value);
+                  if (target) setProfile(target.profile);
                   setDirty(true);
                 }}
                 placeholder="例如 desk-display"
                 required
               />
-              <datalist id="known-nodes">
-                {state.nodes.map((n) => (
-                  <option key={n.nodeId} value={n.nodeId} />
-                ))}
-              </datalist>
               <p className="field-hint">
                 选择已发现设备，或填写新设备的 ID 进行预配置。
               </p>

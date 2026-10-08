@@ -99,6 +99,10 @@ func (s *Server) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 	}
 }
 func (s *Server) operation(w http.ResponseWriter, r *http.Request, node string) {
+	s.applyOperation(w, r, node, false)
+}
+
+func (s *Server) applyOperation(w http.ResponseWriter, r *http.Request, node string, allowRestore bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, 32*1024)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -110,6 +114,10 @@ func (s *Server) operation(w http.ResponseWriter, r *http.Request, node string) 
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
 		failure(w, &inbox.Fault{Code: "invalid_fields"})
+		return
+	}
+	if op.Type == "restore" && !allowRestore {
+		failure(w, &inbox.Fault{Code: "forbidden"})
 		return
 	}
 	item, err := s.store.Apply(r.Context(), node, op)
@@ -220,7 +228,7 @@ func failure(w http.ResponseWriter, err error) {
 	switch fault.Code {
 	case "unauthenticated":
 		status = 401
-	case "device_revoked":
+	case "device_revoked", "forbidden":
 		status = 403
 	case "not_found", "attachment_unavailable":
 		status = 404

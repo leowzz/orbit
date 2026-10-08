@@ -19,9 +19,9 @@ func (s *Store) AddAttachment(ctx context.Context, node string, a Attachment) er
 	_, err := s.db.ExecContext(ctx, `INSERT INTO attachments VALUES(?,?,?,?,?,?,?)`, a.ID, node, a.MIME, a.Size, a.Width, a.Height, time.Now().Unix())
 	return err
 }
-func (s *Store) Attachment(ctx context.Context, node, id string) (Attachment, error) {
+func (s *Store) Attachment(ctx context.Context, node, id string, includeDeleted bool) (Attachment, error) {
 	a := Attachment{ID: id}
-	err := s.db.QueryRowContext(ctx, `SELECT mime,size,width,height FROM attachments WHERE id=? AND (owner=? OR EXISTS(SELECT 1 FROM items WHERE json_extract(payload,'$.attachment_id')=? AND COALESCE(json_extract(payload,'$.deleted_at'),'')=''))`, id, node, id).Scan(&a.MIME, &a.Size, &a.Width, &a.Height)
+	err := s.db.QueryRowContext(ctx, `SELECT mime,size,width,height FROM attachments WHERE id=? AND (owner=? OR EXISTS(SELECT 1 FROM items WHERE json_extract(payload,'$.attachment_id')=? AND (? OR COALESCE(json_extract(payload,'$.deleted_at'),'')='')))`, id, node, id, includeDeleted).Scan(&a.MIME, &a.Size, &a.Width, &a.Height)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, &Fault{Code: "attachment_unavailable"}
 	}
@@ -29,14 +29,15 @@ func (s *Store) Attachment(ctx context.Context, node, id string) (Attachment, er
 }
 
 // ExpiredAttachments removes metadata in the same write lock used to validate
-// new references. Files are removed after commit by the caller.
+// new references. Soft-deleted items retain their attachments for restoration.
+// Files are removed after commit by the caller.
 func (s *Store) ExpiredAttachments(ctx context.Context) ([]string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM attachments WHERE created_at<? AND NOT EXISTS(SELECT 1 FROM items WHERE json_extract(payload,'$.attachment_id')=attachments.id AND COALESCE(json_extract(payload,'$.deleted_at'),'')='')`, time.Now().Add(-24*time.Hour).Unix())
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM attachments WHERE created_at<? AND NOT EXISTS(SELECT 1 FROM items WHERE json_extract(payload,'$.attachment_id')=attachments.id)`, time.Now().Add(-24*time.Hour).Unix())
 	if err != nil {
 		return nil, err
 	}

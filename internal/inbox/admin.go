@@ -19,8 +19,8 @@ func (s *Store) SaveDevices(ctx context.Context, raw []byte) error {
 	return err
 }
 
-func (s *Store) ListItems(ctx context.Context, after, kind, query string) ([]Item, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT payload FROM items WHERE id>? AND COALESCE(json_extract(payload,'$.deleted_at'),'')='' AND (?='' OR json_extract(payload,'$.kind')=?) AND instr(lower(json_extract(payload,'$.body')),lower(?))>0 ORDER BY id LIMIT 51`, after, kind, kind, query)
+func (s *Store) ListItems(ctx context.Context, after, kind, query string, deleted bool) ([]Item, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT payload FROM items WHERE id>? AND (COALESCE(json_extract(payload,'$.deleted_at'),'')!='')=? AND (?='' OR json_extract(payload,'$.kind')=?) AND instr(lower(json_extract(payload,'$.body')),lower(?))>0 ORDER BY id LIMIT 51`, after, deleted, kind, kind, query)
 	if err != nil {
 		return nil, err
 	}

@@ -94,6 +94,21 @@ func TestAuthenticatedTwoDeviceFlow(t *testing.T) {
 	if err != nil || !strings.Contains(string(data[:n]), `"cursor":"1"`) {
 		t.Fatal(string(data[:n]), err)
 	}
+	// Type changes use the same authenticated operations and cross-device sync.
+	for index, kind := range []string{"todo", "text"} {
+		change := inbox.Operation{ID: uuid.NewString(), ItemID: op.ItemID, Type: "set_kind", ExpectedRevision: int64(index + 1), Kind: kind}
+		raw, _ := json.Marshal(change)
+		status, result := request("POST", "/api/v1/operations", "a", raw)
+		var changed inbox.Item
+		if err := json.Unmarshal(result, &changed); status != 200 || err != nil || changed.Kind != kind || changed.Body != "hello" {
+			t.Fatal("type change failed", status, string(result), err)
+		}
+		status, result = request("GET", "/api/v1/sync/snapshot", "b", nil)
+		var snapshot inbox.Page
+		if err := json.Unmarshal(result, &snapshot); status != 200 || err != nil || len(snapshot.Items) != 1 || snapshot.Items[0] != changed {
+			t.Fatal("type change not visible to other device", status, string(result), err)
+		}
+	}
 	// Unreferenced uploads are private to their owner; valid item references
 	// make them available to the shared inbox.
 	var buf bytes.Buffer
@@ -117,5 +132,33 @@ func TestAuthenticatedTwoDeviceFlow(t *testing.T) {
 	}
 	if status, b = request("GET", "/api/v1/attachments/"+attachment.ID+"?thumbnail=1", "b", nil); status != 200 || len(b) == 0 {
 		t.Fatal(status)
+	}
+	// A phone can delete an image; only the console can restore it.
+	remove := inbox.Operation{ID: uuid.NewString(), ItemID: op.ItemID, Type: "delete", ExpectedRevision: 1}
+	raw, _ = json.Marshal(remove)
+	if status, b = request("POST", "/api/v1/operations", "a", raw); status != 200 {
+		t.Fatal(status, string(b))
+	}
+	if status, _ = request("GET", "/api/v1/attachments/"+attachment.ID, "b", nil); status != 404 {
+		t.Fatal("deleted image visible to another phone", status)
+	}
+	restore := inbox.Operation{ID: uuid.NewString(), ItemID: op.ItemID, Type: "restore", ExpectedRevision: 2}
+	raw, _ = json.Marshal(restore)
+	if status, _ = request("POST", "/api/v1/operations", "a", raw); status != 403 {
+		t.Fatal("phone restored without console authorization", status)
+	}
+	admin := api.AdminHandler()
+	w := httptest.NewRecorder()
+	admin.ServeHTTP(w, httptest.NewRequest("GET", "/api/app/attachments/"+attachment.ID, nil))
+	if w.Code != 200 || w.Body.Len() == 0 {
+		t.Fatal("console cannot preview deleted image", w.Code)
+	}
+	w = httptest.NewRecorder()
+	admin.ServeHTTP(w, httptest.NewRequest("POST", "/api/app/operations", bytes.NewReader(raw)))
+	if w.Code != 200 {
+		t.Fatal("console restore failed", w.Code, w.Body.String())
+	}
+	if status, _ = request("GET", "/api/v1/attachments/"+attachment.ID, "b", nil); status != 200 {
+		t.Fatal("restored image not available", status)
 	}
 }

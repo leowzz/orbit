@@ -176,15 +176,40 @@ func (s *Store) Apply(ctx context.Context, node string, op Operation) (Item, err
 		if !exists {
 			return item, &Fault{Code: "not_found"}
 		}
-		if item.Revision != op.ExpectedRevision || item.DeletedAt != "" {
+		if item.Revision != op.ExpectedRevision || (item.DeletedAt != "" && op.Type != "restore") {
 			return item, &Fault{Code: "conflict", Current: &item}
 		}
 		switch op.Type {
+		case "restore":
+			if item.DeletedAt == "" {
+				return item, &Fault{Code: "conflict", Current: &item}
+			}
+			if op.Body != "" || op.Kind != "" || op.AttachmentID != "" || op.Completed != nil {
+				return item, &Fault{Code: "invalid_fields"}
+			}
+			if item.AttachmentID != "" {
+				var id string
+				if err := tx.QueryRowContext(ctx, `SELECT id FROM attachments WHERE id=?`, item.AttachmentID).Scan(&id); err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return item, &Fault{Code: "attachment_unavailable"}
+					}
+					return item, err
+				}
+			}
+			item.DeletedAt = ""
 		case "update":
 			if (item.Kind != "image" && strings.TrimSpace(op.Body) == "") || op.Kind != "" || op.AttachmentID != "" || op.Completed != nil {
 				return item, &Fault{Code: "invalid_fields"}
 			}
 			item.Body = op.Body
+		case "set_kind":
+			if (item.Kind != "text" && item.Kind != "todo") || (op.Kind != "text" && op.Kind != "todo") || op.Body != "" || op.AttachmentID != "" || op.Completed != nil {
+				return item, &Fault{Code: "invalid_fields"}
+			}
+			if item.Kind != op.Kind {
+				item.Kind = op.Kind
+				item.Completed = false
+			}
 		case "set_completed":
 			if item.Kind != "todo" || op.Completed == nil || op.Body != "" || op.Kind != "" || op.AttachmentID != "" {
 				return item, &Fault{Code: "invalid_fields"}

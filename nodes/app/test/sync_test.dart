@@ -76,6 +76,11 @@ void main() {
       expect(await local.meta('cursor'), '3');
       await local.acknowledge('old-receipt', item('2'));
       expect(await local.items(), isEmpty);
+      await local.applyPage(page('4', [item('4')]));
+      expect((await local.items()).single['body'], 'from server');
+      expect(await local.meta('cursor'), '4');
+      await local.acknowledge('old-delete', item('3', deleted: true));
+      expect((await local.items()).single['revision'], '4');
     },
   );
   test('failed cache write rolls back the applied cursor', () async {

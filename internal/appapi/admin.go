@@ -51,11 +51,11 @@ func (s *Server) AdminHandler() http.Handler {
 	mux.HandleFunc("POST /api/app/devices/{id}/{action}", s.changeDevice)
 	mux.HandleFunc("GET /api/app/items", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if len(q.Get("q")) > 200 {
+		if len(q.Get("q")) > 200 || (q.Get("deleted") != "" && q.Get("deleted") != "false" && q.Get("deleted") != "true") {
 			failure(w, &inbox.Fault{Code: "invalid_fields"})
 			return
 		}
-		items, err := s.store.ListItems(r.Context(), q.Get("after"), q.Get("kind"), q.Get("q"))
+		items, err := s.store.ListItems(r.Context(), q.Get("after"), q.Get("kind"), q.Get("q"), q.Get("deleted") == "true")
 		if err != nil {
 			failure(w, err)
 			return
@@ -70,9 +70,9 @@ func (s *Server) AdminHandler() http.Handler {
 		}
 		write(w, 200, map[string]any{"items": items, "next": next})
 	})
-	mux.HandleFunc("POST /api/app/operations", func(w http.ResponseWriter, r *http.Request) { s.operation(w, r, consoleNode) })
+	mux.HandleFunc("POST /api/app/operations", func(w http.ResponseWriter, r *http.Request) { s.applyOperation(w, r, consoleNode, true) })
 	mux.HandleFunc("POST /api/app/attachments", func(w http.ResponseWriter, r *http.Request) { s.upload(w, r, consoleNode) })
-	mux.HandleFunc("GET /api/app/attachments/{id}", func(w http.ResponseWriter, r *http.Request) { s.download(w, r, consoleNode) })
+	mux.HandleFunc("GET /api/app/attachments/{id}", func(w http.ResponseWriter, r *http.Request) { s.downloadAttachment(w, r, consoleNode, true) })
 	return mux
 }
 func (s *Server) listDevices(w http.ResponseWriter, r *http.Request) {

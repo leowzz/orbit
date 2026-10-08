@@ -34,10 +34,12 @@ Item ID 和 operation ID 使用 UUID。正文最多 16000 UTF-8 字节，HTTP �
 | --- | --- | --- |
 | create | kind、body；image 需要 attachment_id | 新 UUID，expected_revision 为 "0"；文本/待办正文非空 |
 | update | body | 携带最新 expected_revision；不改变类型/附件 |
+| set_kind | kind: text/todo | 仅文本和待办互转，保留正文；类型改变时清除完成状态 |
 | set_completed | completed: true/false | 仅待办；目标值语义 |
-| delete | 无 | 全局删除；保留 tombstone，禁止复活 |
+| delete | 无 | 所有 App 隐藏，保留记录和附件，可在控制台恢复 |
+| restore | 无 | 仅管理台接口可调用；携带已删除条目的最新 expected_revision，恢复后同步到所有 App |
 
-非 create 操作不传 kind、attachment_id。正文不接受 node_id。
+除 create/set_kind 外不传 kind；除 create 外不传 attachment_id。正文不接受 node_id。
 同一设备、同一 operation_id 的同内容重试返回原结果，先于版本校验；不同内容拒绝。
 Item 修改、Change、Receipt 在同一 SQLite 事务提交。成功回执和变更历史当前永久保留。
 冲突返回 409 `{"code":"conflict","current":<Item>}`。客户端保留草稿，由用户决定。
@@ -86,7 +88,7 @@ SSE 仅提示追赶，不能推进本地 applied_cursor；相同 cursor 的心�
 
 先上传完成，再 create image 引用该 ID。未引用附件仅上传者可读/引用；条目创建后本人
 其他已授权设备可读。`GET /api/v1/attachments/{id}` 下载原图，加 `?thumbnail=1` 下载缩略图。
-尚未被有效条目引用且超过 24 小时的附件每小时回收，崩溃遗留的孤立文件也会回收。
+未被任何条目引用且超过 24 小时的附件每小时回收，崩溃遗留的孤立文件也会回收。已删除条目的附件保留，管理台仍可预览，恢复后 App 可重新读取。旧版本已经清理的附件无法恢复，恢复操作会返回 attachment_unavailable。
 受有效条目引用的图片不会回收。正文编辑不替换图片；需要替换时创建新图片条目。
 
 ## 错误
@@ -112,7 +114,7 @@ SSE 仅提示追赶，不能推进本地 applied_cursor；相同 cursor 的心�
 - `GET /api/app/devices`：启用状态、设备名称/系统/撤销状态，以及本次进程的连接数、最近访问、最近成功同步请求时间与返回游标；不返回令牌或摘要。
 - `POST /api/app/devices`：`{label, platform}`（android/macos/windows），生成设备 ID 与随机令牌，只在本次响应返回明文。
 - `POST /api/app/devices/{id}/rotate`：替换令牌并恢复授权；`.../revoke`：撤销访问，保留内容。
-- `GET /api/app/items?after=...&kind=...&q=...`：当前未删除条目，每页 50 条，返回 `items` 和下一页 `next`；按稳定 ID 分页。
+- `GET /api/app/items?after=...&kind=...&q=...&deleted=true`：默认未删除条目；deleted=true 仅列出已删除条目，支持同样的类型/正文筛选，每页 50 条，返回 `items` 和下一页 `next`；按稳定 ID 分页。
 - `POST /api/app/operations`：复用 App 操作契约、版本冲突与幂等回执，以保留身份 `@console` 作为操作来源，触发相同同步通知。
 - `POST /api/app/attachments` 与 `GET /api/app/attachments/{id}`：上传和读取共享图片，支持缩略图。未引用图片仍仅其上传来源可读。
 

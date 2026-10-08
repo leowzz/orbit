@@ -86,12 +86,16 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request, node string) {
 	write(w, 201, a)
 }
 func (s *Server) download(w http.ResponseWriter, r *http.Request, node string) {
+	s.downloadAttachment(w, r, node, false)
+}
+
+func (s *Server) downloadAttachment(w http.ResponseWriter, r *http.Request, node string, includeDeleted bool) {
 	id := r.PathValue("id")
 	if _, err := uuid.Parse(id); err != nil || len(id) != 36 {
 		failure(w, &inbox.Fault{Code: "attachment_unavailable"})
 		return
 	}
-	a, err := s.store.Attachment(r.Context(), node, id)
+	a, err := s.store.Attachment(r.Context(), node, id, includeDeleted)
 	if err != nil {
 		failure(w, err)
 		return

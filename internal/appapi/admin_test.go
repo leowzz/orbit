@@ -127,13 +127,29 @@ func TestAdminDevicesPersistRotateRevokeAndSync(t *testing.T) {
 	}
 	op = inbox.Operation{ID: uuid.NewString(), ItemID: item.ID, Type: "delete", ExpectedRevision: item.Revision}
 	raw, _ = json.Marshal(op)
-	call("POST", "/api/app/operations", string(raw))
+	json.Unmarshal(call("POST", "/api/app/operations", string(raw)), &item)
 	if bytes.Contains(call("GET", "/api/app/items", ""), []byte(item.ID)) {
 		t.Fatal("deleted item listed")
 	}
 	snap, err := store.Snapshot(context.Background(), "", nil, "", 100)
 	if err != nil || len(snap.Items) != 1 || snap.Items[0].DeletedAt == "" {
 		t.Fatal("admin deletion missing from device sync", err)
+	}
+	if !bytes.Contains(call("GET", "/api/app/items?deleted=true&kind=todo&q=管理台", ""), []byte(item.ID)) {
+		t.Fatal("deleted item missing from console")
+	}
+	op = inbox.Operation{ID: uuid.NewString(), ItemID: item.ID, Type: "restore", ExpectedRevision: item.Revision}
+	raw, _ = json.Marshal(op)
+	restored := call("POST", "/api/app/operations", string(raw))
+	if !bytes.Equal(restored, call("POST", "/api/app/operations", string(raw))) {
+		t.Fatal("restore retry not idempotent")
+	}
+	if bytes.Contains(call("GET", "/api/app/items?deleted=true", ""), []byte(item.ID)) || !bytes.Contains(call("GET", "/api/app/items", ""), []byte(item.ID)) {
+		t.Fatal("restored item in wrong list")
+	}
+	changes, err := store.Changes(context.Background(), snap.Generation, snap.Cursor, 100)
+	if err != nil || len(changes.Changes) != 1 || changes.Changes[0].Item.DeletedAt != "" {
+		t.Fatal("restore missing from device sync", err)
 	}
 	// The bearer-token listener never exposes the admin handlers.
 	w := httptest.NewRecorder()

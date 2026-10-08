@@ -171,6 +171,59 @@ func TestCompletedRetryDoesNotToggle(t *testing.T) {
 	}
 }
 
+func TestKindChangesPreserveContentAndSync(t *testing.T) {
+	s := newStore(t)
+	original := apply(t, s, "a", create())
+	completed := true
+	done := apply(t, s, "a", Operation{ID: uuid.NewString(), ItemID: original.ID, Type: "set_completed", ExpectedRevision: 1, Completed: &completed})
+	op := Operation{ID: uuid.NewString(), ItemID: done.ID, Type: "set_kind", ExpectedRevision: done.Revision, Kind: "text"}
+	text := apply(t, s, "a", op)
+	if text.Kind != "text" || text.Completed || text.Body != original.Body || text.CreatedAt != original.CreatedAt || text.CreatedBy != original.CreatedBy {
+		t.Fatal("conversion lost content or completion state", text)
+	}
+	if apply(t, s, "a", op) != text {
+		t.Fatal("retry changed the conversion")
+	}
+	op.ID = uuid.NewString()
+	_, err := s.Apply(ctx, "b", op)
+	code(t, err, "conflict")
+	op.ExpectedRevision = text.Revision
+	op.Kind = "todo"
+	todo := apply(t, s, "b", op)
+	if todo.Kind != "todo" || todo.Completed || todo.Body != original.Body {
+		t.Fatal("conversion back to todo failed", todo)
+	}
+	generation, _, _ := s.Watermark(ctx)
+	page, err := s.Changes(ctx, generation, 2, 100)
+	if err != nil || len(page.Changes) != 2 || page.Changes[0].Item != text || page.Changes[1].Item != todo {
+		t.Fatal("conversion not synchronized", page, err)
+	}
+}
+
+func TestKindChangeRejectsImagesAndUnrelatedFields(t *testing.T) {
+	s := newStore(t)
+	item := apply(t, s, "a", create())
+	completed := true
+	for _, fields := range []Operation{
+		{Kind: ""}, {Kind: "image"}, {Kind: "unknown"},
+		{Kind: "text", Body: "overwrite"}, {Kind: "text", Completed: &completed},
+		{Kind: "text", AttachmentID: uuid.NewString()},
+	} {
+		fields.ID, fields.ItemID, fields.Type, fields.ExpectedRevision = uuid.NewString(), item.ID, "set_kind", item.Revision
+		_, err := s.Apply(ctx, "a", fields)
+		code(t, err, "invalid_fields")
+	}
+	attachment := uuid.NewString()
+	if err := s.AddAttachment(ctx, "a", Attachment{ID: attachment, MIME: "image/png", Size: 10, Width: 1, Height: 1}); err != nil {
+		t.Fatal(err)
+	}
+	image := create()
+	image.Kind, image.AttachmentID = "image", attachment
+	stored := apply(t, s, "a", image)
+	_, err := s.Apply(ctx, "a", Operation{ID: uuid.NewString(), ItemID: stored.ID, Type: "set_kind", ExpectedRevision: stored.Revision, Kind: "todo"})
+	code(t, err, "invalid_fields")
+}
+
 func TestAttachmentCleanupKeepsLiveReferences(t *testing.T) {
 	s := newStore(t)
 	live, orphan := uuid.NewString(), uuid.NewString()
@@ -193,12 +246,62 @@ func TestAttachmentCleanupKeepsLiveReferences(t *testing.T) {
 	if !s.HasAttachment(ctx, live) || s.HasAttachment(ctx, orphan) {
 		t.Fatal("wrong attachment removed")
 	}
-	if _, err = s.Attachment(ctx, "b", live); err != nil {
+	if _, err = s.Attachment(ctx, "b", live, false); err != nil {
 		t.Fatal("shared attachment inaccessible", err)
 	}
 	apply(t, s, "a", Operation{ID: uuid.NewString(), ItemID: op.ItemID, Type: "delete", ExpectedRevision: 1})
 	removed, err = s.ExpiredAttachments(ctx)
-	if err != nil || len(removed) != 1 || removed[0] != live {
+	if err != nil || len(removed) != 0 {
 		t.Fatal(removed, err)
+	}
+	if _, err := s.Attachment(ctx, "b", live, false); err == nil {
+		t.Fatal("deleted attachment available to other devices")
+	}
+	if _, err := s.Attachment(ctx, "@console", live, true); err != nil {
+		t.Fatal("deleted attachment unavailable to console", err)
+	}
+}
+
+func TestSoftDeleteRestorePreservesItemAndPreventsStaleWrites(t *testing.T) {
+	s := newStore(t)
+	original := apply(t, s, "a", create())
+	completed := true
+	original = apply(t, s, "a", Operation{ID: uuid.NewString(), ItemID: original.ID, Type: "set_completed", ExpectedRevision: original.Revision, Completed: &completed})
+	deleted := apply(t, s, "a", Operation{ID: uuid.NewString(), ItemID: original.ID, Type: "delete", ExpectedRevision: original.Revision})
+	active, err := s.ListItems(ctx, "", "", "", false)
+	if err != nil || len(active) != 0 {
+		t.Fatal(active, err)
+	}
+	trash, err := s.ListItems(ctx, "", "todo", "sample", true)
+	if err != nil || len(trash) != 1 || trash[0] != deleted {
+		t.Fatal(trash, err)
+	}
+	op := Operation{ID: uuid.NewString(), ItemID: deleted.ID, Type: "restore", ExpectedRevision: deleted.Revision}
+	bad := op
+	bad.Body = "overwrite"
+	_, err = s.Apply(ctx, "@console", bad)
+	code(t, err, "invalid_fields")
+	restored := apply(t, s, "@console", op)
+	if restored.DeletedAt != "" || restored.Revision != deleted.Revision+1 || restored.Body != original.Body || !restored.Completed || restored.Kind != original.Kind || restored.CreatedBy != original.CreatedBy || restored.CreatedAt != original.CreatedAt {
+		t.Fatal("restore lost item data", restored)
+	}
+	if got := apply(t, s, "@console", op); got != restored {
+		t.Fatal("restore retry is not idempotent", got)
+	}
+	trash, err = s.ListItems(ctx, "", "", "", true)
+	if err != nil || len(trash) != 0 {
+		t.Fatal(trash, err)
+	}
+	_, err = s.Apply(ctx, "a", Operation{ID: uuid.NewString(), ItemID: restored.ID, Type: "update", ExpectedRevision: deleted.Revision, Body: "stale"})
+	code(t, err, "conflict")
+	deletedAgain := apply(t, s, "a", Operation{ID: uuid.NewString(), ItemID: restored.ID, Type: "delete", ExpectedRevision: restored.Revision})
+	apply(t, s, "@console", op) // An old retry must not undo a later deletion.
+	page, err := s.Snapshot(ctx, "", nil, "", 100)
+	if err != nil || len(page.Items) != 1 || page.Items[0] != deletedAgain {
+		t.Fatal(page, err)
+	}
+	changes, err := s.Changes(ctx, page.Generation, deleted.Revision, 100)
+	if err != nil || len(changes.Changes) != 2 || changes.Changes[0].Item != restored {
+		t.Fatal("restoration missing from sync", changes, err)
 	}
 }

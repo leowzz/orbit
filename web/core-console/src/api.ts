@@ -44,6 +44,13 @@ export interface NetworkState {
   nodes: Node[];
   now: string;
 }
+export interface AppDevice {
+  id: string;
+  label: string;
+  platform: string;
+  revoked: boolean;
+  activity: { connections: number; last_seen?: string; last_sync?: string };
+}
 export interface SystemInfo {
   started_at: string;
   policies: Record<string, { max_ttl: string; max_future_skew: string }>;

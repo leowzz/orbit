@@ -10,15 +10,9 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { api, APIError, date } from "../api";
+import type { AppDevice } from "../api";
 import { Badge, Empty, PageHead } from "../components";
 
-type Device = {
-  id: string;
-  label: string;
-  platform: string;
-  revoked: boolean;
-  activity: { connections: number; last_seen?: string; last_sync?: string };
-};
 type Item = {
   id: string;
   kind: string;
@@ -27,6 +21,7 @@ type Item = {
   revision: string;
   attachment_id?: string;
   updated_at: string;
+  deleted_at?: string;
 };
 type Items = { items: Item[]; next: string };
 type Operation = Record<string, unknown>;
@@ -42,12 +37,13 @@ function message(e: unknown): string {
 }
 export default function Apps() {
   const [tab, setTab] = useState("devices"),
-    [devices, setDevices] = useState<Device[] | null>(null),
+    [devices, setDevices] = useState<AppDevice[] | null>(null),
     [enabled, setEnabled] = useState(true),
     [error, setError] = useState("");
   const [items, setItems] = useState<Item[] | null>(null),
     [next, setNext] = useState(""),
     [kind, setKind] = useState(""),
+    [deleted, setDeleted] = useState(false),
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false),
@@ -57,7 +53,7 @@ export default function Apps() {
   const [deviceError, setDeviceError] = useState("");
   const itemsRequest = useRef(0);
   const refreshDevices = useCallback(async () => {
-    const d = await api<{ enabled: boolean; devices: Device[] }>(
+    const d = await api<{ enabled: boolean; devices: AppDevice[] }>(
       "/app/devices",
     );
     setEnabled(d.enabled);
@@ -67,13 +63,19 @@ export default function Apps() {
     async (after = "") => {
       const request = ++itemsRequest.current;
       const d = await api<Items>(
-        "/app/items?" + new URLSearchParams({ kind, q: filter, after }),
+        "/app/items?" +
+          new URLSearchParams({
+            kind,
+            q: filter,
+            after,
+            deleted: String(deleted),
+          }),
       );
       if (request !== itemsRequest.current) return;
       setItems((old) => (after ? [...(old ?? []), ...d.items] : d.items));
       setNext(d.next);
     },
-    [kind, filter],
+    [kind, filter, deleted],
   );
   useEffect(() => {
     let active = true;
@@ -112,7 +114,7 @@ export default function Apps() {
       setBusy(false);
     }
   }
-  async function deviceAction(d: Device, action: string) {
+  async function deviceAction(d: AppDevice, action: string) {
     if (
       !window.confirm(
         action === "revoke"
@@ -139,7 +141,7 @@ export default function Apps() {
   async function changeItem(item: Item, type: string) {
     if (
       type === "delete" &&
-      !window.confirm("删除这条内容？所有设备都会同步删除，无法撤销。")
+      !window.confirm("删除这条内容？所有设备都会隐藏，可在「已删除」中恢复。")
     )
       return;
     setBusy(true);
@@ -267,9 +269,11 @@ export default function Apps() {
                   </dl>
                   <details>
                     <summary>状态摘要设置</summary>
-                    <p>在转发规则中使用此设备 ID，选择「App · 收件箱」。</p>
+                    <p>配置这台设备显示的用量与会话来源。</p>
                     <code>{d.id}</code>
-                    <Link to="/routes">配置转发规则</Link>
+                    <Link to={`/routes?node=${encodeURIComponent(d.id)}`}>
+                      配置转发规则
+                    </Link>
                   </details>
                   <div className="app-actions">
                     <button
@@ -304,8 +308,23 @@ export default function Apps() {
             }}
           >
             <label>
+              状态
+              <select
+                value={deleted ? "deleted" : "active"}
+                disabled={busy}
+                onChange={(e) => setDeleted(e.target.value === "deleted")}
+              >
+                <option value="active">未删除</option>
+                <option value="deleted">已删除</option>
+              </select>
+            </label>
+            <label>
               类型
-              <select value={kind} onChange={(e) => setKind(e.target.value)}>
+              <select
+                value={kind}
+                disabled={busy}
+                onChange={(e) => setKind(e.target.value)}
+              >
                 <option value="">全部内容</option>
                 <option value="text">文本</option>
                 <option value="todo">待办</option>
@@ -321,13 +340,17 @@ export default function Apps() {
                 placeholder="搜索正文"
               />
             </label>
-            <button className="button secondary">搜索</button>
+            <button className="button secondary" disabled={busy}>
+              搜索
+            </button>
           </form>
           {items === null ? (
             <p role="status">正在加载内容…</p>
           ) : items.length === 0 ? (
             <Empty title="没有匹配的内容">
-              在这里或 App 中新增文本、待办和图片。
+              {deleted
+                ? "已删除的内容会保留在这里，可逐条恢复。"
+                : "在这里或 App 中新增文本、待办和图片。"}
             </Empty>
           ) : (
             <div className="app-items">
@@ -339,7 +362,8 @@ export default function Apps() {
                         item.kind
                       ] ?? item.kind}
                     </Badge>
-                    <time>{date(item.updated_at)}</time>
+                    {item.deleted_at && <Badge>已删除</Badge>}
+                    <time>{date(item.deleted_at || item.updated_at)}</time>
                   </div>
                   {item.attachment_id && (
                     <a
@@ -363,29 +387,41 @@ export default function Apps() {
                     {item.body}
                   </p>
                   <div className="app-actions">
-                    {item.kind === "todo" && (
+                    {item.deleted_at ? (
                       <button
                         className="button secondary"
                         disabled={busy}
-                        onClick={() => changeItem(item, "set_completed")}
+                        onClick={() => changeItem(item, "restore")}
                       >
-                        {item.completed ? "标为未完成" : "完成待办"}
+                        恢复
                       </button>
+                    ) : (
+                      <>
+                        {item.kind === "todo" && (
+                          <button
+                            className="button secondary"
+                            disabled={busy}
+                            onClick={() => changeItem(item, "set_completed")}
+                          >
+                            {item.completed ? "标为未完成" : "完成待办"}
+                          </button>
+                        )}
+                        <button
+                          className="button secondary"
+                          disabled={busy}
+                          onClick={() => setEditor({ item })}
+                        >
+                          编辑
+                        </button>
+                        <button
+                          className="button secondary danger"
+                          disabled={busy}
+                          onClick={() => changeItem(item, "delete")}
+                        >
+                          删除
+                        </button>
+                      </>
                     )}
-                    <button
-                      className="button secondary"
-                      disabled={busy}
-                      onClick={() => setEditor({ item })}
-                    >
-                      编辑
-                    </button>
-                    <button
-                      className="button secondary danger"
-                      disabled={busy}
-                      onClick={() => changeItem(item, "delete")}
-                    >
-                      删除
-                    </button>
                   </div>
                 </article>
               ))}
