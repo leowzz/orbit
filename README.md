@@ -277,13 +277,17 @@ console:
 The password is required. `console.session_hours` sets the login lifetime in
 hours (a positive integer), defaulting to 72 hours (3 days). Restart Core after
 changing it. Both the HttpOnly session Cookie and server-side expiry use this
-duration; logout invalidates the session, and Core restart requires a new login.
+duration. Sessions are persisted in `console.database`, so Core restarts and
+updates retain existing logins until their original expiry. Logout revokes only
+the current browser session; changing the configured password revokes all sessions
+when Core next starts. Changing `session_hours` applies to new logins.
+The first upgrade from memory-only sessions requires one new login.
 The Core frontend stores neither passwords nor tokens in local storage. Basic
 Auth is not accepted. Use HTTPS or an SSH tunnel for remote access.
 
 Keep Core identity, MQTT/TLS credentials, observation policies, NTP, logging,
-and console settings in YAML. SQLite stores projection routes and their
-revision; it does not replace the deployment configuration. Relative database
+and console settings in YAML. SQLite stores projection routes, their revision,
+and hashed login sessions; it does not replace the deployment configuration. Relative database
 paths resolve from the Core YAML directory, so the default local configuration
 uses `configs/data/core.sqlite`.
 

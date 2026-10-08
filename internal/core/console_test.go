@@ -315,7 +315,7 @@ func TestUnroutedNodeDiscoveryClearsOldRetainedView(t *testing.T) {
 func TestAppAdminUsesConsoleAuthenticationAndOriginChecks(t *testing.T) {
 	engine := newTestEngine(t)
 	runner, _ := NewRunner(engine, &fakeTransport{}, nil, time.Now)
-	handler := ConsoleHandler(runner, nil, &config.CoreConfig{Console: config.ConsoleConfig{Password: "test-password", SessionHours: 72}}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+	handler := ConsoleHandler(runner, newTestConsoleStore(t), &config.CoreConfig{Console: config.ConsoleConfig{Password: "test-password", SessionHours: 72}}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
 	for _, path := range []string{"/api/app/devices", "/api/app/operations", "/api/app/attachments/file"} {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, httptest.NewRequest("GET", path, nil))

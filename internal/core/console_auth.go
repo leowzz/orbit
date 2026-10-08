@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"net"
@@ -26,27 +27,28 @@ type consoleAuth struct {
 	password   [32]byte
 	configured bool
 	sessionTTL time.Duration
-	sessions   map[string]time.Time
+	store      *RouteStore
+	verifier   []byte
 	attempts   map[string]loginAttempts
 	now        func() time.Time
 }
 
-func newConsoleAuth(password string, sessionTTL time.Duration) *consoleAuth {
-	return &consoleAuth{password: sha256.Sum256([]byte(password)), configured: strings.TrimSpace(password) != "", sessionTTL: sessionTTL, sessions: make(map[string]time.Time), attempts: make(map[string]loginAttempts), now: time.Now}
-}
-func (a *consoleAuth) valid(r *http.Request) bool {
-	cookie, err := r.Cookie(consoleCookie)
+func newConsoleAuth(password string, sessionTTL time.Duration, store *RouteStore) (*consoleAuth, error) {
+	if store == nil {
+		return nil, errors.New("console session store is required")
+	}
+	verifier, err := store.consoleCredential(password)
 	if err != nil {
-		return false
+		return nil, err
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	until, ok := a.sessions[cookie.Value]
-	if !ok || !until.After(a.now()) {
-		delete(a.sessions, cookie.Value)
-		return false
+	return &consoleAuth{password: sha256.Sum256([]byte(password)), configured: strings.TrimSpace(password) != "", sessionTTL: sessionTTL, store: store, verifier: verifier, attempts: make(map[string]loginAttempts), now: time.Now}, nil
+}
+func (a *consoleAuth) valid(r *http.Request) (bool, error) {
+	cookie, err := r.Cookie(consoleCookie)
+	if err != nil || !a.configured || len(cookie.Value) != 64 {
+		return false, nil
 	}
-	return true
+	return a.store.validConsoleSession(r.Context(), cookie.Value, a.verifier, a.now())
 }
 func sessionCookie(r *http.Request, value string, age int) *http.Cookie {
 	return &http.Cookie{Name: consoleCookie, Value: value, Path: "/", MaxAge: age, HttpOnly: true, Secure: r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https", SameSite: http.SameSiteStrictMode}
@@ -103,15 +105,6 @@ func (a *consoleAuth) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	delete(a.attempts, host)
-	for token, until := range a.sessions {
-		if !until.After(now) {
-			delete(a.sessions, token)
-		}
-	}
-	if len(a.sessions) >= 256 {
-		http.Error(w, "too many active sessions", 429)
-		return
-	}
 	var bytes [32]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
 		http.Error(w, "cannot create session", 500)
@@ -119,7 +112,14 @@ func (a *consoleAuth) login(w http.ResponseWriter, r *http.Request) {
 	}
 	token := hex.EncodeToString(bytes[:])
 	until := now.Add(a.sessionTTL)
-	a.sessions[token] = until
+	if err := a.store.createConsoleSession(r.Context(), token, a.verifier, now, until); err != nil {
+		if errors.Is(err, errSessionLimit) {
+			http.Error(w, "too many active sessions", 429)
+		} else {
+			http.Error(w, "cannot save session", http.StatusServiceUnavailable)
+		}
+		return
+	}
 	cookie := sessionCookie(r, token, int(a.sessionTTL.Seconds()))
 	cookie.Expires = until
 	http.SetCookie(w, cookie)
@@ -127,9 +127,10 @@ func (a *consoleAuth) login(w http.ResponseWriter, r *http.Request) {
 }
 func (a *consoleAuth) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(consoleCookie); err == nil {
-		a.mu.Lock()
-		delete(a.sessions, cookie.Value)
-		a.mu.Unlock()
+		if err := a.store.deleteConsoleSession(r.Context(), cookie.Value); err != nil {
+			http.Error(w, "cannot revoke session", http.StatusServiceUnavailable)
+			return
+		}
 	}
 	http.SetCookie(w, sessionCookie(r, "", -1))
 	writeConsoleJSON(w, map[string]bool{"authenticated": false})

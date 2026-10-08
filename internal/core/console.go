@@ -46,6 +46,9 @@ func OpenRouteStore(path string, seed map[string]config.ProjectionRoute) (*Route
 	if _, err = db.Exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS routing_config (id INTEGER PRIMARY KEY CHECK (id=1), revision INTEGER NOT NULL, document TEXT NOT NULL);`); err != nil {
 		return fail(err)
 	}
+	if _, err = db.Exec(consoleSessionSchema); err != nil {
+		return fail(err)
+	}
 	if seed == nil {
 		seed = map[string]config.ProjectionRoute{}
 	}
@@ -207,7 +210,12 @@ func InboxConsoleHandler(engine *Engine, store *RouteStore, cfg *config.CoreConf
 }
 
 func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, app ...http.Handler) http.Handler {
-	auth := newConsoleAuth(cfg.Console.Password, time.Duration(cfg.Console.SessionHours)*time.Hour)
+	auth, err := newConsoleAuth(cfg.Console.Password, time.Duration(cfg.Console.SessionHours)*time.Hour, store)
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Error(w, "console session storage unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	startedAt := time.Now().UTC()
 	mux := http.NewServeMux()
 	admin := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -314,9 +322,16 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 			app[1].ServeHTTP(w, r)
 			return
 		}
-		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/auth/login" && !auth.valid(r) {
-			http.Error(w, "authentication required", 401)
-			return
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/auth/login" {
+			valid, err := auth.valid(r)
+			if err != nil {
+				http.Error(w, "console session storage unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if !valid {
+				http.Error(w, "authentication required", 401)
+				return
+			}
 		}
 		mux.ServeHTTP(w, r)
 	})

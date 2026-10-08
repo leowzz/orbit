@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,10 +12,38 @@ import (
 	"orbit/internal/config"
 )
 
+func newTestConsoleStore(t *testing.T) *RouteStore {
+	t.Helper()
+	store, err := OpenRouteStore(filepath.Join(t.TempDir(), "console.sqlite"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return store
+}
+
+func newTestConsoleAuth(t *testing.T, password string, ttl time.Duration) *consoleAuth {
+	t.Helper()
+	auth, err := newConsoleAuth(password, ttl, newTestConsoleStore(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return auth
+}
+
+func consoleValid(t *testing.T, auth *consoleAuth, request *http.Request) bool {
+	t.Helper()
+	valid, err := auth.valid(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return valid
+}
+
 func TestConsoleConfiguredSessionLifetime(t *testing.T) {
 	for _, hours := range []int{1, 12, 72, 96} {
 		ttl := time.Duration(hours) * time.Hour
-		a := newConsoleAuth("password", ttl)
+		a := newTestConsoleAuth(t, "password", ttl)
 		start := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
 		now := start
 		a.now = func() time.Time { return now }
@@ -32,18 +61,18 @@ func TestConsoleConfiguredSessionLifetime(t *testing.T) {
 		r = httptest.NewRequest("GET", "/api/auth/session", nil)
 		r.AddCookie(cookie)
 		now = start.Add(ttl - time.Nanosecond)
-		if !a.valid(r) {
+		if !consoleValid(t, a, r) {
 			t.Fatalf("%d-hour session expired early", hours)
 		}
 		now = start.Add(ttl)
-		if a.valid(r) {
+		if consoleValid(t, a, r) {
 			t.Fatalf("%d-hour session accepted at expiry", hours)
 		}
 	}
 }
 
 func TestConsoleSystemReportsConfiguredSessionLifetime(t *testing.T) {
-	handler := ConsoleHandler(nil, nil, &config.CoreConfig{Console: config.ConsoleConfig{Password: "password", SessionHours: 12}})
+	handler := ConsoleHandler(nil, newTestConsoleStore(t), &config.CoreConfig{Console: config.ConsoleConfig{Password: "password", SessionHours: 12}})
 	r := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{"password":"password"}`))
 	r.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -64,7 +93,7 @@ func TestConsoleSystemReportsConfiguredSessionLifetime(t *testing.T) {
 }
 
 func TestConsoleSessionLoginExpiryLogoutAndSecureCookie(t *testing.T) {
-	a := newConsoleAuth("password", 72*time.Hour)
+	a := newTestConsoleAuth(t, "password", 72*time.Hour)
 	now := time.Now()
 	a.now = func() time.Time { return now }
 	login := func(password string) *httptest.ResponseRecorder {
@@ -91,27 +120,30 @@ func TestConsoleSessionLoginExpiryLogoutAndSecureCookie(t *testing.T) {
 	}
 	r := httptest.NewRequest("GET", "https://example.com/api/state", nil)
 	r.AddCookie(cookie)
-	if !a.valid(r) {
+	if !consoleValid(t, a, r) {
 		t.Fatal("new session rejected")
 	}
-	newAuth := newConsoleAuth("password", 72*time.Hour)
-	if newAuth.valid(r) {
-		t.Fatal("session survived restart")
+	newAuth, err := newConsoleAuth("password", 72*time.Hour, a.store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !consoleValid(t, newAuth, r) {
+		t.Fatal("session lost after rebuilding handler")
 	}
 	a.logout(httptest.NewRecorder(), r)
-	if a.valid(r) {
+	if consoleValid(t, a, r) {
 		t.Fatal("logout did not revoke token")
 	}
 	w = login("password")
 	r = httptest.NewRequest("GET", "https://example.com/api/state", nil)
 	r.AddCookie(w.Result().Cookies()[0])
 	now = now.Add(72 * time.Hour)
-	if a.valid(r) {
+	if consoleValid(t, a, r) {
 		t.Fatal("expired session accepted")
 	}
 }
 func TestConsoleLoginThrottleAndMalformedRequests(t *testing.T) {
-	a := newConsoleAuth("password", 72*time.Hour)
+	a := newTestConsoleAuth(t, "password", 72*time.Hour)
 	now := time.Now()
 	a.now = func() time.Time { return now }
 	request := func(body string) *httptest.ResponseRecorder {
