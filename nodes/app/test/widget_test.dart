@@ -8,6 +8,26 @@ import 'package:orbit_app/local_store.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'sync_test.dart' show item, page;
 
+Future<void> waitForLocalUpdate(
+  WidgetTester tester,
+  bool Function() completed,
+) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  await tester.pump();
+  while (!completed()) {
+    if (DateTime.now().isAfter(deadline)) {
+      throw TestFailure('Local update did not complete within 5 seconds');
+    }
+    // SQLite runs outside the fake clock. Wait for its result, not a fixed
+    // assumption about the runner's disk speed.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+  }
+  await tester.pumpAndSettle();
+}
+
 void main() {
   sqfliteFfiInit();
   for (final width in [360.0, 900.0]) {
@@ -99,10 +119,7 @@ void main() {
         await tester.tap(find.byTooltip('更多操作'));
         await tester.pumpAndSettle();
         await tester.tap(find.text(kind == 'todo' ? '设为待办' : '改为文本'));
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        });
-        await tester.pumpAndSettle();
+        await waitForLocalUpdate(tester, () => c.pending.isNotEmpty);
         final operation = jsonDecode(c.pending.single['payload']);
         expect(operation['type'], 'set_kind');
         expect(operation['kind'], kind);
@@ -139,10 +156,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '离线时也能记下来');
       await tester.tap(find.text('发送'));
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pumpAndSettle();
+      await waitForLocalUpdate(
+        tester,
+        () => c.pending.isNotEmpty && find.text('保存中…').evaluate().isEmpty,
+      );
       expect(find.text('待发送'), findsNothing);
       expect(find.text('离线时也能记下来'), findsOneWidget);
       expect(tester.getRect(message).top, greaterThan(position.top));
@@ -178,17 +195,17 @@ void main() {
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), '只把这一条设为待办');
       await tester.tap(find.byType(Switch));
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pumpAndSettle();
+      await waitForLocalUpdate(
+        tester,
+        () => tester.widget<Switch>(find.byType(Switch)).value,
+      );
       expect(find.text('只把这一条设为待办'), findsOneWidget);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       await tester.tap(find.text('发送'));
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pumpAndSettle();
+      await waitForLocalUpdate(
+        tester,
+        () => c.pending.isNotEmpty && find.text('保存中…').evaluate().isEmpty,
+      );
       expect(jsonDecode(c.pending.single['payload'])['kind'], 'todo');
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       expect(tester.takeException(), isNull);
@@ -208,16 +225,16 @@ void main() {
           home: InboxScreen(controller: c, onSettings: () {}),
         ),
       );
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pumpAndSettle();
+      await waitForLocalUpdate(
+        tester,
+        () => tester.widget<Switch>(find.byType(Switch)).value,
+      );
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       await tester.tap(find.byType(Switch));
-      await tester.runAsync(() async {
-        await Future<void>.delayed(const Duration(milliseconds: 100));
-      });
-      await tester.pumpAndSettle();
+      await waitForLocalUpdate(
+        tester,
+        () => !tester.widget<Switch>(find.byType(Switch)).value,
+      );
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
       expect(await tester.runAsync(() => local.meta('composer_kind')), 'text');
       await tester.pumpWidget(const SizedBox());
