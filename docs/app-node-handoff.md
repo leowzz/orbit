@@ -439,3 +439,10 @@ make build-go
 - tx Core/Web 已更新到 `v0.2.9`，镜像摘要与 CI 签名记录一致。公网验证删除接口的管理员权限、未登录拒绝、跨站拒绝与不存在设备返回值；线上前端资源包含删除按钮。没有删除任何已有设备。
 - Web 收件箱登录与快照正常，消息、附件、设备注册表及 6 条路由保持不变，数据库完整性正常，容器重启计数为 0。
 - 升级前备份：`/srv/orbit-deploy/backups/v0.2.9-20261008T093920Z`；部署记录：`/srv/orbit-deploy/releases/v0.2.9`；构建：https://github.com/leowzz/orbit/actions/runs/37757699412 。
+
+### 2026-10-08 — v0.2.10 登录会话持久化发布到 tx
+
+- 功能提交 `2d7c8b0`，`v0.2.10` 指向 `1e45e68`。Core 登录会话以令牌哈希和原到期时间保存到现有 SQLite；更新或重启保留会话，退出及修改密码会撤销相应会话。首次从内存会话升级需要重新登录一次。
+- tx Core/Web 已更新到 `v0.2.10`，镜像摘要与 CI 签名验证后的产物记录一致。服务镜像构建与测试均通过；部署时 Android 包仍在独立构建，完整 Release 状态见构建链接。
+- 公网使用同一 Cookie 验证真实 Core 重启后仍可访问，SQLite 会话及到期时间不变；退出后重放该 Cookie 返回 401。Web 收件箱登录、状态和快照、设备注册表、6 条路由及数据库完整性检查通过。
+- 升级前备份：`/srv/orbit-deploy/backups/v0.2.10-20261008T100334Z`；部署脚本、镜像摘要及验收记录：`/srv/orbit-deploy/releases/v0.2.10`；构建：https://github.com/leowzz/orbit/actions/runs/37760274585 。
