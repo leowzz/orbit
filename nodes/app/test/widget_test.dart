@@ -144,8 +144,8 @@ void main() {
       });
       await tester.pumpAndSettle();
       expect(find.text('待发送'), findsNothing);
-      expect(find.text('离线时也能记下来'), findsNothing);
-      expect(tester.getRect(message), position);
+      expect(find.text('离线时也能记下来'), findsOneWidget);
+      expect(tester.getRect(message).top, greaterThan(position.top));
       expect((await tester.runAsync(local.pending))!.length, 1);
       expect(jsonDecode(c.pending.single['payload'])['kind'], 'text');
       // Upload progress stays quiet; only failures expose the preserved draft.
@@ -163,10 +163,7 @@ void main() {
           await c.load();
         });
         await tester.pumpAndSettle();
-        expect(
-          find.text('离线时也能记下来'),
-          state == 'pending' ? findsNothing : findsOneWidget,
-        );
+        expect(find.text('离线时也能记下来'), findsOneWidget);
         expect(
           find.text('重试'),
           state == 'failed' ? findsOneWidget : findsNothing,

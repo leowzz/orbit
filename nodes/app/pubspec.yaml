@@ -20,6 +20,7 @@ dependencies:
   crypto: ^3.0.6
   image_picker: ^1.2.1
   mobile_scanner: ^7.4.2
+  url_launcher: ^6.3.3
 dev_dependencies:
   flutter_test:
     sdk: flutter

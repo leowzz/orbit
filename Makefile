@@ -104,7 +104,7 @@ test-dev:
 	node --test scripts/dev-core.test.mjs
 
 test-web:
-	node --test nodes/web/app.test.cjs
+	node --test nodes/web/*.test.cjs
 
 test-go: build-console
 	$(GO) test ./...

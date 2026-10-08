@@ -167,6 +167,7 @@ void main() {
       await tester.tap(find.byType(DropdownButton<String>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('图片').last);
+      await tester.runAsync(() => controller.load());
       await tester.pumpAndSettle();
       expect(find.text('还没有图片'), findsOneWidget);
       expect(find.byType(NavigationBar), findsOneWidget);

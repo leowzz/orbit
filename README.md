@@ -707,6 +707,13 @@ are also kept in
 
 ## Personal inbox App
 
+For messages only, start with `configs/core.inbox.example.yaml`: no MQTT broker,
+Agent, node identity, or projection route is required. Core serves the browser
+inbox at `/inbox/` on both the console and App listeners. Add a device in the
+console, then paste its connection information into the App or browser.
+See [个人收件箱：连接、使用与部署](docs/personal-inbox.md).
+
+
 The shared Flutter App in [nodes/app](nodes/app/README.md) adds a personal inbox:
 text, todos and images, foreground synchronization, offline caching, a durable
 outbox, and explicit conflict handling. The fixed usage/session summary reads an

@@ -199,6 +199,13 @@ func (e *Engine) consoleState(now time.Time) map[string]any {
 	return map[string]any{"core_id": e.config.CoreID, "core_epoch": e.config.CoreEpoch, "agents": agents, "nodes": nodes, "now": now}
 }
 
+// InboxConsoleHandler serves device authorization and inbox administration
+// without a broker. Projection routes remain unavailable until MQTT is enabled.
+func InboxConsoleHandler(engine *Engine, store *RouteStore, cfg *config.CoreConfig, app ...http.Handler) http.Handler {
+	runner := &Runner{engine: engine, now: time.Now}
+	return ConsoleHandler(runner, store, cfg, app...)
+}
+
 func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, app ...http.Handler) http.Handler {
 	auth := newConsoleAuth(cfg.Console.Password, time.Duration(cfg.Console.SessionHours)*time.Hour)
 	startedAt := time.Now().UTC()
@@ -256,6 +263,10 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 			http.Error(w, "invalid routing document", 400)
 			return
 		}
+		if runner.transport == nil && len(d.Routes) > 0 {
+			http.Error(w, "enable MQTT before adding projection routes", http.StatusConflict)
+			return
+		}
 		if err := cfg.ValidateRoutes(d.Routes); err != nil {
 			http.Error(w, err.Error(), 400)
 			return
@@ -274,7 +285,10 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 		// Use a bounded context independent of a browser disconnect after commit.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		publishErr := runner.publishViews(ctx, views)
+		var publishErr error
+		if runner.transport != nil {
+			publishErr = runner.publishViews(ctx, views)
+		}
 		d.Revision++
 		writeConsoleJSON(w, map[string]any{"revision": d.Revision, "routes": d.Routes, "publish_pending": publishErr != nil})
 	})
@@ -291,6 +305,12 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 		}
 		if r.Header.Get("Sec-Fetch-Site") == "cross-site" && r.Method != "GET" && r.Method != "HEAD" {
 			http.Error(w, "cross-site request rejected", 403)
+			return
+		}
+		// Personal routes retain their own device authorization. A console session
+		// never grants inbox API access, and device cookies never grant admin access.
+		if len(app) > 1 && app[1] != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/") || strings.HasPrefix(r.URL.Path, "/inbox/") || r.URL.Path == "/inbox") {
+			app[1].ServeHTTP(w, r)
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/auth/login" && !auth.valid(r) {

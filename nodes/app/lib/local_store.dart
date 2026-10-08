@@ -45,7 +45,7 @@ class LocalStore {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<List<Json>> items({int limit = 100}) async => (await db.query(
+  Future<List<Json>> items({int? limit = 100}) async => (await db.query(
     'items',
     where: 'deleted=0',
     orderBy: 'created DESC, id DESC',

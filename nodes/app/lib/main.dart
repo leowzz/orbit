@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqlite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -78,6 +79,19 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   }
 
   Future<void> _connect(Json config) async {
+    final response = await http
+        .get(
+          Uri.parse('${config['server']}/api/v1/status'),
+          headers: {'Authorization': 'Bearer ${config['token']}'},
+        )
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode == 401) throw ApiError('unauthenticated');
+    if (response.statusCode == 403) throw ApiError('device_revoked');
+    if (response.statusCode != 200) throw ApiError('unavailable');
+    final status = jsonDecode(response.body);
+    if (status is! Map || status['node_id'] is! String) {
+      throw ApiError('unavailable');
+    }
     await _open(config);
     await secure.write(key: 'connection', value: jsonEncode(config));
     if (mounted) {
@@ -175,6 +189,7 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
             ),
           )
         : OrbitHome(
+            controller: controller,
             widgetsEnabled: Platform.isAndroid,
             inbox: controller == null
                 ? ConnectionScreen(onConnect: _connect)
@@ -222,10 +237,27 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
     });
     try {
       await widget.onConnect(config.toJson());
+    } on ApiError catch (e) {
+      if (mounted) setState(() => error = message(e.code));
     } catch (_) {
-      if (mounted) setState(() => error = '无法保存连接，请重试');
+      if (mounted) setState(() => error = '连接未完成，请检查服务地址和网络后重试');
     } finally {
       if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> pasteConnection() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final config = ConnectionConfig.fromQr(data?.text ?? '');
+      if (!mounted) return;
+      setState(() {
+        server.text = config.server;
+        token.text = config.token;
+        error = null;
+      });
+    } catch (_) {
+      if (mounted) setState(() => error = '请先在管理台点击「复制连接信息」，再粘贴到这里');
     }
   }
 
@@ -263,7 +295,13 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               '连接你的 Orbit 服务。打开应用后同步，离线时仍可查看已保存的内容。',
               style: TextStyle(height: 1.6),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            OutlinedButton.icon(
+              onPressed: saving ? null : pasteConnection,
+              icon: const Icon(Icons.content_paste),
+              label: const Text('粘贴连接信息'),
+            ),
+            const SizedBox(height: 12),
             if (defaultTargetPlatform == TargetPlatform.android) ...[
               OutlinedButton.icon(
                 onPressed: saving ? null : scan,
@@ -291,7 +329,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             ),
             const SizedBox(height: 12),
             const Text(
-              '每台设备使用独立令牌，由服务管理员提供。',
+              '从管理台复制连接信息或扫码即可。收件箱无需配置 MQTT 或转发规则。',
               style: TextStyle(color: Colors.black54),
             ),
             if (error != null)
@@ -305,7 +343,7 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
             const SizedBox(height: 28),
             FilledButton(
               onPressed: saving ? null : connect,
-              child: Text(saving ? '正在保存…' : '连接'),
+              child: Text(saving ? '正在连接…' : '连接'),
             ),
           ],
         ),

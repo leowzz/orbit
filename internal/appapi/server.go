@@ -50,6 +50,7 @@ func New(store *inbox.Store, cfg config.AppConfig, status func(string) json.RawM
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	s.browserRoutes(mux)
 	mux.HandleFunc("GET /api/v1/status", s.auth(func(w http.ResponseWriter, r *http.Request, node string) {
 		var value json.RawMessage = json.RawMessage(`null`)
 		if s.status != nil {
@@ -73,7 +74,18 @@ func (s *Server) auth(next func(http.ResponseWriter, *http.Request, string)) htt
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+		authorization := r.Header.Get("Authorization")
+		if authorization == "" {
+			if cookie, err := r.Cookie(browserCookie); err == nil {
+				if !browserOriginAllowed(r) {
+					failure(w, &inbox.Fault{Code: "forbidden"})
+					return
+				}
+				authorization = "Bearer " + cookie.Value
+				r.Header.Set("Authorization", authorization)
+			}
+		}
+		token, ok := strings.CutPrefix(authorization, "Bearer ")
 		if !ok || len(token) < 32 || len(token) > 512 {
 			failure(w, &inbox.Fault{Code: "unauthenticated"})
 			return

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>收件箱 · Orbit</title>
+    <link rel="stylesheet" href="/inbox/inbox.css" />
+    <script src="/inbox/inbox.js" defer></script>
+  </head>
+  <body>
+    <section id="login" class="gate" hidden>
+      <form id="login-form" class="login-card">
+        <span class="brand">◉ Orbit</span>
+        <h1>留给下一次打开的自己</h1>
+        <p>随手存下链接、文字和图片，在自己的设备间接着看。</p>
+        <label id="credential-label" for="credential">连接信息或设备令牌</label
+        ><textarea
+          id="credential"
+          rows="3"
+          autocomplete="off"
+          spellcheck="false"
+          required
+        ></textarea>
+        <input
+          id="gateway-password"
+          type="password"
+          autocomplete="current-password"
+          hidden
+          disabled
+        />
+        <p id="login-help" class="muted">
+          在管理台添加一台网页设备，粘贴连接信息即可。每台设备都可以单独撤销访问。
+        </p>
+        <button class="primary" id="connect">连接收件箱</button>
+        <p id="login-error" role="alert"></p>
+      </form>
+    </section>
+    <div id="workspace" hidden>
+      <header>
+        <div class="identity">
+          <span class="brand">◉ Orbit</span><span class="divider"></span>
+          <h1>收件箱</h1>
+        </div>
+        <div class="header-actions">
+          <span id="sync-state" role="status">正在读取…</span
+          ><button id="refresh" title="同步消息">同步</button
+          ><button id="logout" title="退出并清除此浏览器的缓存">退出</button>
+        </div>
+      </header>
+      <main>
+        <div class="toolbar">
+          <label class="search"
+            ><span aria-hidden="true">⌕</span
+            ><input
+              id="search"
+              type="search"
+              aria-label="搜索消息"
+              placeholder="搜索文字、链接…"
+              autocomplete="off" /></label
+          ><select id="filter" aria-label="筛选消息">
+            <option value="all">全部消息</option>
+            <option value="links">链接</option>
+            <option value="todo">未完成待办</option>
+            <option value="image">图片</option>
+            <option value="completed">已完成</option>
+          </select>
+        </div>
+        <div id="error" role="alert" hidden></div>
+        <section id="messages" aria-label="消息列表"></section>
+        <button id="more" hidden>加载更多</button>
+      </main>
+      <div class="compose-wrap">
+        <form id="composer">
+          <label class="sr-only" for="body">消息内容</label
+          ><textarea
+            id="body"
+            rows="2"
+            maxlength="4000"
+            placeholder="写点什么，留给自己…"
+          ></textarea>
+          <div id="attachment" hidden>
+            <span id="attachment-name"></span
+            ><button type="button" id="remove-photo">移除图片</button>
+          </div>
+          <div class="compose-actions">
+            <label class="todo-switch"
+              ><input id="todo" type="checkbox" />设为待办</label
+            ><button
+              id="choose-photo"
+              type="button"
+              title="也可在输入框粘贴或拖入图片"
+            >
+              添加图片</button
+            ><input
+              id="photo"
+              type="file"
+              accept="image/png,image/jpeg,image/gif"
+              hidden
+            /><span class="shortcut">⌘ / Ctrl + Enter 发送</span
+            ><button id="send" class="primary" type="submit">发送</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <dialog id="editor">
+      <form id="edit-form">
+        <h2>编辑消息</h2>
+        <textarea
+          id="edit-body"
+          rows="8"
+          maxlength="4000"
+          aria-label="编辑消息内容"
+        ></textarea>
+        <div class="dialog-actions">
+          <button type="button" id="cancel-edit">取消</button
+          ><button class="primary">保存</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="image-view">
+      <button id="close-image" aria-label="关闭图片">关闭</button
+      ><img id="full-image" alt="消息原图" />
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>

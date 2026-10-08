@@ -77,6 +77,9 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
+	if cfg.MQTT.URL == "" && len(document.Routes) > 0 {
+		return errors.New("stored projection routes require MQTT; keep the broker configuration or remove routes before using inbox-only mode")
+	}
 	if err := cfg.ValidateRoutes(document.Routes); err != nil {
 		return fmt.Errorf("stored routes: %w", err)
 	}
@@ -116,10 +119,12 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
-	synchronizedClock.Start(ctx)
+	if cfg.MQTT.URL != "" {
+		synchronizedClock.Start(ctx)
+	}
 
 	if cfg.App.Listen == "" {
-		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, nil)
+		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, nil, nil)
 	}
 	inboxStore, err := inbox.Open(cfg.App.DataDir)
 	if err != nil {
@@ -146,7 +151,11 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	go func() { serverErr <- server.Serve(listener) }()
 	go api.Sweep(ctx)
 	go func() {
-		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, api.AdminHandler()); err != nil && ctx.Err() == nil {
+		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, api.AdminHandler(), api.Handler()); err != nil && ctx.Err() == nil {
+			if cfg.MQTT.URL == "" {
+				serverErr <- err
+				return
+			}
 			logger.Error("MQTT stopped; App inbox remains available", zap.Error(err))
 		}
 	}()
@@ -165,7 +174,10 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	return err
 }
 
-func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time, admin http.Handler) error {
+func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time, admin, personal http.Handler) error {
+	if cfg.MQTT.URL == "" {
+		return runInboxConsole(ctx, cfg, engine, store, admin, personal, logger)
+	}
 	client, err := mqtt.Connect(ctx, mqtt.Config{
 		URL:      cfg.MQTT.URL,
 		ClientID: "orbit-core-" + cfg.Core.ID,
@@ -190,7 +202,7 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 	if err != nil {
 		return fmt.Errorf("listen core console: %w", err)
 	}
-	server := &http.Server{Handler: core.ConsoleHandler(runner, store, cfg, admin), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Handler: core.ConsoleHandler(runner, store, cfg, admin, personal), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	defer func() {
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -224,5 +236,30 @@ func disconnect(client *mqtt.Client, logger *zap.Logger) {
 	defer cancel()
 	if err := client.Disconnect(ctx); err != nil {
 		logger.Warn("disconnect mqtt", zap.Error(err))
+	}
+}
+
+func runInboxConsole(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, admin, personal http.Handler, logger *zap.Logger) error {
+	listener, err := net.Listen("tcp", cfg.Console.Listen)
+	if err != nil {
+		return fmt.Errorf("listen inbox console: %w", err)
+	}
+	server := &http.Server{Handler: core.InboxConsoleHandler(engine, store, cfg, admin, personal), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	defer func() {
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdown)
+	}()
+	failed := make(chan error, 1)
+	go func() { failed <- server.Serve(listener) }()
+	logger.Info("inbox console started without MQTT", zap.String("listen", cfg.Console.Listen))
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-failed:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
 	}
 }

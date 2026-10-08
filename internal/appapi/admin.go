@@ -134,7 +134,7 @@ func (s *Server) createDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.Label = strings.TrimSpace(input.Label)
-	if input.Label == "" || len(input.Label) > 120 || (input.Platform != "android" && input.Platform != "macos" && input.Platform != "windows") {
+	if input.Label == "" || len(input.Label) > 120 || (input.Platform != "android" && input.Platform != "macos" && input.Platform != "windows" && input.Platform != "web") {
 		failure(w, &inbox.Fault{Code: "invalid_fields"})
 		return
 	}

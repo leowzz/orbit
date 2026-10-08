@@ -603,3 +603,55 @@ func TestAppDeviceConfiguration(t *testing.T) {
 		t.Fatal("App reused MQTT product route")
 	}
 }
+
+func TestInboxOnlyWebConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "token"), []byte(strings.Repeat("a", 64)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	text := `web:
+  listen: 127.0.0.1:8080
+  auth:
+    password: example-password
+  inbox:
+    url: https://orbit.example.com
+    token_file: token
+`
+	cfg, err := LoadWebNode(writeConfig(t, dir, "web.yaml", text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MQTT.URL != "" || cfg.Web.Inbox.Token != strings.Repeat("a", 64) {
+		t.Fatal("unexpected inbox connection")
+	}
+	for _, url := range []string{"http://remote.example.com", "https://user:password@example.com", "https://example.com?token=secret", "https://example.com/path", "https://example.com#fragment"} {
+		_, err := LoadWebNode(writeConfig(t, dir, "invalid.yaml", strings.Replace(text, "https://orbit.example.com", url, 1)))
+		if err == nil {
+			t.Fatal("accepted unsafe URL", url)
+		}
+	}
+}
+
+func TestCoreInboxConfigurationWithoutBroker(t *testing.T) {
+	dir := t.TempDir()
+	text := `core:
+  id: inbox-core
+console:
+  password: test-only
+app:
+  listen: 127.0.0.1:7622
+`
+	cfg, err := LoadCore(writeConfig(t, dir, "inbox.yaml", text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MQTT.URL != "" || cfg.App.Listen == "" {
+		t.Fatal("unexpected config")
+	}
+	if _, err = LoadCore(writeConfig(t, dir, "bad.yaml", strings.Replace(text, "app:\n  listen: 127.0.0.1:7622\n", "", 1))); err == nil {
+		t.Fatal("accepted core without inbox or MQTT")
+	}
+	if _, err = LoadCore(writeConfig(t, dir, "partial.yaml", text+"mqtt:\n  credentials:\n    password_file: missing\n")); err == nil {
+		t.Fatal("ignored partial MQTT config")
+	}
+}

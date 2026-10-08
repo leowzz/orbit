@@ -19,7 +19,9 @@ class ConnectionConfig {
         url.userInfo.isNotEmpty ||
         url.hasQuery ||
         url.hasFragment ||
-        token.trim().length < 32) {
+        (token.trim().length < 32 ||
+            token.trim().length > 512 ||
+            RegExp(r'\s').hasMatch(token.trim()))) {
       throw const FormatException('请输入 HTTPS 服务地址和有效的设备令牌');
     }
     return ConnectionConfig._(

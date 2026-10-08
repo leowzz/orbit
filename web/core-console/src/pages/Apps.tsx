@@ -562,6 +562,7 @@ function DeviceForm({
             <option value="android">Android</option>
             <option value="macos">macOS</option>
             <option value="windows">Windows</option>
+            <option value="web">网页 / Web Node</option>
           </select>
         </label>
         <p>每台设备使用独立令牌，可访问共享收件箱。</p>
@@ -587,7 +588,10 @@ function TokenDialog({
   const [copied, setCopied] = useState("");
   return (
     <Modal title="连接 App" onClose={onClose}>
-      <p>在 Orbit 的连接页点击「扫码填写」，即可填入服务地址和设备令牌。</p>
+      <p>
+        在 Orbit 中粘贴连接信息或扫码即可。网页可直接打开服务地址下的
+        /inbox/，无需 MQTT 配置。
+      </p>
       <div className="app-pairing-qr">
         <QRCodeSVG
           value={JSON.stringify({
@@ -616,15 +620,22 @@ function TokenDialog({
           className="button secondary"
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(secret.token);
-              setCopied("令牌已复制");
+              await navigator.clipboard.writeText(
+                JSON.stringify({
+                  type: "orbit-app",
+                  version: 1,
+                  server: window.location.origin,
+                  token: secret.token,
+                }),
+              );
+              setCopied("连接信息已复制");
             } catch {
               setCopied("未能复制，请选中上方令牌手动复制");
             }
           }}
         >
           <Copy size={16} />
-          复制令牌
+          复制连接信息
         </button>
         <button className="button primary" onClick={onClose}>
           完成

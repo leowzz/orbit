@@ -52,6 +52,7 @@ func DevelopmentHandler(store *Store, intents SessionIntentPublisher, authConfig
 func handlerWithAssets(store *Store, intents SessionIntentPublisher, authConfig AuthConfig, assets fs.FS, assetVersion func() (string, error)) http.Handler {
 	auth := newAuthManager(authConfig)
 	mux := http.NewServeMux()
+	mountInbox(mux, auth, authConfig)
 	mux.HandleFunc("GET /favicon.ico", func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusNoContent)
 	})
@@ -96,12 +97,12 @@ func handlerWithAssets(store *Store, intents SessionIntentPublisher, authConfig 
 		}
 		http.SetCookie(response, &http.Cookie{
 			Name: authCookieName, Value: token, Path: "/", MaxAge: maxAge,
-			Expires: expiresAt, HttpOnly: true, SameSite: http.SameSiteLaxMode,
+			Expires: expiresAt, HttpOnly: true, Secure: request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteLaxMode,
 		})
 		writeJSON(response, map[string]string{"token": token, "expires_at": expiresAt.UTC().Format(time.RFC3339Nano)})
 	})
-	mux.HandleFunc("POST /api/auth/logout", func(response http.ResponseWriter, _ *http.Request) {
-		http.SetCookie(response, &http.Cookie{Name: authCookieName, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	mux.HandleFunc("POST /api/auth/logout", func(response http.ResponseWriter, request *http.Request) {
+		http.SetCookie(response, &http.Cookie{Name: authCookieName, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), HttpOnly: true, Secure: request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteLaxMode})
 		response.WriteHeader(http.StatusNoContent)
 	})
 	mux.Handle("POST /api/auth/session", auth.protect(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
@@ -121,7 +122,7 @@ func handlerWithAssets(store *Store, intents SessionIntentPublisher, authConfig 
 		}
 		http.SetCookie(response, &http.Cookie{
 			Name: authCookieName, Value: token, Path: "/", MaxAge: maxAge,
-			Expires: expiresAt, HttpOnly: true, SameSite: http.SameSiteLaxMode,
+			Expires: expiresAt, HttpOnly: true, Secure: request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteLaxMode,
 		})
 		response.WriteHeader(http.StatusNoContent)
 	})))

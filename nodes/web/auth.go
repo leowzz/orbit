@@ -14,6 +14,8 @@ import (
 const authCookieName = "orbit_web_auth"
 
 type AuthConfig struct {
+	InboxURL   string
+	InboxToken string
 	Password   string
 	SessionTTL time.Duration
 }

@@ -35,3 +35,10 @@ web:
 # Optional; defaults to info. Supported values: debug, info, warn, error.
 # logging:
 #   level: info
+
+# Optional shared inbox, configured once on the Web Node server.
+# Add these fields under the existing web section:
+#   inbox:
+#     url: https://orbit.example.com
+#     token_file: secrets/web-inbox-token
+# For an inbox without MQTT, see web.inbox.example.yaml.

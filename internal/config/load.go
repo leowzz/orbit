@@ -174,7 +174,11 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	if err := validateID("core.id", cfg.Core.ID); err != nil {
 		return err
 	}
-	if err := cfg.MQTT.validate(baseDir); err != nil {
+	if cfg.MQTT.URL == "" && cfg.App.Listen != "" {
+		if cfg.MQTT.Credentials.UsernameFile != "" || cfg.MQTT.Credentials.PasswordFile != "" || cfg.MQTT.TLS.CAFile != "" || cfg.MQTT.TLS.CertFile != "" || cfg.MQTT.TLS.KeyFile != "" {
+			return errors.New("mqtt.url is required when MQTT credentials or certificates are configured")
+		}
+	} else if err := cfg.MQTT.validate(baseDir); err != nil {
 		return fmt.Errorf("mqtt: %w", err)
 	}
 	host, port, err := net.SplitHostPort(cfg.Console.Listen)
@@ -192,6 +196,9 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	}
 	if !filepath.IsAbs(cfg.Console.Database) {
 		cfg.Console.Database = filepath.Join(baseDir, cfg.Console.Database)
+	}
+	if cfg.MQTT.URL == "" && len(cfg.ProjectionRoutes) > 0 {
+		return errors.New("projection routes require mqtt.url")
 	}
 	if err := cfg.ValidateRoutes(cfg.ProjectionRoutes); err != nil {
 		return err
@@ -263,11 +270,30 @@ func (cfg *WebNodeConfig) validate(baseDir string) error {
 	if err := cfg.NTP.validate(); err != nil {
 		return fmt.Errorf("ntp: %w", err)
 	}
-	if err := validateID("node.id", cfg.Node.ID); err != nil {
-		return err
+	if cfg.MQTT.URL != "" || cfg.Web.Inbox.URL == "" {
+		if err := validateID("node.id", cfg.Node.ID); err != nil {
+			return err
+		}
+		if err := cfg.MQTT.validate(baseDir); err != nil {
+			return fmt.Errorf("mqtt: %w", err)
+		}
 	}
-	if err := cfg.MQTT.validate(baseDir); err != nil {
-		return fmt.Errorf("mqtt: %w", err)
+	if cfg.Web.Inbox.URL != "" {
+		u, err := url.Parse(cfg.Web.Inbox.URL)
+		local := u != nil && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1")
+		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "https" && !(local && u.Scheme == "http")) {
+			return errors.New("web.inbox.url must be an HTTPS origin (HTTP is allowed only on loopback)")
+		}
+		token, err := readSecret(baseDir, &cfg.Web.Inbox.TokenFile)
+		if err != nil {
+			return fmt.Errorf("web.inbox.token_file: %w", err)
+		}
+		if len(token) < 32 || len(token) > 512 {
+			return errors.New("web.inbox.token_file must contain a valid device token")
+		}
+		cfg.Web.Inbox.Token = token
+	} else if cfg.Web.Inbox.TokenFile != "" {
+		return errors.New("web.inbox.url is required with token_file")
 	}
 	host, port, err := net.SplitHostPort(cfg.Web.Listen)
 	if err != nil || strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {

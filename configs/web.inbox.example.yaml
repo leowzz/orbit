@@ -1,0 +1,9 @@
+# Optional standalone Web Node. Prefer Core's built-in /inbox/ when possible.
+# No MQTT or node.id is needed in this mode. Protect remote access with HTTPS.
+web:
+  listen: 127.0.0.1:8080
+  auth:
+    password: change-me
+  inbox:
+    url: https://orbit.example.com
+    token_file: secrets/web-inbox-token

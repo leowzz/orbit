@@ -139,9 +139,16 @@ type WebNodeIdentity struct {
 	ID string `yaml:"id"`
 }
 
+type InboxGatewayConfig struct {
+	URL       string `yaml:"url"`
+	TokenFile string `yaml:"token_file"`
+	Token     string `yaml:"-"`
+}
+
 type WebConfig struct {
-	Listen string        `yaml:"listen"`
-	Auth   WebAuthConfig `yaml:"auth"`
+	Inbox  InboxGatewayConfig `yaml:"inbox"`
+	Listen string             `yaml:"listen"`
+	Auth   WebAuthConfig      `yaml:"auth"`
 }
 
 type WebAuthConfig struct {

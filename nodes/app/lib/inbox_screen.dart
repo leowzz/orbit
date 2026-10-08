@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'inbox_controller.dart';
 import 'local_store.dart';
 
@@ -27,6 +28,9 @@ class InboxScreen extends StatefulWidget {
 
 class _InboxScreenState extends State<InboxScreen> {
   final text = TextEditingController();
+  final searchText = TextEditingController();
+  bool searching = false;
+  Timer? searchTimer;
   String kind = 'text', filter = 'all';
   bool sending = false, composerReady = false, reading = false;
   InboxController get c => widget.controller;
@@ -112,6 +116,8 @@ class _InboxScreenState extends State<InboxScreen> {
 
   @override
   void dispose() {
+    searchTimer?.cancel();
+    searchText.dispose();
     text.dispose();
     super.dispose();
   }
@@ -323,9 +329,7 @@ class _InboxScreenState extends State<InboxScreen> {
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: c,
     builder: (context, _) {
-      final visible = c.items
-          .where((i) => filter == 'all' || i['kind'] == filter)
-          .toList();
+      final visible = c.items;
       // Only failed operations need a separate notice in the message list.
       final drafts = c.pending
           .where(
@@ -333,8 +337,8 @@ class _InboxScreenState extends State<InboxScreen> {
                 entry['state'] == 'conflict' || entry['state'] == 'failed',
           )
           .toList();
-      final empty = visible.isEmpty && c.pending.isEmpty;
-      final more = c.items.length >= c.limit;
+      final empty = visible.isEmpty && drafts.isEmpty;
+      final more = c.hasMore;
       final rowIndexes = <Key, int>{
         for (var i = 0; i < drafts.length; i++)
           ValueKey<String>(drafts[i]['id']): i,
@@ -344,21 +348,23 @@ class _InboxScreenState extends State<InboxScreen> {
       final scheme = Theme.of(context).colorScheme;
       return Scaffold(
         appBar: AppBar(
-          title: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.blur_circular_rounded, size: 27),
-              SizedBox(width: 10),
-              Text(
-                'Orbit',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -.5,
-                ),
-              ),
-            ],
+          title: const Text(
+            'Orbit',
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
           actions: [
+            IconButton(
+              tooltip: searching ? '关闭搜索' : '搜索消息',
+              icon: Icon(searching ? Icons.search_off : Icons.search),
+              onPressed: () {
+                setReading(false);
+                setState(() => searching = !searching);
+                if (!searching) {
+                  searchText.clear();
+                  c.search('', filter);
+                }
+              },
+            ),
             DropdownButtonHideUnderline(
               child: DropdownButton<String>(
                 value: filter,
@@ -367,12 +373,15 @@ class _InboxScreenState extends State<InboxScreen> {
                 style: TextStyle(color: scheme.onSurface, fontSize: 14),
                 items: const [
                   DropdownMenuItem(value: 'all', child: Text('全部')),
+                  DropdownMenuItem(value: 'links', child: Text('链接')),
                   DropdownMenuItem(value: 'todo', child: Text('待办')),
+                  DropdownMenuItem(value: 'completed', child: Text('已完成')),
                   DropdownMenuItem(value: 'image', child: Text('图片')),
                 ],
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() => filter = value);
+                  c.search(searchText.text, filter);
                   setReading(false);
                 },
               ),
@@ -403,6 +412,25 @@ class _InboxScreenState extends State<InboxScreen> {
               constraints: const BoxConstraints(maxWidth: 900),
               child: Column(
                 children: [
+                  if (searching)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                      child: TextField(
+                        controller: searchText,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          hintText: '搜索文字、链接…',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (value) {
+                          searchTimer?.cancel();
+                          searchTimer = Timer(
+                            const Duration(milliseconds: 150),
+                            () => c.search(value, filter),
+                          );
+                        },
+                      ),
+                    ),
                   if (c.error != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
@@ -462,11 +490,13 @@ class _InboxScreenState extends State<InboxScreen> {
                                     Text(
                                       c.syncing
                                           ? '正在同步…'
+                                          : searchText.text.trim().isNotEmpty
+                                          ? '没有找到匹配的消息'
                                           : filter == 'all'
                                           ? (c.error == null
                                                 ? '收件箱很清爽'
                                                 : '暂未取得消息')
-                                          : '还没有${filter == 'todo' ? '待办' : '图片'}',
+                                          : '还没有${{'todo': '待办', 'image': '图片', 'links': '链接', 'completed': '已完成待办'}[filter] ?? '消息'}',
                                       style: const TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.w500,
@@ -507,25 +537,39 @@ class _InboxScreenState extends State<InboxScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            TextField(
-                              controller: text,
-                              enabled: !sending,
-                              minLines: 1,
-                              maxLines: 4,
-                              maxLength: 4000,
-                              onChanged: (value) =>
-                                  c.local.setMeta('draft', value),
-                              decoration: InputDecoration(
-                                hintText: kind == 'todo'
-                                    ? '添加一件待办…'
-                                    : '写点什么，留给自己…',
-                                counterText: '',
-                                filled: false,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 6,
+                            CallbackShortcuts(
+                              bindings: {
+                                const SingleActivator(
+                                  LogicalKeyboardKey.enter,
+                                  control: true,
+                                ): () =>
+                                    send(),
+                                const SingleActivator(
+                                  LogicalKeyboardKey.enter,
+                                  meta: true,
+                                ): () =>
+                                    send(),
+                              },
+                              child: TextField(
+                                controller: text,
+                                enabled: !sending,
+                                minLines: 1,
+                                maxLines: 4,
+                                maxLength: 4000,
+                                onChanged: (value) =>
+                                    c.local.setMeta('draft', value),
+                                decoration: InputDecoration(
+                                  hintText: kind == 'todo'
+                                      ? '添加一件待办…'
+                                      : '写点什么，留给自己…',
+                                  counterText: '',
+                                  filled: false,
+                                  border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
                                 ),
                               ),
                             ),
@@ -694,6 +738,12 @@ class _InboxScreenState extends State<InboxScreen> {
                     style: const TextStyle(color: Colors.black54, fontSize: 12),
                   ),
                 ),
+                if ((item['body'] as String).isNotEmpty)
+                  IconButton(
+                    tooltip: '复制消息',
+                    onPressed: () => copy(item['body']),
+                    icon: const Icon(Icons.copy_outlined, size: 17),
+                  ),
                 PopupMenuButton<String>(
                   tooltip: '更多操作',
                   onSelected: (action) {
@@ -729,16 +779,27 @@ class _InboxScreenState extends State<InboxScreen> {
               Padding(
                 padding: const EdgeInsets.only(right: 6, bottom: 8),
                 child: GestureDetector(
-                  onTap: () => showImage(item['attachment_id']),
+                  onTap: () {
+                    if (item['attachment_id'] != null) {
+                      showImage(item['attachment_id']);
+                    }
+                  },
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: SizedBox(
                       height: 160,
                       width: double.infinity,
-                      child: AttachmentImage(
-                        controller: c,
-                        id: item['attachment_id'],
-                      ),
+                      child: item['local_photo'] != null
+                          ? Image.file(
+                              File(item['local_photo']),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  const Center(child: Text('本机图片不可用')),
+                            )
+                          : AttachmentImage(
+                              controller: c,
+                              id: item['attachment_id'],
+                            ),
                     ),
                   ),
                 ),
@@ -830,6 +891,37 @@ class _InboxMessageBodyState extends State<InboxMessageBody> {
             )
           else
             SelectionArea(child: Text(widget.body, style: style)),
+          if (messageLinks(widget.body).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  for (final link in messageLinks(widget.body))
+                    ActionChip(
+                      avatar: const Icon(Icons.open_in_new, size: 15),
+                      label: Text(link.host),
+                      tooltip: link.toString(),
+                      onPressed: () async {
+                        try {
+                          if (await launchUrl(
+                            link,
+                            mode: LaunchMode.externalApplication,
+                          )) {
+                            return;
+                          }
+                        } catch (_) {}
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('无法打开链接，请复制后在浏览器打开')),
+                          );
+                        }
+                      },
+                    ),
+                ],
+              ),
+            ),
           if (overflowing)
             TextButton(
               onPressed: () => setState(() => expanded = !expanded),
@@ -898,3 +990,12 @@ class _AttachmentImageState extends State<AttachmentImage> {
     },
   );
 }
+
+List<Uri> messageLinks(String body) =>
+    RegExp(r'https?://[^\s<>"，。！？、；）》」』]+', caseSensitive: false)
+        .allMatches(body)
+        .map((m) => Uri.tryParse(m.group(0)!))
+        .whereType<Uri>()
+        .where((u) => u.host.isNotEmpty && u.userInfo.isEmpty)
+        .toSet()
+        .toList();

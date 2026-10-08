@@ -118,7 +118,11 @@ void main() {
     expect(fields[1].controller!.text, testToken);
     expect(saved, isNull);
     expect(calls, contains('stop'));
-    await tester.ensureVisible(find.text('连接'));
+    await tester.scrollUntilVisible(
+      find.text('连接'),
+      160,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('连接'));
     await tester.pumpAndSettle();
     expect(saved, {'server': pairing['server'], 'token': testToken});

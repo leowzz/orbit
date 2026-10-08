@@ -51,6 +51,9 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error 
 	defer stopSignals()
 	ctx, cancel := context.WithCancel(signalContext)
 	defer cancel()
+	if cfg.MQTT.URL == "" && cfg.Web.Inbox.URL != "" {
+		return runInbox(ctx, cfg, logger, staticDir)
+	}
 	synchronizedClock, err := appclock.New(appclock.Config{
 		Server:       cfg.NTP.Server,
 		SyncInterval: cfg.NTP.SyncInterval.Duration,
@@ -90,6 +93,7 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error 
 	}
 	authConfig := webnode.AuthConfig{
 		Password: cfg.Web.Auth.Password, SessionTTL: cfg.Web.Auth.SessionTTL.Duration,
+		InboxURL: cfg.Web.Inbox.URL, InboxToken: cfg.Web.Inbox.Token,
 	}
 	var handler http.Handler
 	if staticDir == "" {
@@ -143,4 +147,43 @@ func disconnect(client *mqtt.Client, logger *zap.Logger) {
 	if err := client.Disconnect(ctx); err != nil {
 		logger.Warn("disconnect mqtt", zap.Error(err))
 	}
+}
+
+// A message-only Web Node needs one Core connection, no MQTT identity or route.
+func runInbox(ctx context.Context, cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error {
+	auth := webnode.AuthConfig{Password: cfg.Web.Auth.Password, SessionTTL: cfg.Web.Auth.SessionTTL.Duration, InboxURL: cfg.Web.Inbox.URL, InboxToken: cfg.Web.Inbox.Token}
+	var handler http.Handler = webnode.HandlerWithAuth(webnode.NewStore(), nil, auth)
+	if staticDir != "" {
+		var err error
+		handler, err = webnode.DevelopmentHandler(webnode.NewStore(), nil, auth, staticDir)
+		if err != nil {
+			return err
+		}
+	}
+	original := handler
+	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			http.Redirect(w, r, "/inbox/", http.StatusSeeOther)
+			return
+		}
+		original.ServeHTTP(w, r)
+	})
+	listener, err := net.Listen("tcp", cfg.Web.Listen)
+	if err != nil {
+		return err
+	}
+	server := newHTTPServer(ctx, handler)
+	stopped := make(chan error, 1)
+	go func() { stopped <- server.Serve(listener) }()
+	logger.Info("orbit web inbox started", zap.String("url", "http://"+cfg.Web.Listen+"/inbox/"))
+	select {
+	case err = <-stopped:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+	case <-ctx.Done():
+	}
+	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return server.Shutdown(shutdown)
 }

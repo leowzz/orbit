@@ -46,6 +46,42 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test('search reaches older pages and offline creates stay visible', () async {
+    final entries = List.generate(
+      130,
+      (i) => {
+        ...item('1', body: i == 0 ? 'https://example.com/old 旧链接' : '普通消息 $i'),
+        'id': 'item-${i.toString().padLeft(3, '0')}',
+        'created_at': DateTime.utc(
+          2026,
+          1,
+          1,
+        ).add(Duration(minutes: i)).toIso8601String(),
+      },
+    );
+    await local.applyPage(page('1', entries));
+    final c = InboxController(local, 'https://example.test', 'token', dir.path);
+    await c.load();
+    expect(c.items.length, 100);
+    expect(c.hasMore, isTrue);
+    await c.search('旧链接', 'links');
+    expect(c.items.single['id'], 'item-000');
+    expect(c.hasMore, isFalse);
+    await c.search('', 'all');
+    await c.submit('create', kind: 'text', body: '离线创建');
+    expect(c.items.first['body'], '离线创建');
+    final queued = c.pending.single;
+    await local.acknowledge(queued['id'], {
+      ...c.items.first,
+      'revision': '2',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+    await c.load();
+    expect(c.items.where((i) => i['body'] == '离线创建').length, 1);
+    expect(c.pending, isEmpty);
+    c.client.close();
+  });
+
   test('cache, cursor and immutable outbox survive a restart', () async {
     await local.applyPage(
       page('1', [item('1')]),

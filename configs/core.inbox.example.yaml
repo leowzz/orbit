@@ -1,0 +1,12 @@
+# Personal inbox only: no MQTT, Agent, projection route, or Node identity needed.
+# Keep the console private and expose /api/v1/* and /inbox/* through HTTPS.
+core:
+  id: core-local
+console:
+  listen: 127.0.0.1:7620
+  password: change-me
+  database: ../data/core.sqlite
+app:
+  listen: 127.0.0.1:7622
+  data_dir: ../data/app
+# Add and revoke devices in the console. Do not copy one token to all devices.

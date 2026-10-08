@@ -24,6 +24,9 @@ class InboxController extends ChangeNotifier {
   String? uploadingID;
   bool online = false, syncing = false, active = false;
   int limit = 100;
+  String query = '', filter = 'all';
+  bool hasMore = false;
+  int _loadRevision = 0;
   Timer? _timer;
   http.Client? _events;
   int _epoch = 0;
@@ -66,11 +69,66 @@ class InboxController extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    items = await local.items(limit: limit);
-    pending = await local.pending();
+    final revision = ++_loadRevision;
+    final all = await local.items(limit: null);
+    final queue = await local.pending();
+    // A committed local create must be visible even before the server responds.
+    for (final entry in queue) {
+      final op = jsonDecode(entry['payload']) as Json;
+      if (op['type'] == 'create' &&
+          entry['state'] == 'pending' &&
+          !all.any((item) => item['id'] == op['item_id'])) {
+        all.add({
+          'id': op['item_id'],
+          'revision': '0',
+          'kind': op['kind'],
+          'body': op['body'] ?? '',
+          'completed': false,
+          'created_at': DateTime.fromMicrosecondsSinceEpoch(
+            entry['created'],
+          ).toUtc().toIso8601String(),
+          'attachment_id': op['attachment_id'],
+          'local_photo': entry['photo'],
+        });
+      }
+    }
+    all.sort((a, b) {
+      final date = (b['created_at'] as String).compareTo(
+        a['created_at'] as String,
+      );
+      return date != 0
+          ? date
+          : (b['id'] as String).compareTo(a['id'] as String);
+    });
+    final needle = query.trim().toLowerCase();
+    final matches = all.where((item) {
+      final body = item['body'] as String;
+      return body.toLowerCase().contains(needle) &&
+          switch (filter) {
+            'links' => RegExp(
+              r'https?://[^\s]+',
+              caseSensitive: false,
+            ).hasMatch(body),
+            'todo' => item['kind'] == 'todo' && item['completed'] != true,
+            'completed' => item['kind'] == 'todo' && item['completed'] == true,
+            'image' => item['kind'] == 'image',
+            _ => true,
+          };
+    }).toList();
     final saved = await local.meta('status');
+    if (revision != _loadRevision) return;
+    items = matches.take(limit).toList();
+    hasMore = matches.length > limit;
+    pending = queue;
     if (saved != null) view = jsonDecode(saved) as Json?;
     notifyListeners();
+  }
+
+  Future<void> search(String text, String kind) async {
+    query = text;
+    filter = kind;
+    limit = 100;
+    await load();
   }
 
   Future<void> loadMore() async {

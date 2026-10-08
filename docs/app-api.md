@@ -112,7 +112,7 @@ SSE 仅提示追赶，不能推进本地 applied_cursor；相同 cursor 的心�
 以下路径仅在管理台监听器开放，复用管理台登录会话、Origin 和跨站请求检查；App 的 Bearer 令牌不能调用。
 
 - `GET /api/app/devices`：启用状态、设备名称/系统/撤销状态，以及本次进程的连接数、最近访问、最近成功同步请求时间与返回游标；不返回令牌或摘要。
-- `POST /api/app/devices`：`{label, platform}`（android/macos/windows），生成设备 ID 与随机令牌，只在本次响应返回明文。
+- `POST /api/app/devices`：`{label, platform}`（android/macos/windows/web），生成设备 ID 与随机令牌，只在本次响应返回明文。
 - `POST /api/app/devices/{id}/rotate`：替换令牌并恢复授权；`.../revoke`：撤销访问，保留内容。
 - `GET /api/app/items?after=...&kind=...&q=...&deleted=true`：默认未删除条目；deleted=true 仅列出已删除条目，支持同样的类型/正文筛选，每页 50 条，返回 `items` 和下一页 `next`；按稳定 ID 分页。
 - `POST /api/app/operations`：复用 App 操作契约、版本冲突与幂等回执，以保留身份 `@console` 作为操作来源，触发相同同步通知。
@@ -131,3 +131,15 @@ SSE 仅提示追赶，不能推进本地 applied_cursor；相同 cursor 的心�
 `server` 使用当前管理台的 origin（部署时同域反代 App API）。二维码只在明文令牌
 弹窗存续期间展示，不额外持久化。Android 校验类型、版本及与手动输入相同的地址/
 令牌约束；识别后仅填入表单，用户点击连接才保存，不会直接访问二维码中的地址。
+
+## 网页与同域访问
+
+Core 的 App 监听器和管理台监听器均提供 `/inbox/` 网页和同一套 `/api/v1/` 设备接口；管理台会话不能代替设备授权。
+
+- `GET /api/v1/browser` 返回 `{mode:"device"}`，不包含凭据。
+- `POST /api/v1/session` 接受 `{token}`，验证设备授权后写入 HttpOnly、SameSite=Strict、远程 Secure Cookie（30 天）。不在响应中返回令牌。无效令牌不会被已有 Cookie 代替。
+- `DELETE /api/v1/session` 清除当前浏览器 Cookie。
+- Bearer 授权保持原契约；没有 Authorization 时才尝试 Cookie。Cookie 请求会校验 Origin 和 Sec-Fetch-Site，跨站请求返回 forbidden。
+- 撤销或轮换设备后，已有 Cookie 和 SSE 连接同样失效。
+
+Web Node 的可选 `web.inbox` 代理只转发消息、同步、状态和附件接口，使用自己的访问会话保护入口；不会代理管理台或上游会话接口。
