@@ -10,9 +10,12 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 export function Mark({ small = false }: { small?: boolean }) {
   return (
-    <span className={"orbit-mark " + (small ? "small" : "")} aria-hidden>
-      <span />
-    </span>
+    <img
+      className={"orbit-mark " + (small ? "small" : "")}
+      src="/orbit-icon.svg"
+      alt=""
+      aria-hidden
+    />
   );
 }
 export function PageHead({

@@ -1,0 +1,7 @@
+Orbit's launcher icon uses Google's Material Icons blur_circular_rounded glyph,
+as bundled with Flutter. Changes: dark green fill, light background, launcher
+padding and platform-specific sizes. See MaterialIcons-LICENSE.txt for the
+license supplied with the source font.
+
+Source: https://github.com/google/material-design-icons
+Regenerate: uv run nodes/app/tool/generate_icons.py /path/to/flutter

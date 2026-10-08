@@ -187,42 +187,14 @@ strong {
 }
 .orbit-mark {
   display: inline-block;
-  position: relative;
   width: 37px;
   height: 37px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  transform: rotate(-35deg);
+  object-fit: contain;
   flex-shrink: 0;
-}
-.orbit-mark:before {
-  content: "";
-  position: absolute;
-  inset: 8px -7px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-}
-.orbit-mark span {
-  position: absolute;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  top: -2px;
-  left: 10px;
-  box-shadow: 0 0 0 3px #fff;
 }
 .orbit-mark.small {
   width: 25px;
   height: 25px;
-}
-.orbit-mark.small:before {
-  inset: 6px -5px;
-}
-.orbit-mark.small span {
-  width: 5px;
-  height: 5px;
-  left: 6px;
 }
 .wordmark {
   display: flex;

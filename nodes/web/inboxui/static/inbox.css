@@ -234,7 +234,10 @@ select {
   gap: 10px;
 }
 .body-row input {
-  margin-top: 7px;
+  /* Center on the first text line, including when the message wraps. */
+  margin: calc(0.825em - 9px) 0 0;
+  padding: 0;
+  flex: 0 0 18px;
   width: 18px;
   height: 18px;
   accent-color: var(--accent);
