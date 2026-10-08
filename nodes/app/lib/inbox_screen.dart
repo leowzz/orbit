@@ -333,6 +333,14 @@ class _InboxScreenState extends State<InboxScreen> {
                 entry['state'] == 'conflict' || entry['state'] == 'failed',
           )
           .toList();
+      final empty = visible.isEmpty && c.pending.isEmpty;
+      final more = c.items.length >= c.limit;
+      final rowIndexes = <Key, int>{
+        for (var i = 0; i < drafts.length; i++)
+          ValueKey<String>(drafts[i]['id']): i,
+        for (var i = 0; i < visible.length; i++)
+          ValueKey<String>(visible[i]['id']): drafts.length + i,
+      };
       final scheme = Theme.of(context).colorScheme;
       return Scaffold(
         appBar: AppBar(
@@ -420,14 +428,26 @@ class _InboxScreenState extends State<InboxScreen> {
                       onNotification: onListScroll,
                       child: RefreshIndicator(
                         onRefresh: c.sync,
-                        child: ListView(
+                        child: ListView.builder(
                           key: const PageStorageKey('inbox'),
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                          children: [
-                            for (final entry in drafts) _failedDraft(entry),
-                            if (visible.isEmpty && c.pending.isEmpty)
-                              Padding(
+                          itemCount:
+                              drafts.length +
+                              visible.length +
+                              (empty ? 1 : 0) +
+                              (more ? 1 : 0),
+                          findChildIndexCallback: (key) => rowIndexes[key],
+                          itemBuilder: (context, index) {
+                            if (index < drafts.length) {
+                              return _failedDraft(drafts[index]);
+                            }
+                            index -= drafts.length;
+                            if (index < visible.length) {
+                              return _item(visible[index]);
+                            }
+                            if (empty && index == 0) {
+                              return Padding(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 60,
                                 ),
@@ -459,14 +479,13 @@ class _InboxScreenState extends State<InboxScreen> {
                                     ),
                                   ],
                                 ),
-                              ),
-                            for (final item in visible) _item(item),
-                            if (c.items.length >= c.limit)
-                              TextButton(
-                                onPressed: c.loadMore,
-                                child: const Text('加载更多'),
-                              ),
-                          ],
+                              );
+                            }
+                            return TextButton(
+                              onPressed: c.loadMore,
+                              child: const Text('加载更多'),
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -563,7 +582,7 @@ class _InboxScreenState extends State<InboxScreen> {
         failed = entry['state'] == 'failed';
     final state = conflict ? '冲突 · 草稿已保留' : message(entry['error'] ?? '');
     return Container(
-      key: ValueKey(entry['id']),
+      key: ValueKey<String>(entry['id']),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -645,7 +664,7 @@ class _InboxScreenState extends State<InboxScreen> {
         ? ''
         : '${stamp.month}月${stamp.day}日 · ${stamp.hour.toString().padLeft(2, '0')}:${stamp.minute.toString().padLeft(2, '0')}';
     return Container(
-      key: ValueKey(item['id']),
+      key: ValueKey<String>(item['id']),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -779,20 +798,26 @@ class InboxMessageBody extends StatefulWidget {
 
 class _InboxMessageBodyState extends State<InboxMessageBody> {
   bool expanded = false;
+  // TextPainter reuses its paragraph when text, typography and width are unchanged.
+  final painter = TextPainter(maxLines: 8);
+
+  @override
+  void dispose() {
+    painter.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final style = DefaultTextStyle.of(context).style.merge(widget.style);
-      final painter = TextPainter(
-        text: TextSpan(text: widget.body, style: style),
-        textDirection: Directionality.of(context),
-        textScaler: MediaQuery.textScalerOf(context),
-        locale: Localizations.maybeLocaleOf(context),
-        maxLines: 8,
-      )..layout(maxWidth: constraints.maxWidth);
+      painter
+        ..text = TextSpan(text: widget.body, style: style)
+        ..textDirection = Directionality.of(context)
+        ..textScaler = MediaQuery.textScalerOf(context)
+        ..locale = Localizations.maybeLocaleOf(context)
+        ..layout(maxWidth: constraints.maxWidth);
       final overflowing = painter.didExceedMaxLines;
-      painter.dispose();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

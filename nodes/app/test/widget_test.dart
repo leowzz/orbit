@@ -231,6 +231,110 @@ void main() {
     });
   }
 
+  testWidgets(
+    'lazy inbox keeps expansion attached to a message after insertion',
+    (tester) async {
+      late Directory dir;
+      late InboxController c;
+      final messages = List.generate(
+        100,
+        (i) => {
+          ...item(
+            '1',
+            body: i == 0 ? List.filled(9, '一行正文').join('\n') : '消息 $i',
+          ),
+          'id': 'item-${(100 - i).toString().padLeft(3, '0')}',
+          'kind': 'text',
+        },
+      );
+      await tester.runAsync(() async {
+        dir = await Directory.systemTemp.createTemp('orbit-lazy-');
+        final local = await LocalStore.open(
+          databaseFactoryFfi,
+          '${dir.path}/test.db',
+        );
+        await local.applyPage(page('1', messages));
+        c = InboxController(local, 'https://example.test', '', dir.path);
+        await c.load();
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InboxScreen(controller: c, onSettings: () {}),
+        ),
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(InboxMessageBody).evaluate().length, lessThan(20));
+      await tester.tap(find.text('展开'));
+      await tester.pumpAndSettle();
+      final original = find.descendant(
+        of: find.byKey(const ValueKey('item-100')),
+        matching: find.byType(InboxMessageBody),
+      );
+      final state = tester.state(original);
+      await tester.runAsync(() async {
+        await c.local.applyPage(
+          page('2', [
+            {...item('1', body: '新消息'), 'id': 'item-101', 'kind': 'text'},
+          ]),
+        );
+        await c.load();
+      });
+      await tester.pumpAndSettle();
+      expect(tester.state(original), same(state));
+      expect(find.text('收起'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() async {
+        await c.close();
+        await dir.delete(recursive: true);
+      });
+    },
+  );
+
+  testWidgets('cached text layout responds to content, width and text scale', (
+    tester,
+  ) async {
+    Future<void> show(
+      String body, {
+      double width = 400,
+      double scale = 1,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+              child: SizedBox(
+                width: width,
+                child: InboxMessageBody(
+                  body,
+                  style: const TextStyle(fontSize: 16, height: 1.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await show(List.filled(9, '正文').join('\n'));
+    expect(find.text('展开'), findsOneWidget);
+    await show('短消息');
+    expect(find.text('展开'), findsNothing);
+    final paragraph = List.filled(10, '这是自动换行的正文。').join();
+    await show(paragraph);
+    expect(find.text('展开'), findsNothing);
+    await show(paragraph, width: 100);
+    expect(find.text('展开'), findsOneWidget);
+    await show(paragraph, scale: 2);
+    expect(find.text('展开'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final width in [280.0, 800.0]) {
     testWidgets('message collapses after eight rendered lines at $width', (
       tester,
