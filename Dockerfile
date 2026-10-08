@@ -1,3 +1,11 @@
+FROM node:24-alpine AS console
+WORKDIR /console
+RUN npm install --global pnpm@11.9.0
+COPY web/core-console/package.json web/core-console/pnpm-lock.yaml web/core-console/pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY web/core-console ./
+RUN pnpm build
+
 FROM golang:1.27-alpine AS build
 
 ARG BINARY
@@ -11,6 +19,8 @@ COPY cmd ./cmd
 COPY gen ./gen
 COPY internal ./internal
 COPY nodes/web ./nodes/web
+COPY web/core-console/embed.go ./web/core-console/embed.go
+COPY --from=console /console/dist ./web/core-console/dist
 
 RUN case "$BINARY" in orbit-agent|orbit-core|orbit-web) ;; *) exit 2 ;; esac \
     && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
@@ -18,7 +28,8 @@ RUN case "$BINARY" in orbit-agent|orbit-core|orbit-web) ;; *) exit 2 ;; esac \
 
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata \
+    && mkdir -p /app/data && chown 65532:65532 /app/data
 
 ENV TZ=Asia/Shanghai
 
@@ -26,7 +37,6 @@ WORKDIR /app
 
 COPY --from=build /out/orbit /usr/local/bin/orbit
 
-RUN mkdir -p /app/data && chown 65532:65532 /app/data
 
 USER 65532:65532
 

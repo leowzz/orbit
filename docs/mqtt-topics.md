@@ -8,8 +8,8 @@ chain uses these topics:
 | `orbit/v1/agents/{agent_id}/state` | Agent | Core | yes |
 | `orbit/v1/agents/{agent_id}/observations/usage` | Agent | Core | no |
 | `orbit/v1/agents/{agent_id}/observations/codex` | Agent | Core -> Web projection | no |
-| `orbit/v1/nodes/{node_id}/state` | OLED/Web Node | Core | yes |
-| `orbit/v1/nodes/{node_id}/view` | Core | OLED/Web Node | yes |
+| `orbit/v1/nodes/{node_id}/state` | OLED/Web/Android Node | Core | yes |
+| `orbit/v1/nodes/{node_id}/view` | Core | OLED/Web/Android Node | yes |
 | `orbit/v1/nodes/{node_id}/intents` | Web Node | Core | no |
 | `orbit/v1/agents/{agent_id}/commands` | Core | Agent | no |
 | `orbit/v1/agents/{agent_id}/results` | Agent | Core | no |
@@ -43,6 +43,11 @@ validates the target, expiry, requester reference, and lowercase session UUID,
 deduplicates by command ID in bounded process memory, opens the local Codex URI,
 and publishes a final result. Intent, Command, and CommandResult are never
 retained and contain no arbitrary URL or shell command string.
+
+Android Nodes identify as `display/android/flutter` and use the `overview-android`
+profile, with the same UsageView and CodexView fields as `overview-web`. They
+use MQTT 3.1.1 QoS 1 (without the MQTT 5 Content Type property) and publish
+only their own Node State; this display-only client does not emit intents.
 
 The `usage-oled-128x32` profile contains only the three bounded DisplaySlot
 fields. The `overview-web` profile may additionally contain sanitized CodexView

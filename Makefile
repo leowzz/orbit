@@ -1,6 +1,8 @@
 .DEFAULT_GOAL := dev
 
 GO ?= go
+PNPM ?= pnpm
+CONSOLE_DIR := web/core-console
 TOOLS_DIR := $(CURDIR)/.tools/bin
 BUF := $(TOOLS_DIR)/buf
 PROTOC_GEN_GO := $(TOOLS_DIR)/protoc-gen-go
@@ -19,18 +21,22 @@ PLUTIL ?= /usr/bin/plutil
 CORE_LAUNCHD_LABEL ?= com.leo.orbit.core.dev
 WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
 
-.PHONY: dev dev-agent dev-core dev-web install-agent stop-agent uninstall-agent \
+.PHONY: dev dev-agent dev-core dev-core-api dev-web install-agent stop-agent uninstall-agent \
 	kill kill-agent kill-core kill-web \
 	build build-go build-node test test-go test-node lint fmt fmt-check \
 	proto-lint generate verify release
 
 dev:
-	$(MAKE) -j2 dev-agent dev-core
+	ORBIT_DEV_PLAIN=1 $(MAKE) -j2 dev-agent dev-core
 
 dev-agent:
 	$(GO) run ./cmd/orbit-agent -config "$(AGENT_CONFIG)"
 
+dev-core: export MAKE_BIN := $(MAKE)
 dev-core:
+	@GO="$(GO)" PNPM="$(PNPM)" CORE_CONFIG="$(CORE_CONFIG)" node scripts/dev-core.mjs
+
+dev-core-api:
 	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
 
 dev-web:
@@ -85,28 +91,35 @@ kill-web:
 
 build: build-go
 
-build-go:
+build-go: build-console
 	$(GO) build ./...
 
 build-node:
 	$(MAKE) -C "$(NODE_DIR)" build CONFIG=config.example.yaml
 
-test: test-go
+test: test-go test-web test-dev
 
-test-go:
+.PHONY: test-web test-dev
+test-dev:
+	node --test scripts/dev-core.test.mjs
+
+test-web:
+	node --test nodes/web/app.test.cjs
+
+test-go: build-console
 	$(GO) test ./...
 
 test-node:
 	$(MAKE) -C "$(NODE_DIR)" check
 
-lint:
+lint: build-console
 	$(GO) vet ./...
 
 fmt:
-	gofmt -w $$(find cmd internal proto -name '*.go' -type f)
+	gofmt -w $$(find cmd internal proto -name '*.go' -type f) web/core-console/*.go
 
 fmt-check:
-	@test -z "$$(gofmt -l $$(find cmd internal proto -name '*.go' -type f))"
+	@test -z "$$(gofmt -l $$(find cmd internal proto -name '*.go' -type f) web/core-console/*.go)"
 
 proto-lint: $(BUF)
 	$(BUF) lint
@@ -114,7 +127,7 @@ proto-lint: $(BUF)
 generate: $(BUF) $(PROTOC_GEN_GO)
 	PATH="$(TOOLS_DIR):$$PATH" $(BUF) generate
 
-verify: fmt-check lint test-go proto-lint test-node build-go build-node
+verify: fmt-check lint test-go test-web test-dev proto-lint test-node build-go build-node
 
 # Bump patch in .env and create an annotated git tag. Override: make release V=v1.2.3
 release:
@@ -140,3 +153,16 @@ test-app:
 
 build-app:
 	cd nodes/app && $(FLUTTER) build apk --debug
+
+.PHONY: dev-console build-console build-core
+
+dev-console:
+	$(PNPM) --dir "$(CONSOLE_DIR)" install --frozen-lockfile
+	$(PNPM) --dir "$(CONSOLE_DIR)" dev
+
+build-console:
+	$(PNPM) --dir "$(CONSOLE_DIR)" install --frozen-lockfile
+	$(PNPM) --dir "$(CONSOLE_DIR)" build
+
+build-core: build-console
+	$(GO) build -trimpath -o dist/orbit-core ./cmd/orbit-core

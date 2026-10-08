@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
+import { sanitizeLog } from "./dev-log.mjs";
+
+const output = process.stdout;
+const interactive = output.isTTY && process.env.TERM !== "dumb" && process.env.ORBIT_DEV_PLAIN !== "1";
+const color = output.isTTY && process.env.TERM !== "dumb" && !process.env.NO_COLOR && process.env.FORCE_COLOR !== "0";
+const children = [];
+const lines = [];
+let stopping = false;
+let exitCode = 0;
+let repaint;
+let deadline;
+const statuses = { Core: "启动中", Vite: "启动中" };
+const address = "http://127.0.0.1:5173";
+
+function draw() {
+  if (!interactive) return;
+  const width = Math.max(1, output.columns || 80);
+  const height = Math.max(1, output.rows || 24);
+  const header = [
+    ` Orbit Core · 前端 ${address}`,
+    ` Core: ${statuses.Core}  |  Vite: ${statuses.Vite}  |  Ctrl-C 停止全部`,
+    "─".repeat(width),
+  ];
+  // Keep the header fixed, but let the terminal wrap logs using its own
+  // Unicode cell widths. Only the body scrolls when wrapped lines overflow.
+  const headerRows = header.slice(0, height);
+  const bodyRows = Math.max(0, height - headerRows.length);
+  let frame = "\x1b[0m\x1b[r\x1b[?7l\x1b[H\x1b[2J";
+  frame += headerRows.map((line, index) =>
+    `\x1b[${index + 1};1H${line}`,
+  ).join("");
+  if (bodyRows) {
+    const top = headerRows.length + 1;
+    // The last N logical lines contain at least N physical rows. The terminal
+    // scroll region keeps the tail if any of those lines wrap to multiple rows.
+    frame += `\x1b[${top};${height}r\x1b[${top};1H\x1b[?7h`;
+    frame += lines.slice(-bodyRows).join("\r\n");
+  }
+  output.write(frame);
+}
+
+function log(name, value) {
+  // Child output must not clear or reposition the terminal's fixed header.
+  const line = `[${name}] ${sanitizeLog(value, color)}${color ? "\x1b[0m" : ""}`;
+  if (!interactive) { output.write(line + "\n"); return; }
+  lines.push(line);
+  if (lines.length > 500) lines.shift();
+  if (!repaint) repaint = setTimeout(() => { repaint = undefined; draw(); }, 33);
+}
+
+function signalGroup(child, signal) {
+  if (!child.pid) return;
+  try { process.kill(process.platform === "win32" ? child.pid : -child.pid, signal); }
+  catch (error) { if (error.code !== "ESRCH") log("dev", error.message); }
+}
+
+function finish() {
+  clearTimeout(deadline);
+  clearTimeout(repaint);
+  // A shell/go-run parent can exit before its descendants: clean up its group too.
+  children.forEach(({ child }) => signalGroup(child, "SIGKILL"));
+  if (interactive) output.write("\x1b[0m\x1b[r\x1b[?7h\x1b[?25h\x1b[?1049l");
+  console.log(`Orbit 开发进程已停止。前端地址：${address}`);
+  process.exit(exitCode);
+}
+
+function stop(code) {
+  if (stopping) return;
+  stopping = true;
+  exitCode = code;
+  children.forEach(({ child }) => signalGroup(child, "SIGTERM"));
+  deadline = setTimeout(finish, 2500);
+  if (children.every(entry => entry.closed)) finish();
+}
+
+function start(name, target) {
+  const env = { ...process.env };
+  if (color) {
+    delete env.NO_COLOR;
+    env.FORCE_COLOR = "1";
+  } else {
+    delete env.FORCE_COLOR;
+    env.NO_COLOR = "1";
+  }
+  const child = spawn(process.env.MAKE_BIN || "make", ["--no-print-directory", target], {
+    env,
+    detached: process.platform !== "win32",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const entry = { child, closed: false };
+  children.push(entry);
+  statuses[name] = "运行中";
+  for (const stream of [child.stdout, child.stderr]) {
+    createInterface({ input: stream }).on("line", line => log(name, line));
+  }
+  child.on("error", error => { log(name, error.message); stop(1); });
+  child.on("close", (code, signal) => {
+    entry.closed = true;
+    statuses[name] = "已停止";
+    if (!stopping) {
+      log(name, `进程退出 (${signal || code})，停止其他开发进程。`);
+      stop(code || 1);
+    }
+    if (stopping && children.every(item => item.closed)) finish();
+  });
+}
+
+process.on("SIGINT", () => stop(130));
+process.on("SIGTERM", () => stop(143));
+output.on("resize", draw);
+if (interactive) {
+  // Alternate screen keeps the development dashboard separate from shell history.
+  output.write("\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[2J");
+} else {
+  console.log(`Orbit Core · 前端 ${address} · Ctrl-C 停止全部`);
+}
+start("Core", "dev-core-api");
+start("Vite", "dev-console");
+draw();

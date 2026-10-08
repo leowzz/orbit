@@ -3,7 +3,7 @@
 Core 启用 app 后仍只需一个进程。`app.data_dir` 相对 Core YAML 文件目录解析，内部保存
 inbox.sqlite（WAL/SHM）与 attachments/。不要把可写数据放进只读配置挂载。
 
-`deploy/docker-compose.yml` 已为 Core 增加 `orbit-app:/app/data` 和仅绑定回环的
+`deploy/docker-compose.yml` 已为 Core 增加 `orbit-core-data:/app/data` 和仅绑定回环的
 7622 端口；配置可用 `data_dir: ../data/app`、`listen: 0.0.0.0:7622`。
 镜像准备的 /app/data 归属 uid/gid 65532；若改用宿主机绑定目录，需赋予该 UID 写权限。
 未启用 app 配置时不监听 API，不改变既有 MQTT Node 行为。
@@ -40,3 +40,10 @@ go run ./cmd/orbit-core -config configs/core.local.yaml -reset-sync-generation
 
 设备撤销、令牌替换、路由调整通过修改配置并重启 Core 完成。每个物理 App 安装使用
 独立 node_id/令牌；一个人所有已授权 App 共享条目。暂不提供多用户权限隔离。
+
+## 与管理台共存
+
+Core 管理台继续使用 `console.database`，App 使用 `app.data_dir`，二者放在同一持久卷的不同路径。
+必须设置 `console.password`；App 的设备令牌保持独立。状态摘要路由通过管理台新增或编辑，
+选择 `App · 收件箱`（`overview-app`），设备 ID 与 `app.devices` 的键一致。
+YAML 路由仅在首次创建管理台数据库时导入；已有部署修改 YAML 不会覆盖已保存路由。

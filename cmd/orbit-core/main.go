@@ -11,11 +11,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sort"
 	"syscall"
 	"time"
 
-	orbitv1 "orbit/gen/go/orbit/v1"
 	"orbit/internal/appapi"
 	appclock "orbit/internal/clock"
 	"orbit/internal/config"
@@ -70,23 +68,23 @@ func main() {
 }
 
 func run(cfg *config.CoreConfig, logger *zap.Logger) error {
-	routes := make([]core.Route, 0, len(cfg.ProjectionRoutes))
-	nodeIDs := make([]string, 0, len(cfg.ProjectionRoutes))
-	for nodeID, route := range cfg.ProjectionRoutes {
-		nodeIDs = append(nodeIDs, nodeID)
-		inputs := make([]core.RouteInput, 0, len(route.Inputs))
-		for _, input := range route.Inputs {
-			observationType, err := parseObservationType(input.ObservationType)
-			if err != nil {
-				return err
-			}
-			inputs = append(inputs, core.RouteInput{AgentID: input.AgentID, ObservationType: observationType})
-		}
-		routes = append(routes, core.Route{
-			NodeID: nodeID, Profile: route.Profile, Inputs: inputs,
-		})
+	store, err := core.OpenRouteStore(cfg.Console.Database, cfg.ProjectionRoutes)
+	if err != nil {
+		return fmt.Errorf("open core database: %w", err)
 	}
-	sort.Strings(nodeIDs)
+	defer store.Close()
+	document, err := store.Load()
+	if err != nil {
+		return err
+	}
+	if err := cfg.ValidateRoutes(document.Routes); err != nil {
+		return fmt.Errorf("stored routes: %w", err)
+	}
+	routes := core.RoutesFromConfig(document.Routes)
+	nodeIDs := make([]string, 0, len(routes))
+	for _, route := range routes {
+		nodeIDs = append(nodeIDs, route.NodeID)
+	}
 	usagePolicy := cfg.ObservationPolicies["usage"]
 	codexPolicy := cfg.ObservationPolicies["codex"]
 	coreEpoch := core.NewEpoch()
@@ -121,14 +119,14 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	synchronizedClock.Start(ctx)
 
 	if cfg.App.Listen == "" {
-		return runMQTT(ctx, cfg, engine, logger, synchronizedClock.Now)
+		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now)
 	}
-	store, err := inbox.Open(cfg.App.DataDir)
+	inboxStore, err := inbox.Open(cfg.App.DataDir)
 	if err != nil {
 		return err
 	}
-	defer store.Close()
-	api := appapi.New(store, cfg.App, func(node string) json.RawMessage {
+	defer inboxStore.Close()
+	api := appapi.New(inboxStore, cfg.App, func(node string) json.RawMessage {
 		view := engine.AppView(synchronizedClock.Now(), node)
 		if view == nil {
 			return json.RawMessage(`null`)
@@ -145,7 +143,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	go func() { serverErr <- server.Serve(listener) }()
 	go api.Sweep(ctx)
 	go func() {
-		if err := runMQTT(ctx, cfg, engine, logger, synchronizedClock.Now); err != nil && ctx.Err() == nil {
+		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now); err != nil && ctx.Err() == nil {
 			logger.Error("MQTT stopped; App inbox remains available", zap.Error(err))
 		}
 	}()
@@ -164,7 +162,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	return err
 }
 
-func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, logger *zap.Logger, now func() time.Time) error {
+func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time) error {
 	client, err := mqtt.Connect(ctx, mqtt.Config{
 		URL:      cfg.MQTT.URL,
 		ClientID: "orbit-core-" + cfg.Core.ID,
@@ -185,6 +183,19 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, l
 	if err != nil {
 		return err
 	}
+	listener, err := net.Listen("tcp", cfg.Console.Listen)
+	if err != nil {
+		return fmt.Errorf("listen core console: %w", err)
+	}
+	server := &http.Server{Handler: core.ConsoleHandler(runner, store, cfg), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	defer func() {
+		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdown)
+	}()
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- server.Serve(listener) }()
+	logger.Info("core console listening", zap.String("listen", cfg.Console.Listen))
 	logger.Info("orbit core started",
 		zap.String("core_id", cfg.Core.ID),
 	)
@@ -193,21 +204,15 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, l
 	select {
 	case <-ctx.Done():
 		return nil
+	case err := <-serverErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
 	case err := <-runnerErr:
 		return err
 	case err := <-client.TerminalErrors():
 		return fmt.Errorf("mqtt connection terminated: %w", err)
-	}
-}
-
-func parseObservationType(value string) (orbitv1.ObservationType, error) {
-	switch value {
-	case "usage":
-		return orbitv1.ObservationType_OBSERVATION_TYPE_USAGE, nil
-	case "codex":
-		return orbitv1.ObservationType_OBSERVATION_TYPE_CODEX, nil
-	default:
-		return orbitv1.ObservationType_OBSERVATION_TYPE_UNSPECIFIED, fmt.Errorf("unsupported observation type %q", value)
 	}
 }
 

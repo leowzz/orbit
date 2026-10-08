@@ -31,6 +31,10 @@ with tempfile.TemporaryDirectory(prefix='orbit-smoke-') as directory:
         devices += f'    app-{number}:\n      token_sha256: {digest}\n      platform: android\n'
     (temp / 'core.yaml').write_text('''core:
   id: smoke-core
+console:
+  listen: 127.0.0.1:17620
+  password: test-only-console-password
+  database: core.sqlite
 mqtt:
   url: mqtt://127.0.0.1:1
   tls:
@@ -44,6 +48,7 @@ app:
   devices:
 ''' + devices)
     binary = str(temp / 'core')
+    subprocess.run(['make', 'build-console'], cwd=root, check=True)
     subprocess.run(['go', 'build', '-o', binary, './cmd/orbit-core'], cwd=root, check=True)
     command = [binary, '-config', str(temp / 'core.yaml')]
     subprocess.run(command + ['-seed-inbox'], cwd=root, check=True)

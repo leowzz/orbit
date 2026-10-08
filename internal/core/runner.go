@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
@@ -25,10 +26,12 @@ type Transport interface {
 }
 
 type Runner struct {
-	engine    *Engine
-	transport Transport
-	logger    *zap.Logger
-	now       func() time.Time
+	operations   sync.Mutex
+	pendingViews map[string]*orbitv1.DeviceView
+	engine       *Engine
+	transport    Transport
+	logger       *zap.Logger
+	now          func() time.Time
 }
 
 func NewRunner(engine *Engine, transport Transport, logger *zap.Logger, now func() time.Time) (*Runner, error) {
@@ -41,7 +44,7 @@ func NewRunner(engine *Engine, transport Transport, logger *zap.Logger, now func
 	if now == nil {
 		now = time.Now
 	}
-	return &Runner{engine: engine, transport: transport, logger: logger, now: now}, nil
+	return &Runner{engine: engine, transport: transport, logger: logger, now: now, pendingViews: make(map[string]*orbitv1.DeviceView)}, nil
 }
 
 func (r *Runner) Run(ctx context.Context) error {
@@ -55,7 +58,11 @@ func (r *Runner) Run(ctx context.Context) error {
 		{filter: "orbit/v1/agents/+/observations/codex", handler: r.handleCodexObservation},
 		{filter: "orbit/v1/nodes/+/intents", handler: r.handleIntent},
 	} {
-		if err := r.transport.Subscribe(ctx, item.filter, item.handler); err != nil {
+		if err := r.transport.Subscribe(ctx, item.filter, func(ctx context.Context, message mqtt.Message) error {
+			r.operations.Lock()
+			defer r.operations.Unlock()
+			return item.handler(ctx, message)
+		}); err != nil {
 			return err
 		}
 	}
@@ -67,14 +74,15 @@ func (r *Runner) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return nil
-		case now := <-ticker.C:
-			views, err := r.engine.Refresh(now.UTC())
+		case <-ticker.C:
+			r.operations.Lock()
+			views, err := r.engine.Refresh(r.now().UTC())
+			if err == nil {
+				err = r.publishViews(ctx, views)
+			}
+			r.operations.Unlock()
 			if err != nil {
 				r.logger.Warn("refresh device views failed", zap.Error(err))
-				continue
-			}
-			if err := r.publishViews(ctx, views); err != nil {
-				r.logger.Warn("publish stale device views failed", zap.Error(err))
 			}
 		}
 	}
@@ -222,6 +230,9 @@ func (r *Runner) handleTypedObservation(ctx context.Context, message mqtt.Messag
 
 func (r *Runner) publishViews(ctx context.Context, views []*orbitv1.DeviceView) error {
 	for _, view := range views {
+		r.pendingViews[view.NodeId] = view
+	}
+	for _, view := range r.pendingViews {
 		payload, err := proto.Marshal(view)
 		if err != nil {
 			return fmt.Errorf("marshal view for node %q: %w", view.NodeId, err)
@@ -237,6 +248,7 @@ func (r *Runner) publishViews(ctx context.Context, views []*orbitv1.DeviceView) 
 		}); err != nil {
 			return err
 		}
+		delete(r.pendingViews, view.NodeId)
 		r.logger.Info("device view published",
 			zap.String("node_id", view.NodeId),
 			zap.String("core_epoch", view.CoreEpoch),

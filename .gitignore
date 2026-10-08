@@ -59,8 +59,15 @@ certs/
 *.log
 *.tmp
 
-# Durable App inbox and local caches
 /data/
+# Core console local database
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Independent Core console
+web/core-console/node_modules/
+!web/core-console/dist/
+web/core-console/dist/*
+!web/core-console/dist/.gitkeep
+*.tsbuildinfo

@@ -6,6 +6,8 @@ requires-python = ">=3.13"
 dependencies = [
     "grpcio-tools==1.83.1",
     "nanopb==0.4.9.1",
+    # PlatformIO's esptool post-install script invokes python -m pip.
+    "pip==26.2",
     "platformio==6.1.19",
     "pytest==8.4.2",
     "pyyaml==6.0.3",

@@ -352,6 +352,8 @@ func TestUsageAndCodexRevisionsAreIndependent(t *testing.T) {
 	if err := runner.PollCodexOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	usageSource.usage.TodayTokens++
+	codexSource.snapshot.TotalCount++
 	if err := runner.PollOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -384,7 +386,7 @@ func TestUsageAndCodexRevisionsAreIndependent(t *testing.T) {
 	if !equalUint64s(usageRevisions, []uint64{1, 2}) || !equalUint64s(codexRevisions, []uint64{1, 2}) {
 		t.Fatalf("source revisions were not independent: usage=%v codex=%v", usageRevisions, codexRevisions)
 	}
-	if !equalUint64s(stateRevisions, []uint64{1, 2, 3, 4}) {
+	if !equalUint64s(stateRevisions, []uint64{1, 2}) {
 		t.Fatalf("state revisions were not ordered: %v", stateRevisions)
 	}
 }

@@ -301,3 +301,10 @@ make build-go
 - 新增 `.github/workflows/build-app.yml`：App/Makefile/工作流相关的 PR 和 main 推送触发，另支持 `v*` 标签及手动运行。使用固定 Flutter 3.44.8、Java 17，安装锁定依赖，执行 `make test-app build-app`，上传 `orbit-android-debug` 调试 APK，保留 14 天。
 - 验证：`actionlint`、`git diff --check`、锁定依赖安装通过；本地复跑 Make 命令，静态分析、7 项测试和 APK 构建通过。尚未提交/推送本次工作流，未宣称 GitHub runner 已运行成功。
 - CI 当前覆盖 Android；macOS/Windows 平台构建及正式签名发布仍待补充。
+
+### 2026-10-08 — 合并管理台主线
+
+- 合并 `main`（`da65e64`）到 `feat/app`，保留 Core 管理台、Android 小组件、Web 改进与 App 收件箱。
+- 管理台路由数据库与 App 收件箱分别存储；管理台支持 `overview-app` 路由编辑，已保存路由即时影响 App 摘要。
+- 管理台鉴权配置 `console.password` 必填；App 设备仍使用独立令牌，MQTT 不发布 App 路由。
+- 验证：管理台生产构建、Go 全量测试/vet、Core/config/App API/inbox race 检查、Web/dev 测试、Flutter analyze 与 7 个测试、Actions 静态检查通过。

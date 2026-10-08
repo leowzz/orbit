@@ -7,17 +7,38 @@ TRACKED_ENV_FILE="$ROOT/.env.example"
 cd "$ROOT"
 
 read_version() {
-  local contents
+  local line version="" count=0
   [[ -f "$1" ]] || { echo "release: missing $1" >&2; exit 1; }
-  contents="$(<"$1")"
-  if [[ "$contents" == *$'\n'* || ! "$contents" =~ ^version=(v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
-    echo "release: $1 must contain exactly one version=vX.Y.Z line" >&2
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" == version=* ]] || continue
+    count=$((count + 1))
+    version="${line#version=}"
+  done < "$1"
+  if [[ "$count" != 1 || ! "$version" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+    echo "release: $1 must contain exactly one valid version=vX.Y.Z entry" >&2
     exit 1
   fi
-  printf '%s\n' "${BASH_REMATCH[1]}"
+  printf '%s\n' "$version"
+}
+
+write_version() {
+  local temporary
+  temporary="$(mktemp)"
+  if awk -v version="$NEW_VERSION" '
+    /^version=/ { print "version=" version; next }
+    { print }
+  ' "$1" > "$temporary" && cat "$temporary" > "$1"; then
+    rm -f "$temporary"
+  else
+    rm -f "$temporary"
+    return 1
+  fi
 }
 
 CURRENT_VERSION="$(read_version "$ENV_FILE")"
+# Validate both files before modifying either; never source local configuration.
+read_version "$TRACKED_ENV_FILE" >/dev/null
 
 dirty="$(git status --porcelain --untracked-files=normal)"
 if [[ -n "$dirty" ]]; then
@@ -43,8 +64,8 @@ if git show-ref --verify --quiet "refs/tags/$NEW_VERSION"; then
   exit 1
 fi
 
-printf 'version=%s\n' "$NEW_VERSION" >"$ENV_FILE"
-printf 'version=%s\n' "$NEW_VERSION" >"$TRACKED_ENV_FILE"
+write_version "$ENV_FILE"
+write_version "$TRACKED_ENV_FILE"
 
 git add -- .env.example
 if ! git diff --cached --quiet -- .env.example; then

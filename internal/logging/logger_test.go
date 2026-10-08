@@ -72,3 +72,22 @@ func TestNewRejectsInvalidLevel(t *testing.T) {
 		t.Fatal("New accepted an invalid log level")
 	}
 }
+
+func TestColorEnvironment(t *testing.T) {
+	for _, tc := range []struct {
+		name, force, noColor string
+		want                 bool
+	}{
+		{"forced through pipe", "1", "", true},
+		{"disabled explicitly", "0", "", false},
+		{"no color wins", "1", "1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("FORCE_COLOR", tc.force)
+			t.Setenv("NO_COLOR", tc.noColor)
+			if got := colorEnabled(); got != tc.want {
+				t.Fatalf("colorEnabled() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

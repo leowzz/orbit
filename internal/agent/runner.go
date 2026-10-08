@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -80,13 +81,16 @@ type Runner struct {
 	mu        sync.Mutex
 	commandMu sync.Mutex
 
-	usageRevision  uint64
-	codexRevision  uint64
-	stateRevision  uint64
-	sourceStates   map[orbitv1.ObservationType]sourceState
-	commandResults map[string]cachedCommandResult
-	commandOrder   []string
-	resultRevision uint64
+	usageRevision    uint64
+	codexRevision    uint64
+	stateRevision    uint64
+	sourceStates     map[orbitv1.ObservationType]sourceState
+	commandResults   map[string]cachedCommandResult
+	commandOrder     []string
+	resultRevision   uint64
+	observationMu    sync.Mutex
+	lastObservations map[string]*orbitv1.Observation
+	lastState        *orbitv1.AgentState
 }
 
 const (
@@ -145,14 +149,15 @@ func newRunner(config Config, sources Sources, capabilities Capabilities, transp
 		now = time.Now
 	}
 	return &Runner{
-		config:         config,
-		sources:        sources,
-		capabilities:   capabilities,
-		transport:      transport,
-		logger:         logger,
-		now:            now,
-		sourceStates:   states,
-		commandResults: make(map[string]cachedCommandResult),
+		config:           config,
+		sources:          sources,
+		capabilities:     capabilities,
+		transport:        transport,
+		logger:           logger,
+		now:              now,
+		sourceStates:     states,
+		commandResults:   make(map[string]cachedCommandResult),
+		lastObservations: make(map[string]*orbitv1.Observation),
 	}, nil
 }
 
@@ -203,7 +208,6 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 
 	now := r.now().UTC()
 	expiresAt := now.Add(r.config.ObservationTTL)
-	revision := r.nextRevision(orbitv1.ObservationType_OBSERVATION_TYPE_USAGE)
 	windowStart, windowEnd := localDayWindow(now, r.config.Location)
 	cost := usage.TodayActualCostMicros
 	tokens := usage.TodayTokens
@@ -212,7 +216,6 @@ func (r *Runner) PollOnce(ctx context.Context) error {
 		Metadata: &orbitv1.Metadata{
 			MessageId:  newID(),
 			ProducerId: r.config.AgentID,
-			Revision:   revision,
 			ProducedAt: timestamppb.New(now),
 			ExpiresAt:  timestamppb.New(expiresAt),
 		},
@@ -243,7 +246,6 @@ func (r *Runner) PollCodexOnce(ctx context.Context) error {
 	}
 
 	now := r.now().UTC()
-	revision := r.nextRevision(orbitv1.ObservationType_OBSERVATION_TYPE_CODEX)
 	payload := &orbitv1.CodexObservation{
 		TotalCount:   uint32(snapshot.TotalCount),
 		RunningCount: uint32(snapshot.RunningCount),
@@ -271,7 +273,6 @@ func (r *Runner) PollCodexOnce(ctx context.Context) error {
 		Metadata: &orbitv1.Metadata{
 			MessageId:  newID(),
 			ProducerId: r.config.AgentID,
-			Revision:   revision,
 			ProducedAt: timestamppb.New(now),
 			ExpiresAt:  timestamppb.New(now.Add(r.config.CodexObservationTTL)),
 		},
@@ -321,6 +322,21 @@ func (r *Runner) runCodex(ctx context.Context) {
 }
 
 func (r *Runner) publishObservation(ctx context.Context, name string, observation *orbitv1.Observation) error {
+	r.observationMu.Lock()
+	defer r.observationMu.Unlock()
+	source := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
+	interval := r.config.PollInterval
+	if name == "codex" {
+		source = orbitv1.ObservationType_OBSERVATION_TYPE_CODEX
+		interval = r.config.CodexPollInterval
+	}
+	previous := r.lastObservations[name]
+	// Refresh on the last scheduled poll before expiry, even when facts are unchanged.
+	if previous != nil && proto.Equal(observationFacts(previous), observationFacts(observation)) &&
+		observation.Metadata.ProducedAt.AsTime().Add(interval).Before(previous.Metadata.ExpiresAt.AsTime()) {
+		return nil
+	}
+	observation.Metadata.Revision = r.nextRevision(source)
 	payload, err := proto.Marshal(observation)
 	if err != nil {
 		return fmt.Errorf("marshal %s observation: %w", name, err)
@@ -346,6 +362,7 @@ func (r *Runner) publishObservation(ctx context.Context, name string, observatio
 			zap.Int("session_count", len(codexPayload.GetSessions())),
 		)
 	}
+	r.lastObservations[name] = proto.Clone(observation).(*orbitv1.Observation)
 	r.logger.Info("observation published", fields...)
 	return nil
 }
@@ -398,13 +415,11 @@ func (r *Runner) publishState(ctx context.Context) error {
 }
 
 func (r *Runner) publishStateLocked(ctx context.Context) error {
-	r.stateRevision++
 	now := r.now().UTC()
 	state := &orbitv1.AgentState{
 		Metadata: &orbitv1.Metadata{
 			MessageId:  newID(),
 			ProducerId: r.config.AgentID,
-			Revision:   r.stateRevision,
 			ProducedAt: timestamppb.New(now),
 		},
 		AgentId:      r.config.AgentID,
@@ -431,6 +446,16 @@ func (r *Runner) publishStateLocked(ctx context.Context) error {
 		}
 		state.Sources = append(state.Sources, item)
 	}
+	facts := proto.Clone(state).(*orbitv1.AgentState)
+	facts.Metadata = nil
+	for _, source := range facts.Sources {
+		source.LastSuccessAt = nil
+	}
+	if proto.Equal(r.lastState, facts) {
+		return nil
+	}
+	r.stateRevision++
+	state.Metadata.Revision = r.stateRevision
 	payload, err := proto.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("marshal agent state: %w", err)
@@ -456,6 +481,7 @@ func (r *Runner) publishStateLocked(ctx context.Context) error {
 			fields = append(fields, zap.String(name+"_error_code", source.ErrorCode))
 		}
 	}
+	r.lastState = facts
 	r.logger.Info("agent state published", fields...)
 	return nil
 }
@@ -508,4 +534,24 @@ func boundedUTF8(value string, maxBytes int) string {
 		value = value[:len(value)-1]
 	}
 	return value
+}
+
+// observationFacts excludes collection bookkeeping, while preserving the usage
+// day window: a new accounting day is a business change, even with zero usage.
+func observationFacts(observation *orbitv1.Observation) *orbitv1.Observation {
+	facts := proto.Clone(observation).(*orbitv1.Observation)
+	facts.Metadata = nil
+	if usage := facts.GetUsage(); usage != nil {
+		usage.ObservedAt = nil
+	}
+	if codex := facts.GetCodex(); codex != nil {
+		codex.ObservedAt = nil
+		for _, session := range codex.Sessions {
+			session.UpdatedAt = nil
+		}
+		sort.Slice(codex.Sessions, func(i, j int) bool {
+			return codex.Sessions[i].SessionId < codex.Sessions[j].SessionId
+		})
+	}
+	return facts
 }

@@ -10,6 +10,7 @@ const elements = {
   connection: document.querySelector("#connection"),
   connectionLabel: document.querySelector("#connection-label"),
   updatedAt: document.querySelector("#updated-at"),
+  calendarDate: document.querySelector("#calendar-date"),
   cost: document.querySelector("#cost"),
   currency: document.querySelector("#currency"),
   tokens: document.querySelector("#tokens"),
@@ -224,6 +225,29 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatCalendarDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const weekday = new Intl.DateTimeFormat("zh-CN", { weekday: "long" }).format(date);
+  try {
+    const lunar = new Intl.DateTimeFormat("zh-CN-u-ca-chinese", { month: "long", day: "numeric" });
+    // Older WebViews may silently fall back to the Gregorian calendar.
+    if (lunar.resolvedOptions().calendar !== "chinese") return weekday;
+    const parts = lunar.formatToParts(date);
+    const month = parts.find(part => part.type === "month").value;
+    const day = Number(parts.find(part => part.type === "day").value);
+    const digits = "一二三四五六七八九十";
+    const lunarDay = day <= 10 ? `初${digits[day - 1]}`
+      : day < 20 ? `十${digits[day - 11]}`
+      : day === 20 ? "二十"
+      : day < 30 ? `廿${digits[day - 21]}` : "三十";
+    return `${weekday} · 农历${month}${lunarDay}`;
+  } catch (_) {
+    return weekday;
+  }
+}
+
 function fitMetric(element) {
   element.style.fontSize = "";
   let size = Number.parseFloat(getComputedStyle(element).fontSize);
@@ -345,6 +369,7 @@ function render(snapshot) {
   }
   latestSnapshot = snapshot;
   elements.updatedAt.textContent = formatDate(snapshot.produced_at || snapshot.received_at);
+  elements.calendarDate.textContent = formatCalendarDate(snapshot.produced_at || snapshot.received_at);
   elements.nodeID.textContent = `Node ${snapshot.node_id}`;
   elements.revision.textContent = `Revision ${snapshot.revision}`;
 
@@ -369,11 +394,52 @@ async function loadInitialState() {
 
 function connectEvents() {
   if (eventSource) eventSource.close();
-  eventSource = new EventSource("/api/events");
-  eventSource.addEventListener("open", () => setConnection("live", "实时连接"));
-  eventSource.addEventListener("message", (event) => render(JSON.parse(event.data)));
-  eventSource.addEventListener("reload", () => window.location.reload());
-  eventSource.addEventListener("error", () => setConnection("retrying", "正在重连"));
+  const source = new EventSource("/api/events");
+  eventSource = source;
+  let pending = false;
+  let refreshing = false;
+
+  async function refreshLatest() {
+    if (eventSource !== source) return;
+    pending = false;
+    let nextDelay = 100;
+    try {
+      const response = await fetchAPI("/api/state", { cache: "no-store" });
+      if (!response.ok) throw new Error(`request failed with status ${response.status}`);
+      const snapshot = response.status === 204 ? null : await response.json();
+      if (eventSource !== source) return;
+      if (snapshot) render(snapshot);
+      setConnection("live", "实时连接");
+    } catch (_) {
+      if (eventSource === source) {
+        setConnection("retrying", "正在重连");
+        pending = true;
+        nextDelay = 1000;
+      }
+    } finally {
+      refreshing = false;
+      if (pending && eventSource === source) scheduleRefresh(nextDelay);
+    }
+  }
+
+  function scheduleRefresh(delay = 100) {
+    if (eventSource !== source) return;
+    pending = true;
+    if (refreshing) return;
+    refreshing = true;
+    // Treat buffered events as invalidations, never replay their old snapshots.
+    // Bound both burst traffic and in-flight requests while reading the latest state.
+    window.setTimeout(refreshLatest, delay);
+  }
+
+  source.addEventListener("open", () => scheduleRefresh());
+  source.addEventListener("message", () => scheduleRefresh());
+  source.addEventListener("reload", () => {
+    if (eventSource === source) window.location.reload();
+  });
+  source.addEventListener("error", () => {
+    if (eventSource === source) setConnection("retrying", "正在重连");
+  });
 }
 
 async function submitAuth(event) {

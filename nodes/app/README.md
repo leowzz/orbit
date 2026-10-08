@@ -59,7 +59,9 @@ python3 -c 'import hashlib,pathlib; print(hashlib.sha256(pathlib.Path("configs/s
 
 把最后输出的摘要填入 `app.devices.phone-01.token_sha256`，令牌本身通过私有渠道输入 App。
 撤销设备：设置 `revoked: true` 或删除设备配置并重启 Core。不要将令牌放进 URL、日志或仓库。
-仅收件箱可省略 projection_routes/observation_policies；状态摘要需显式配置：
+仅收件箱可省略 projection_routes/observation_policies；管理台仍需设置 console.password。
+状态摘要在 Core 管理台新增对应设备的 `overview-app` 路由并选择数据源。
+下面的 YAML 仅用于首次创建路由数据库时导入，已有数据库以管理台保存的路由为准：
 
 ```yaml
 projection_routes:
