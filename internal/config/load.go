@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -144,6 +145,31 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 }
 
 func (cfg *CoreConfig) validate(baseDir string) error {
+	if cfg.App.Listen != "" {
+		if _, _, err := net.SplitHostPort(cfg.App.Listen); err != nil {
+			return errors.New("app.listen must be host:port")
+		}
+		if cfg.App.DataDir == "" {
+			cfg.App.DataDir = "data/app"
+		}
+		if !filepath.IsAbs(cfg.App.DataDir) {
+			cfg.App.DataDir = filepath.Join(baseDir, cfg.App.DataDir)
+		}
+		seen := map[string]bool{}
+		for id, device := range cfg.App.Devices {
+			if err := validateID("app device", id); err != nil {
+				return err
+			}
+			digest, err := hex.DecodeString(device.TokenSHA256)
+			if err != nil || len(digest) != 32 || seen[string(digest)] {
+				return errors.New("app device tokens must be unique SHA-256 hex digests")
+			}
+			seen[string(digest)] = true
+			if route, ok := cfg.ProjectionRoutes[id]; ok && route.Profile != "overview-app" {
+				return errors.New("app devices require overview-app routes")
+			}
+		}
+	}
 	if err := cfg.NTP.validate(); err != nil {
 		return fmt.Errorf("ntp: %w", err)
 	}
@@ -153,7 +179,7 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	if err := cfg.MQTT.validate(baseDir); err != nil {
 		return fmt.Errorf("mqtt: %w", err)
 	}
-	if len(cfg.ProjectionRoutes) == 0 {
+	if len(cfg.ProjectionRoutes) == 0 && cfg.App.Listen == "" {
 		return errors.New("projection_routes must contain at least one route")
 	}
 
@@ -161,7 +187,7 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
-		if route.Profile != "usage-oled-128x32" && route.Profile != "overview-web" {
+		if route.Profile != "usage-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-app" {
 			return fmt.Errorf("projection route %q: unsupported profile %q", nodeID, route.Profile)
 		}
 		if len(route.Inputs) == 0 {

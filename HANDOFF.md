@@ -2,7 +2,7 @@
 
 更新日期：2026-10-07。
 
-下一阶段从 [App Node 与个人收件箱交接文档](docs/app-node-handoff.md) 开始，内容包括用户目标、当前代码边界、建议技术栈、Core 新增模块、各端能力、同步契约、里程碑和验收步骤。
+App 的原始需求与执行进展见 [App Node 与个人收件箱交接文档](docs/app-node-handoff.md) 开始，内容包括用户目标、当前代码边界、建议技术栈、Core 新增模块、各端能力、同步契约、里程碑和验收步骤。
 
 ## 当前代码已经提供
 
@@ -12,7 +12,7 @@
 - Web 可发起短时的打开 Codex session Intent，Core 路由到 Agent 执行受限能力。
 - Agent 发布最终 CommandResult；Core/Web 的结果反馈链路尚未完成。
 
-当前 Core 不持久保存用户消息，MQTT retained View 不充当历史数据库。Android/macOS/Windows App、消息编辑和完成、附件上传、可靠离线补同步均尚未实现。
+Core 已新增可选 App HTTP/SSE API、独立 SQLite WAL 收件箱和附件目录；Android App 提供缓存、待发送队列、版本冲突、文本/待办/图片和固定状态摘要。MQTT retained View 仍不充当历史数据库。共享工程在 `nodes/app/`；macOS/Windows 的平台发布验证尚未完成。详见 [运行说明](nodes/app/README.md) 和 [API 契约](docs/app-api.md)。
 
 ## 下一阶段目标
 
@@ -24,7 +24,7 @@
 
 | 入口 | 内容 |
 | --- | --- |
-| [App 实现交接](docs/app-node-handoff.md) | 下一阶段完整实现说明；所有新能力明确标记为规划 |
+| [App 实现交接](docs/app-node-handoff.md) | 原始实现方案及当前验收进展 |
 | [README](README.md) | 当前安装、配置、运行、测试与部署命令 |
 | [CONTEXT](CONTEXT.md) | Agent、Core、Node、Observation、View、Intent 等领域术语 |
 | [设计](docs/design.md) | 当前系统设计、实现边界与验收说明 |
@@ -32,4 +32,4 @@
 | [安全说明](docs/security.md) | 凭据、隐私、TLS 与部署边界 |
 | [ADR](docs/adr/README.md) | 架构决策及演进关系 |
 
-仓库路径以当前机器实际 checkout 为准。接手先核对 `git status`、代码版本和工具链，再按专题文档运行基线检查。本次提交只交接方案，不代表完成了功能开发、真机测试或生产验收。
+仓库路径以当前机器实际 checkout 为准。接手先核对 `git status`、代码版本和工具链，再按专题文档运行基线检查。实际运行的检查和未完成项记录在专题交接文档末尾；模拟器验证不代表物理真机或生产验收。

@@ -1,0 +1,77 @@
+name: Build App
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/build-app.yml"
+      - "nodes/app/**"
+      - "Makefile"
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/build-app.yml"
+      - "nodes/app/**"
+      - "Makefile"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Check and build Android APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: "true"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: |
+            nodes/app/android/**/*.gradle.kts
+            nodes/app/android/gradle.properties
+            nodes/app/android/gradle/wrapper/gradle-wrapper.properties
+            nodes/app/pubspec.lock
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: "3.44.8"
+          channel: stable
+          cache: true
+
+      - name: Install locked dependencies
+        working-directory: nodes/app
+        run: flutter pub get --enforce-lockfile
+
+      - name: Analyze and test App
+        run: make test-app
+
+      - name: Build debug APK
+        run: make build-app
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: orbit-android-debug
+          path: nodes/app/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

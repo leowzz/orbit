@@ -55,3 +55,21 @@ observation_policies:
 # Optional; defaults to info. Supported values: debug, info, warn, error.
 # logging:
 #   level: info
+
+# Optional personal inbox API. Terminate HTTPS at your reverse proxy.
+# Each installation receives its own random token (at least 32 characters).
+# Store ONLY its SHA-256 hex digest here. Removing/revoking a device takes effect
+# after restarting Core and closes its existing SSE connection.
+# app:
+#   listen: 0.0.0.0:7622
+#   data_dir: ../data/app
+#   devices:
+#     phone-01:
+#       label: 我的手机
+#       platform: android
+#       token_sha256: <SHA-256 hex digest>
+#       revoked: false
+#
+# An App can use the inbox without a status route. To show usage/session,
+# add phone-01 under projection_routes with profile: overview-app and explicit
+# inputs, using the same observation policies as the Web/OLED routes.

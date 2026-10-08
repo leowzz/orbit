@@ -23,6 +23,7 @@ const (
 	webModel      = "web"
 	webVariant    = "browser"
 	webProfile    = "overview-web"
+	appProfile    = "overview-app"
 )
 
 type RouteInput struct {
@@ -111,7 +112,7 @@ func New(config Config) (*Engine, error) {
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
 		}
-		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != webProfile) || len(route.Inputs) == 0 {
+		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != webProfile && route.Profile != appProfile) || len(route.Inputs) == 0 {
 			return nil, fmt.Errorf("invalid route for node %q", route.NodeID)
 		}
 		inputTypes := make(map[orbitv1.ObservationType]struct{}, len(route.Inputs))
@@ -216,6 +217,9 @@ func (e *Engine) ApplyNodeState(now time.Time, state *orbitv1.NodeState) ([]*orb
 		return nil, fmt.Errorf("unsupported node product %s/%s/%s", state.SeriesId, state.ModelId, state.VariantId)
 	}
 	route := e.routeForNode(state.NodeId)
+	if route != nil && route.Profile == appProfile {
+		return nil, errors.New("HTTP App routes do not accept MQTT node state")
+	}
 	if route != nil && ((route.Profile == usageProfile && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel)) {
 		return nil, fmt.Errorf("node product %s does not match projection profile %s", state.ModelId, route.Profile)
 	}
@@ -423,14 +427,35 @@ func (e *Engine) projectNodeLocked(now time.Time, nodeID string) ([]*orbitv1.Dev
 	if route == nil {
 		return nil, nil
 	}
-	usage, hasUsage := e.usageForRoute(*route)
-	codex, hasCodex := e.codexForRoute(*route)
+	return e.projectRouteLocked(now, *route)
+}
+
+// AppView reads only the authenticated device's configured route. HTTP devices
+// never register MQTT products or select their own upstream sources.
+func (e *Engine) AppView(now time.Time, nodeID string) *orbitv1.DeviceView {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	route := e.routeForNode(nodeID)
+	if route == nil || route.Profile != appProfile {
+		return nil
+	}
+	views, _ := e.projectRouteLocked(now, *route)
+	if len(views) == 0 {
+		return nil
+	}
+	return views[0]
+}
+
+func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.DeviceView, error) {
+	nodeID := route.NodeID
+	usage, hasUsage := e.usageForRoute(route)
+	codex, hasCodex := e.codexForRoute(route)
 	if !hasUsage && !hasCodex {
 		return nil, nil
 	}
-	freshness, freshUntil, retainUntil := e.routeFreshness(now, *route, usage, hasUsage, codex, hasCodex)
+	freshness, freshUntil, retainUntil := e.routeFreshness(now, route, usage, hasUsage, codex, hasCodex)
 	e.viewRevision[nodeID]++
-	e.lastFresh[nodeID] = e.freshnessSignature(now, *route)
+	e.lastFresh[nodeID] = e.freshnessSignature(now, route)
 	view := &orbitv1.DeviceView{
 		Metadata: &orbitv1.Metadata{
 			MessageId:  newID(),
@@ -449,7 +474,7 @@ func (e *Engine) projectNodeLocked(now time.Time, nodeID string) ([]*orbitv1.Dev
 		cost := usage.value.GetActualCostMicros()
 		tokens := usage.value.GetTokenCount()
 		tpm := usage.value.GetTpm()
-		if route.Profile == webProfile {
+		if route.Profile == webProfile || route.Profile == appProfile {
 			view.Usage = &orbitv1.UsageView{
 				Freshness:        freshnessAt(now, usage.expiresAt),
 				FreshUntil:       timestamppb.New(usage.expiresAt),

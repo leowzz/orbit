@@ -3,7 +3,9 @@
 - 日期：2026-10-07（Asia/Shanghai）
 - 代码核对基线：`87ed76ffcbdd8b505d8170259fdaf6b0836220d6`（`v0.1.7`）
 - 交接分支：`feat/app`
-- 状态：需求与实现方案交接；本次只修改文档，以下新增模块、接口和 App 均尚未实现。
+- 状态：Android 收件箱、持久同步、文本/待办与图片链路已实现；桌面发布验证和后续能力见文末执行进展。原方案保留为背景，当前接口以 [App API v1](app-api.md) 为准。
+
+> 下文方案中的“当前/尚未实现”描述的是 2026-10-07 交接基线；实现后的事实和验证范围见本文末尾“执行进展”，API 和运行方法见新文档。
 
 ## 1. 接手目标与决策状态
 
@@ -206,32 +208,32 @@ Flutter 的系统插件是否覆盖三端、最低系统版本、打包签名方
 
 ### M0：建立基线与契约
 
-- [ ] 阅读本文和当前代码，在下一台机器核对工作区、工具链和现有测试。
-- [ ] 记录选定的 Flutter/插件版本、App 工程位置、业务数据路径与部署方式。
-- [ ] 增加 App 接入/持久化 ADR，确定 Item、Operation、Change 与鉴权契约。
-- [ ] 准备不含私人内容的固定样例数据；当前没有用户消息来源，查看端验收需可重复的 seed/测试 fixture。
+- [x] 阅读本文和当前代码，在下一台机器核对工作区、工具链和现有测试。
+- [x] 记录选定的 Flutter/插件版本、App 工程位置、业务数据路径与部署方式。
+- [x] 增加 App 接入/持久化 ADR，确定 Item、Operation、Change 与鉴权契约。
+- [x] 准备不含私人内容的固定样例数据；当前没有用户消息来源，查看端验收需可重复的 seed/测试 fixture。
 
 ### M1：Android 查看端与同步底座
 
-- [ ] Core 设备凭据、数据库/迁移、一致快照、增量读取、状态 API/SSE。
-- [ ] Android 设备配置、安全凭据存储、本地缓存、回前台同步、固定摘要区和分页列表。
-- [ ] 使用样例文本、待办和附件元数据验收列表与详情；显示 stale/离线状态，复制文本可离线完成。
-- [ ] Core 重启后样例条目仍存在；杀掉 App 后重开可先看到缓存，再追赶增量。
+- [x] Core 设备凭据、数据库/迁移、一致快照、增量读取、状态 API/SSE。
+- [x] Android 设备配置、安全凭据存储、本地缓存、回前台同步、固定摘要区和分页列表。
+- [x] 使用样例文本、待办和附件元数据验收列表与详情；显示 stale/离线状态，复制文本可离线完成。
+- [x] Core 重启后样例条目仍存在；杀掉 App 后重开可先看到缓存，再追赶增量。
 
 M1 是只读里程碑，不表示已经支持从 App 创建消息或完整图片上传；可靠写入闭环在 M2/M3 完成。
 
 ### M2：文本与待办的跨设备操作
 
-- [ ] 创建/编辑/完成/撤销/删除，持久操作去重、版本冲突和删除同步。
-- [ ] 客户端待发送队列、明确的保存状态、离线编辑草稿、失败重试。
-- [ ] 用两个独立 node_id 的客户端或集成测试完成端到端验证；所有业务修改经 Core。
-- [ ] 如开放 session 远程操作，补齐 Agent result 回传及超时/失败 UI。
+- [x] 创建/编辑/完成/撤销/删除，持久操作去重、版本冲突和删除同步。
+- [x] 客户端待发送队列、明确的保存状态、离线编辑草稿、失败重试。
+- [x] 用两个独立 node_id 的客户端或集成测试完成端到端验证；所有业务修改经 Core。
+- [ ] 如开放 session 远程操作，补齐 Agent result 回传及超时/失败 UI。（本次未开放，沿用后续范围。）
 
 ### M3：图片、桌面端与运行交付
 
-- [ ] 图片上传/下载/缩略图/缓存/孤立文件回收，正文与附件引用的一致性。
+- [x] 图片上传/下载/缩略图/缓存/孤立文件回收，正文与附件引用的一致性。
 - [ ] macOS、Windows 使用同一 App 核心，分别验证剪贴板、文件选择和打包产物。
-- [ ] 持久数据卷、备份恢复、设备撤销、日志与错误码、配置示例和运行文档。
+- [x] 持久数据卷、备份恢复、设备撤销、日志与错误码、配置示例和运行文档。
 
 ### 后续
 
@@ -279,3 +281,23 @@ make build-go
 可直接交给下一位实现者的任务：
 
 > 阅读 `docs/app-node-handoff.md`，按不引入 IM 的个人收件箱方案，从 M0/M1 开始实现 Android App Node 与 Core 持久化同步底座。按文档区分已存在能力、用户明确需求和建议默认值；保留既有 Agent/OLED/Web 行为。首版只要求打开 App 后同步，后续按 M2/M3 增加文本/待办操作、图片及 macOS/Windows。每个里程碑更新本文清单，记录实际运行的检查、结果与未完成项，不把模拟测试表述为真实设备或生产验收。
+
+
+## 执行进展
+
+### 2026-10-07 16:52（Asia/Shanghai）— Android 首版已验证
+
+- 实现：`internal/inbox` 持久条目/事务/回执/变更/附件元数据，`internal/appapi` 设备鉴权、JSON API、SSE、图片文件与清理，Core 可选 HTTP 启动独立于 MQTT。设备按配置发放/撤销，令牌仅保存摘要。App 使用独立 `overview-app` 路由，拒绝 MQTT 产品冒充。
+- App：`nodes/app/`，Flutter 3.44.8 / Dart 3.12.2；ChangeNotifier + sqflite 简化原建议栈。固定状态摘要、可展开会话、分页列表、文本/待办/图片、复制、编辑、删除、离线缓存与队列、冲突草稿、安全令牌存储、前台 SSE/定时追赶均已接入。无后台推送，无主机会话远程动作入口。
+- 服务端证据：`go test ./...`、`go vet ./...`、`go build ./...` 通过；`go test -race ./internal/inbox ./internal/appapi ./internal/core ./internal/config` 通过。覆盖重复提交及重启回执、操作 ID 复用、双写冲突、事务注入失败回滚、固定边界分页、删除、generation reset、鉴权/撤销/身份注入、私有未引用附件、有效引用的清理保护及 App 路由隔离。
+- 客户端证据：`flutter analyze` 无问题，`flutter test` 7 项通过（持久队列/游标原子性/旧回执/冲突草稿/分页中断/360 与 900 逻辑像素布局）。`scripts/app-smoke.py` 在 Android 8 / API 26 ARM64 模拟器通过真实 Go API 端到端测试，覆盖连接、安全存储、前台同步、离线文本、待办、两设备冲突、图片上传和原图/缩略图读取。测试 Core 的 Broker 故意不可达。
+- 冷启动检查：停止 Core 后强制结束并重开 Android App，缓存仍可读；离线新增后再强制结束重开，待发送记录仍保留；恢复 Core 后仅保存一次，原有条目也仍存在。Android 8 系统 SQLite 不支持 JSON1/新版 UPSERT，本地缓存已使用兼容查询，模拟器验证通过。
+- 交付：`nodes/app/build/app/outputs/flutter-apk/app-debug.apk` 为可安装调试包；[实际界面截图](../nodes/app/docs/android-inbox.png)。配置与操作见 [App README](../nodes/app/README.md)、[API 契约](app-api.md)、[部署/备份](app-operations.md)、[ADR-0021](adr/0021-app-inbox-over-http.md)。Compose 配置校验与 diff 检查通过。
+- 边界：macOS/Windows 工程复用同一业务与 UI，但未完成平台验收；macOS 构建停在缺少开发签名配置（Keychain entitlement 需要），本机无法生成 Windows 产物。未做物理真机、生产 Broker/HTTPS、生产备份恢复或正式签名发布验收。M3 桌面交付仍未完成。
+- 工具环境：本机 Homebrew Flutter 可执行文件启动异常，本次使用仓库忽略目录 `.tools/flutter` 的本地 SDK 副本完成检查；SDK 未纳入源码。命令可通过 `FLUTTER=/absolute/path/to/flutter` 选择可用 SDK。
+
+### 2026-10-08 — 增加 Android App CI
+
+- 新增 `.github/workflows/build-app.yml`：App/Makefile/工作流相关的 PR 和 main 推送触发，另支持 `v*` 标签及手动运行。使用固定 Flutter 3.44.8、Java 17，安装锁定依赖，执行 `make test-app build-app`，上传 `orbit-android-debug` 调试 APK，保留 14 天。
+- 验证：`actionlint`、`git diff --check`、锁定依赖安装通过；本地复跑 Make 命令，静态分析、7 项测试和 APK 构建通过。尚未提交/推送本次工作流，未宣称 GitHub runner 已运行成功。
+- CI 当前覆盖 Android；macOS/Windows 平台构建及正式签名发布仍待补充。

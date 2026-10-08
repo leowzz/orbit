@@ -3,8 +3,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
@@ -12,17 +16,22 @@ import (
 	"time"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
+	"orbit/internal/appapi"
 	appclock "orbit/internal/clock"
 	"orbit/internal/config"
 	"orbit/internal/core"
+	"orbit/internal/inbox"
 	"orbit/internal/logging"
 	"orbit/internal/mqtt"
 
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func main() {
 	configPath := flag.String("config", "configs/core.local.yaml", "path to the Core YAML configuration")
+	seed := flag.Bool("seed-inbox", false, "insert public sample items, then exit")
+	reset := flag.Bool("reset-sync-generation", false, "invalidate sync cursors after restoring a backup, then exit")
 	flag.Parse()
 	cfg, runErr := config.LoadCore(*configPath)
 	level := "info"
@@ -31,7 +40,25 @@ func main() {
 	}
 	logger := zap.Must(logging.New(level))
 	if runErr == nil {
-		runErr = run(cfg, logger)
+		if *seed || *reset {
+			if cfg.App.Listen == "" {
+				runErr = errors.New("app must be enabled")
+			} else {
+				var store *inbox.Store
+				store, runErr = inbox.Open(cfg.App.DataDir)
+				if runErr == nil {
+					if *reset {
+						runErr = store.ResetGeneration(context.Background())
+					}
+					if runErr == nil && *seed {
+						runErr = store.Seed(context.Background())
+					}
+					_ = store.Close()
+				}
+			}
+		} else {
+			runErr = run(cfg, logger)
+		}
 	}
 	if runErr != nil {
 		logger.Error("orbit core stopped", zap.Error(runErr))
@@ -92,6 +119,52 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 		return err
 	}
 	synchronizedClock.Start(ctx)
+
+	if cfg.App.Listen == "" {
+		return runMQTT(ctx, cfg, engine, logger, synchronizedClock.Now)
+	}
+	store, err := inbox.Open(cfg.App.DataDir)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	api := appapi.New(store, cfg.App, func(node string) json.RawMessage {
+		view := engine.AppView(synchronizedClock.Now(), node)
+		if view == nil {
+			return json.RawMessage(`null`)
+		}
+		raw, _ := protojson.Marshal(view)
+		return raw
+	})
+	listener, err := net.Listen("tcp", cfg.App.Listen)
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
+	serverErr := make(chan error, 1)
+	go func() { serverErr <- server.Serve(listener) }()
+	go api.Sweep(ctx)
+	go func() {
+		if err := runMQTT(ctx, cfg, engine, logger, synchronizedClock.Now); err != nil && ctx.Err() == nil {
+			logger.Error("MQTT stopped; App inbox remains available", zap.Error(err))
+		}
+	}()
+	logger.Info("app api started", zap.String("listen", cfg.App.Listen), zap.Strings("node_ids", nodeIDs))
+	select {
+	case <-ctx.Done():
+	case err = <-serverErr:
+	}
+	stop()
+	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = server.Shutdown(shutdown)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, logger *zap.Logger, now func() time.Time) error {
 	client, err := mqtt.Connect(ctx, mqtt.Config{
 		URL:      cfg.MQTT.URL,
 		ClientID: "orbit-core-" + cfg.Core.ID,
@@ -108,19 +181,18 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 		return err
 	}
 	defer disconnect(client, logger)
-	runner, err := core.NewRunner(engine, client, logger, synchronizedClock.Now)
+	runner, err := core.NewRunner(engine, client, logger, now)
 	if err != nil {
 		return err
 	}
 	logger.Info("orbit core started",
 		zap.String("core_id", cfg.Core.ID),
-		zap.String("core_epoch", coreEpoch),
-		zap.Int("route_count", len(routes)),
-		zap.Strings("node_ids", nodeIDs),
 	)
 	runnerErr := make(chan error, 1)
 	go func() { runnerErr <- runner.Run(ctx) }()
 	select {
+	case <-ctx.Done():
+		return nil
 	case err := <-runnerErr:
 		return err
 	case err := <-client.TerminalErrors():

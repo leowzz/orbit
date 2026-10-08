@@ -510,3 +510,38 @@ web:
 logging:
   level: info
 `
+
+func TestAppDeviceConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	app := `app:
+  listen: 127.0.0.1:7622
+  data_dir: ../app-data
+  devices:
+    phone-01:
+      token_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      platform: android
+`
+	path := writeConfig(t, dir, "app.yaml", validCoreYAML+"\n"+app)
+	cfg, err := LoadCore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(cfg.App.DataDir) {
+		t.Fatal("data directory was not resolved")
+	}
+	cfg.ProjectionRoutes = nil
+	cfg.ObservationPolicies = nil
+	if err = cfg.validate(dir); err != nil {
+		t.Fatal("inbox without status routes should work", err)
+	}
+	cfg.App.Devices["another-phone"] = cfg.App.Devices["phone-01"]
+	if err = cfg.validate(dir); err == nil {
+		t.Fatal("duplicate token accepted")
+	}
+	delete(cfg.App.Devices, "another-phone")
+	cfg.ProjectionRoutes = map[string]ProjectionRoute{"phone-01": {Profile: "overview-web"}}
+	if err = cfg.validate(dir); err == nil {
+		t.Fatal("App reused MQTT product route")
+	}
+}

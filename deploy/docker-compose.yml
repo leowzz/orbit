@@ -11,9 +11,17 @@ services:
   orbit-core:
     <<: *orbit-service
     image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-core:${version:?set version in .env}
+    ports:
+      - "127.0.0.1:7622:7622"
+    volumes:
+      - ../configs:/app/configs:ro
+      - orbit-app:/app/data
 
   orbit-web:
     <<: *orbit-service
     image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-web:${version:?set version in .env}
     ports:
       - "7621:7621"
+
+volumes:
+  orbit-app:

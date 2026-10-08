@@ -58,3 +58,9 @@ certs/
 /configs/data/
 *.log
 *.tmp
+
+# Durable App inbox and local caches
+/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

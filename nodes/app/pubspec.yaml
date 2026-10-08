@@ -1,0 +1,27 @@
+name: orbit_app
+description: Orbit personal inbox.
+publish_to: none
+version: 0.1.0+1
+environment:
+  sdk: ^3.12.0
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_secure_storage: ^10.0.0
+  sqflite: ^2.4.2
+  sqflite_common: ^2.5.6
+  sqflite_common_ffi: ^2.3.6
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  http: ^1.6.0
+  uuid: ^4.5.2
+  crypto: ^3.0.6
+  image_picker: ^1.2.1
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true

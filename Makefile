@@ -127,3 +127,16 @@ $(BUF):
 $(PROTOC_GEN_GO):
 	@mkdir -p "$(TOOLS_DIR)"
 	GOBIN="$(TOOLS_DIR)" $(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+
+# Shared App (Android first; Flutter SDK must be on PATH).
+FLUTTER ?= flutter
+.PHONY: dev-app test-app build-app
+
+dev-app:
+	cd nodes/app && $(FLUTTER) run
+
+test-app:
+	cd nodes/app && $(FLUTTER) analyze && $(FLUTTER) test
+
+build-app:
+	cd nodes/app && $(FLUTTER) build apk --debug

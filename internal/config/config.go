@@ -102,12 +102,27 @@ type CodexPrivacyConfig struct {
 }
 
 type CoreConfig struct {
+	App                 AppConfig                    `yaml:"app"`
 	Core                CoreIdentity                 `yaml:"core"`
 	NTP                 NTPConfig                    `yaml:"ntp"`
 	MQTT                MQTTConfig                   `yaml:"mqtt"`
 	ProjectionRoutes    map[string]ProjectionRoute   `yaml:"projection_routes"`
 	ObservationPolicies map[string]ObservationPolicy `yaml:"observation_policies"`
 	Logging             LoggingConfig                `yaml:"logging"`
+}
+
+// App devices are provisioned by the operator. Only SHA-256 token digests are stored.
+type AppConfig struct {
+	Listen  string               `yaml:"listen"`
+	DataDir string               `yaml:"data_dir"`
+	Devices map[string]AppDevice `yaml:"devices"`
+}
+
+type AppDevice struct {
+	Label       string `yaml:"label"`
+	Platform    string `yaml:"platform"`
+	TokenSHA256 string `yaml:"token_sha256"`
+	Revoked     bool   `yaml:"revoked"`
 }
 
 type WebNodeConfig struct {

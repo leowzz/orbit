@@ -26,6 +26,8 @@ WORKDIR /app
 
 COPY --from=build /out/orbit /usr/local/bin/orbit
 
+RUN mkdir -p /app/data && chown 65532:65532 /app/data
+
 USER 65532:65532
 
 ENTRYPOINT ["/usr/local/bin/orbit"]

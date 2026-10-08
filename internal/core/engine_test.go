@@ -280,3 +280,33 @@ func testCodexObservation(now time.Time) *orbitv1.Observation {
 		}},
 	}
 }
+
+func TestAppProjectionUsesOnlyItsRouteWithoutMQTTRegistration(t *testing.T) {
+	now := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
+	engine, err := New(Config{CoreID: "core-a", CoreEpoch: "epoch", Routes: []Route{{NodeID: "app-a", Profile: appProfile, Inputs: []RouteInput{{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}}}, UsagePolicy: UsagePolicy{MaxTTL: time.Minute}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = engine.ApplyAgentState(testAgentState(now)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = engine.ApplyObservation(now, testObservation(now)); err != nil {
+		t.Fatal(err)
+	}
+	view := engine.AppView(now, "app-a")
+	if view == nil || view.Usage == nil {
+		t.Fatal("missing HTTP projection")
+	}
+	if engine.AppView(now, "unconfigured") != nil {
+		t.Fatal("leaked another route")
+	}
+	if engine.AppView(now.Add(2*time.Minute), "app-a").Usage.Freshness != orbitv1.Freshness_FRESHNESS_STALE {
+		t.Fatal("status remained fresh without MQTT refresh")
+	}
+	state := testWebNodeState(now)
+	state.NodeId = "app-a"
+	state.Metadata.ProducerId = "app-a"
+	if _, err = engine.ApplyNodeState(now, state); err == nil {
+		t.Fatal("HTTP route accepted a forged MQTT product")
+	}
+}

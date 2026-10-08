@@ -550,8 +550,19 @@ The Go service contracts and routing rules are described in the source and
 are also kept in
 [nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md](nodes/display/models/oled-128x32/variants/yd-esp32-s3/README.md).
 
-The next App milestone is described in the
-[App Node and personal inbox implementation handoff](docs/app-node-handoff.md)
-(Chinese, 2026-10-07). It covers Android first, future macOS/Windows clients,
-durable messages, attachments, and foreground synchronization. These are planned
-capabilities; the handoff distinguishes them from the current V1 implementation.
+## Personal inbox App
+
+The shared Flutter App in [nodes/app](nodes/app/README.md) adds a personal inbox:
+text, todos and images, foreground synchronization, offline caching, a durable
+outbox, and explicit conflict handling. The fixed usage/session summary reads an
+operator-configured `overview-app` route. App tokens are independent per device.
+
+Enable the optional `app` section in `configs/core.example.yaml`, then run
+`make dev-core` and `make dev-app`. `make test-app` runs Flutter checks;
+`make build-app` creates a debug Android APK. The App API starts even when the
+MQTT broker is unreachable. Existing Agent/OLED/Web MQTT contracts are unchanged.
+
+See [API v1](docs/app-api.md), [HTTPS/deployment/backup](docs/app-operations.md),
+and the [implementation handoff](docs/app-node-handoff.md) for verified scope and
+remaining platform work. macOS/Windows share sources; they are not yet verified
+release artifacts. Background push and App host-session actions remain future work.
