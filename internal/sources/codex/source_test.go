@@ -224,6 +224,149 @@ func TestFetchKeepsCurrentRolloutTurnRunning(t *testing.T) {
 	}
 }
 
+func TestFetchReconcilesLegacyTerminalEvents(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	for _, test := range []struct {
+		name          string
+		turnID        string
+		eventType     string
+		completedAt   time.Time
+		includeStart  bool
+		timestampOnly bool
+		want          string
+	}{
+		{name: "start retained", turnID: "new-turn", eventType: "task_complete", completedAt: now, includeStart: true, want: "completed"},
+		{name: "start outside tail", turnID: "new-turn", eventType: "task_complete", completedAt: now, want: "completed"},
+		{name: "same turn", turnID: "current-turn", eventType: "task_complete", completedAt: now, want: "completed"},
+		{name: "aborted timestamp", turnID: "new-turn", eventType: "turn_aborted", completedAt: now, timestampOnly: true, want: "interrupted"},
+		{name: "older completion", turnID: "old-turn", eventType: "task_complete", completedAt: now.Add(-2 * time.Minute), want: "running"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			home := t.TempDir()
+			rolloutPath := filepath.Join(home, "rollout.jsonl")
+			events := []map[string]any{{
+				"type": "event_msg",
+				"payload": map[string]any{
+					"type": "task_started", "turn_id": test.turnID, "started_at": now.Add(-30 * time.Second).Unix(),
+				},
+			}}
+			if !test.includeStart {
+				// Force the start outside the 1 MiB tail, as happens with large tool output.
+				events = append(events, map[string]any{
+					"type": "response_item", "payload": map[string]any{"output": strings.Repeat("x", int(rolloutTailBytes))},
+				})
+			}
+			payload := map[string]any{"type": test.eventType, "turn_id": test.turnID}
+			if !test.timestampOnly {
+				payload["completed_at"] = test.completedAt.Unix()
+			}
+			events = append(events, map[string]any{
+				"type": "event_msg", "timestamp": test.completedAt.Format(time.RFC3339Nano), "payload": payload,
+			})
+			writeRolloutEvents(t, rolloutPath, events)
+			createStateDB(t, filepath.Join(home, "state_1.sqlite"), true, []stateFixture{{
+				id: "one", source: "vscode", updatedAt: now, rolloutPath: rolloutPath,
+			}})
+			createHistoryDB(t, filepath.Join(home, "thread_history_1.sqlite"), []turnFixture{{
+				threadID: "one", turnID: "current-turn", status: "inProgress", startedAt: now.Add(-time.Minute),
+			}})
+			source, err := New(Config{Home: home})
+			if err != nil {
+				t.Fatal(err)
+			}
+			source.now = func() time.Time { return now }
+			snapshot, err := source.Fetch(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantRunning := 0
+			if test.want == "running" {
+				wantRunning = 1
+			}
+			if len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != test.want || snapshot.RunningCount != wantRunning {
+				t.Fatalf("legacy rollout snapshot = %+v, want status %s running %d", snapshot, test.want, wantRunning)
+			}
+		})
+	}
+}
+
+func TestFetchExpiresOnlyInactiveUnclosedTurnsBeforeCountsAndLimit(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	old := now.Add(-30 * 24 * time.Hour)
+	for _, test := range []struct {
+		name       string
+		updatedAt  time.Time
+		startedAt  time.Time
+		rolloutAt  time.Time
+		processPID int
+		want       string
+	}{
+		{name: "orphaned", updatedAt: old, startedAt: old, rolloutAt: old, want: "unknown"},
+		{name: "dead process", updatedAt: old, startedAt: old, rolloutAt: old, processPID: 99999999, want: "unknown"},
+		{name: "live process", updatedAt: old, startedAt: old, rolloutAt: old, processPID: os.Getpid(), want: "running"},
+		{name: "recent state", updatedAt: now.Add(-time.Hour), startedAt: old, rolloutAt: old, want: "running"},
+		{name: "recent start", updatedAt: old, startedAt: now.Add(-time.Hour), rolloutAt: old, want: "running"},
+		{name: "ongoing rollout", updatedAt: old, startedAt: old, rolloutAt: now.Add(-time.Hour), want: "running"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			home := t.TempDir()
+			rolloutPath := filepath.Join(home, "rollout.jsonl")
+			writeRolloutEvents(t, rolloutPath, []map[string]any{{
+				"type": "event_msg",
+				"payload": map[string]any{
+					"type": "task_started", "turn_id": "unclosed-turn", "started_at": test.startedAt.Unix(),
+				},
+			}})
+			setMtime(t, rolloutPath, test.rolloutAt)
+			createStateDB(t, filepath.Join(home, "state_1.sqlite"), true, []stateFixture{
+				{id: "current", source: "vscode", updatedAt: now},
+				{id: "unclosed", source: "vscode", updatedAt: test.updatedAt, rolloutPath: rolloutPath},
+			})
+			createHistoryDB(t, filepath.Join(home, "thread_history_1.sqlite"), []turnFixture{
+				{threadID: "current", turnID: "current-turn", status: "inProgress", startedAt: now},
+				{threadID: "unclosed", turnID: "unclosed-turn", status: "inProgress", startedAt: test.startedAt},
+			})
+			if test.processPID != 0 {
+				processDir := filepath.Join(home, "process_manager")
+				if err := os.Mkdir(processDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				processes, err := json.Marshal([]map[string]any{{"conversationId": "unclosed", "osPid": test.processPID}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(processDir, "chat_processes.json"), processes, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			source, err := New(Config{Home: home, Limit: 1})
+			if err != nil {
+				t.Fatal(err)
+			}
+			source.now = func() time.Time { return now }
+			snapshot, err := source.Fetch(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantRunning := 1
+			if test.want == "running" {
+				wantRunning++
+			}
+			if snapshot.TotalCount != 2 || snapshot.RunningCount != wantRunning || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].ID != "current" {
+				t.Fatalf("limited snapshot = %+v, want running %d", snapshot, wantRunning)
+			}
+			source.limit = 2
+			snapshot, err = source.Fetch(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if snapshot.Sessions[1].Status != test.want {
+				t.Fatalf("unclosed status = %s, want %s", snapshot.Sessions[1].Status, test.want)
+			}
+		})
+	}
+}
+
 func TestFetchAppliesFiltersAndArchivedOptionBeforeLimit(t *testing.T) {
 	home := t.TempDir()
 	now := time.Now().Truncate(time.Second)

@@ -25,6 +25,7 @@ const (
 	dayflowChatCLISuffix    = "/Library/Application Support/Dayflow/chatcli"
 	pendingTurnGrace        = 5 * time.Minute
 	pendingTurnMinimumDelta = 2 * time.Second
+	orphanedTurnGrace       = 24 * time.Hour
 	readBusyTimeout         = 2 * time.Second
 	rolloutTailBytes        = int64(1 << 20)
 )
@@ -200,6 +201,9 @@ func (s *Source) Fetch(ctx context.Context) (Snapshot, error) {
 		if found && isNewerTurn(rolloutTurn, turn) {
 			session.Status = rolloutTurn.code()
 		}
+		if isOrphanedRunning(*session, turn, sessions[session.ID].rolloutPath, now) {
+			session.Status = "unknown"
+		}
 	}
 
 	runningCount := 0
@@ -276,6 +280,15 @@ func projectionMayBeStale(session Session, turn turnStatus) bool {
 
 func isNewerTurn(candidate, current turnStatus) bool {
 	if candidate.startedAt == nil {
+		// Older completion events omit started_at, and their start can be
+		// outside the bounded rollout tail. A terminal event still resolves
+		// the same turn or a turn ending after the projected turn began.
+		if candidate.code() != "running" && candidate.code() != "unknown" {
+			if candidate.id != "" && candidate.id == current.id {
+				return candidate.code() != current.code()
+			}
+			return candidate.completedAt != nil && current.startedAt != nil && candidate.completedAt.After(*current.startedAt)
+		}
 		return false
 	}
 	if current.startedAt == nil || candidate.startedAt.After(*current.startedAt) {
@@ -285,6 +298,23 @@ func isNewerTurn(candidate, current turnStatus) bool {
 		return false
 	}
 	return candidate.id != "" && (candidate.id != current.id || candidate.code() != current.code())
+}
+
+func isOrphanedRunning(session Session, turn turnStatus, rolloutPath string, now time.Time) bool {
+	if session.Status != "running" || session.ProcessAlive {
+		return false
+	}
+	// The process file tracks tool processes, so a missing PID alone cannot
+	// prove a turn stopped. Keep recent turns and rollouts receiving output;
+	// only drop unclosed turns with no activity for a full day.
+	lastActivity := session.UpdatedAt
+	if turn.startedAt != nil && turn.startedAt.After(lastActivity) {
+		lastActivity = *turn.startedAt
+	}
+	if info, err := os.Stat(rolloutPath); err == nil && info.ModTime().After(lastActivity) {
+		lastActivity = info.ModTime()
+	}
+	return !lastActivity.IsZero() && now.Sub(lastActivity) > orphanedTurnGrace
 }
 
 func resolveHome(configured string) (string, error) {
@@ -531,8 +561,9 @@ func readLatestRolloutTurn(path string) (turnStatus, bool) {
 	found := false
 	for scanner.Scan() {
 		var event struct {
-			Type    string `json:"type"`
-			Payload struct {
+			Type      string `json:"type"`
+			Timestamp string `json:"timestamp"`
+			Payload   struct {
 				Type        string `json:"type"`
 				TurnID      string `json:"turn_id"`
 				Reason      string `json:"reason"`
@@ -557,11 +588,23 @@ func readLatestRolloutTurn(path string) (turnStatus, bool) {
 		default:
 			continue
 		}
+		startedAt := unixTimestamp(event.Payload.StartedAt)
+		completedAt := unixTimestamp(event.Payload.CompletedAt)
+		if timestamp, err := time.Parse(time.RFC3339Nano, event.Timestamp); err == nil {
+			if status == "running" && startedAt == nil {
+				startedAt = &timestamp
+			} else if status != "running" && completedAt == nil {
+				completedAt = &timestamp
+			}
+		}
+		if startedAt == nil && event.Payload.TurnID != "" && event.Payload.TurnID == latest.id {
+			startedAt = latest.startedAt
+		}
 		latest = turnStatus{
 			id:          event.Payload.TurnID,
 			rawStatus:   status,
-			startedAt:   unixTimestamp(event.Payload.StartedAt),
-			completedAt: unixTimestamp(event.Payload.CompletedAt),
+			startedAt:   startedAt,
+			completedAt: completedAt,
 		}
 		found = true
 	}

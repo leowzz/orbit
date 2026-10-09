@@ -212,6 +212,8 @@ The Codex source reads local projection databases in read-only mode. Display
 names and project names are omitted unless their privacy flags are explicitly
 enabled. `include_display_name` is a deliberate opt-in because the value may
 come from a Codex title or first-user-message fallback.
+Unclosed Codex turns with no live tool process and no state, turn-start, or
+rollout-file activity for 24 hours are reported as unknown rather than running.
 
 TLS is enabled by default. With TLS enabled, use an mqtts:// URL. Leave
 `mqtt.tls.ca_file` empty to use the operating system trust store, or set it to
