@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:orbit_app/local_store.dart';
 import 'package:orbit_app/orbit_home.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'sync_test.dart' show item, page;
+import 'widget_test.dart' show waitForLocalUpdate;
 
 void main() {
   sqfliteFfiInit();
@@ -53,6 +55,12 @@ void main() {
             await File('/System/Library/Fonts/STHeiti Light.ttc').readAsBytes(),
             fontFamily: 'Capture',
           );
+          await ui.loadFontFromList(
+            await File(
+              'build/unit_test_assets/fonts/MaterialIcons-Regular.otf',
+            ).readAsBytes(),
+            fontFamily: 'MaterialIcons',
+          );
         });
       }
       final capture = GlobalKey();
@@ -60,7 +68,11 @@ void main() {
         RepaintBoundary(
           key: capture,
           child: MaterialApp(
+            debugShowCheckedModeBanner: false,
             theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xff277765),
+              ),
               fontFamily: Platform.environment['ORBIT_CAPTURE'] != null
                   ? 'Capture'
                   : null,
@@ -74,6 +86,16 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await waitForLocalUpdate(
+        tester,
+        () =>
+            tester
+                .widget<OutlinedButton>(
+                  find.widgetWithText(OutlinedButton, '添加图片'),
+                )
+                .onPressed !=
+            null,
+      );
       expect(find.byTooltip('复制消息'), findsNWidgets(2));
       expect(find.text('example.com'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -89,14 +111,22 @@ void main() {
           image.dispose();
         });
       }
-      await tester.tap(find.byTooltip('搜索消息'));
-      await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextField, '搜索文字、链接…'), '到公司');
       await tester.pump(const Duration(milliseconds: 200));
       await tester.runAsync(c.load);
       await tester.pumpAndSettle();
       expect(find.text('到公司检查同步体验'), findsOneWidget);
       expect(find.text('example.com'), findsNothing);
+      await tester.tap(find.byTooltip('更多操作'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('编辑'));
+      await tester.pumpAndSettle();
+      expect(find.text('编辑消息'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextField, '写点什么…'), '编辑后的待办');
+      await tester.tap(find.text('保存'));
+      await waitForLocalUpdate(tester, () => c.pending.isNotEmpty);
+      expect(jsonDecode(c.pending.single['payload'])['body'], '编辑后的待办');
+      expect(tester.takeException(), isNull);
       await tester.tap(find.text('状态与组件'));
       await tester.pumpAndSettle();
       expect(find.text('Android 桌面组件'), findsOneWidget);
