@@ -126,14 +126,17 @@ void main() {
       await tester.pumpAndSettle();
       final list = find.byKey(const PageStorageKey('inbox'));
       final initialHeight = tester.getSize(list).height;
-      // The title row is gone; only the navigation destination retains this label.
-      expect(find.text('收件箱'), findsOneWidget);
+      // The header and navigation share the inbox label.
+      expect(find.text('收件箱'), findsNWidgets(2));
       expect(find.byType(ChoiceChip), findsNothing);
       expect(
-        tester.getRect(find.byType(DropdownButton<String>)).right,
-        lessThanOrEqualTo(tester.getRect(find.byTooltip('同步')).left),
+        tester.getRect(find.byType(DropdownButton<String>)).top,
+        lessThan(tester.getRect(find.byKey(const PageStorageKey('inbox'))).top),
       );
-      await tester.enterText(find.byType(TextField), '滚动后保留的草稿');
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-body')),
+        '滚动后保留的草稿',
+      );
       await tester.runAsync(() => controller.local.meta('draft'));
       await tester.pumpAndSettle();
       await tester.dragFrom(
@@ -141,7 +144,8 @@ void main() {
         const Offset(0, -160),
       );
       await tester.pumpAndSettle();
-      expect(find.byType(TextField), findsNothing);
+      expect(find.byKey(const ValueKey('composer-body')), findsNothing);
+      expect(find.widgetWithText(TextField, '搜索文字、链接…'), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
       expect(tester.getSize(list).height, greaterThan(initialHeight + 100));
       final scrollable = tester.state<ScrollableState>(

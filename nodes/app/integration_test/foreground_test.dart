@@ -48,11 +48,15 @@ void main() {
       expect(tester.takeException(), isNull);
 
       c.stop();
-      await tester.enterText(find.byType(TextField), 'Android offline sample');
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-body')),
+        'Android offline sample',
+      );
+      await tester.pump();
       await tester.tap(find.text('发送'));
       await tester.pumpAndSettle();
       expect(c.pending.length, 1);
-      expect(find.text('待发送'), findsOneWidget);
+      expect(find.textContaining('待同步'), findsWidgets);
       await c.sync();
       await tester.pumpAndSettle();
       expect(c.pending, isEmpty);

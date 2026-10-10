@@ -63,15 +63,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('整理本周的想法与待办'), findsOneWidget);
-      final composer = tester.getRect(find.byType(TextField));
+      final composer = tester.getRect(
+        find.byKey(const ValueKey('composer-body')),
+      );
       expect(find.text('周期用量'), findsNothing);
       expect(find.byType(ExpansionTile), findsNothing);
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
       expect(
-        tester.getRect(find.byType(Switch)).top,
+        tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
+        isFalse,
+      );
+      expect(
+        tester.getRect(find.byKey(const ValueKey('composer-todo'))).top,
         greaterThanOrEqualTo(composer.bottom),
       );
-      expect(composer.bottom, greaterThan(680));
+      expect(composer.bottom, greaterThan(650));
       final message = find.text('整理本周的想法与待办');
       final position = tester.getRect(message);
       for (final operation in ['set_completed', 'update', 'delete']) {
@@ -86,13 +93,32 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.getRect(message), position);
         expect(find.text('待发送'), findsNothing);
-        expect(find.textContaining('待同步'), findsOneWidget);
+        expect(find.textContaining(' · 待同步'), findsOneWidget);
         expect(
-          tester.widget<Checkbox>(find.byType(Checkbox)).onChanged,
+          tester
+              .widget<Checkbox>(
+                find.byWidgetPredicate(
+                  (widget) =>
+                      widget is Checkbox &&
+                      widget.key != const ValueKey('composer-todo'),
+                ),
+              )
+              .onChanged,
           isNull,
         );
         if (operation == 'set_completed') {
-          expect(tester.widget<Checkbox>(find.byType(Checkbox)).value, isTrue);
+          expect(
+            tester
+                .widget<Checkbox>(
+                  find.byWidgetPredicate(
+                    (widget) =>
+                        widget is Checkbox &&
+                        widget.key != const ValueKey('composer-todo'),
+                  ),
+                )
+                .value!,
+            isTrue,
+          );
           expect(
             tester.widget<Text>(message).style?.decoration,
             isNot(TextDecoration.lineThrough),
@@ -109,7 +135,7 @@ void main() {
         });
         await tester.pumpAndSettle();
         expect(tester.getRect(message), position);
-        expect(find.textContaining('待同步'), findsNothing);
+        expect(find.textContaining(' · 待同步'), findsNothing);
         expect(
           tester.widget<Text>(message).style?.decoration,
           isNot(TextDecoration.lineThrough),
@@ -118,13 +144,22 @@ void main() {
       for (final kind in ['text', 'todo']) {
         await tester.tap(find.byTooltip('更多操作'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text(kind == 'todo' ? '设为待办' : '改为文本'));
+        await tester.tap(
+          find.widgetWithText(
+            PopupMenuItem<String>,
+            kind == 'todo' ? '设为待办' : '改为文本',
+          ),
+        );
         await waitForLocalUpdate(tester, () => c.pending.isNotEmpty);
         final operation = jsonDecode(c.pending.single['payload']);
         expect(operation['type'], 'set_kind');
         expect(operation['kind'], kind);
         expect(
-          find.byType(Checkbox),
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is Checkbox &&
+                widget.key != const ValueKey('composer-todo'),
+          ),
           kind == 'todo' ? findsOneWidget : findsNothing,
         );
         expect(find.text('待发送'), findsNothing);
@@ -154,7 +189,11 @@ void main() {
       expect(find.text('重试'), findsOneWidget);
       await tester.runAsync(() => c.discard(c.pending.single));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '离线时也能记下来');
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-body')),
+        '离线时也能记下来',
+      );
+      await tester.pump();
       await tester.tap(find.text('发送'));
       await waitForLocalUpdate(
         tester,
@@ -193,21 +232,37 @@ void main() {
       c.uploadingID = null;
       await tester.runAsync(() => c.discard(c.pending.single));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '只把这一条设为待办');
-      await tester.tap(find.byType(Switch));
+      await tester.enterText(
+        find.byKey(const ValueKey('composer-body')),
+        '只把这一条设为待办',
+      );
+      await tester.tap(find.byKey(const ValueKey('composer-todo')));
       await waitForLocalUpdate(
         tester,
-        () => tester.widget<Switch>(find.byType(Switch)).value,
+        () => tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
       );
       expect(find.text('只把这一条设为待办'), findsOneWidget);
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(
+        tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
+        isTrue,
+      );
+      await tester.pump();
       await tester.tap(find.text('发送'));
       await waitForLocalUpdate(
         tester,
         () => c.pending.isNotEmpty && find.text('保存中…').evaluate().isEmpty,
       );
       expect(jsonDecode(c.pending.single['payload'])['kind'], 'todo');
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(
+        tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
+        isTrue,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       // A new screen and database connection must restore the preference.
@@ -227,15 +282,29 @@ void main() {
       );
       await waitForLocalUpdate(
         tester,
-        () => tester.widget<Switch>(find.byType(Switch)).value,
+        () => tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
       );
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-      await tester.tap(find.byType(Switch));
+      expect(
+        tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
+        isTrue,
+      );
+      await tester.tap(find.byKey(const ValueKey('composer-todo')));
       await waitForLocalUpdate(
         tester,
-        () => !tester.widget<Switch>(find.byType(Switch)).value,
+        () => !tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
       );
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(
+        tester
+            .widget<Checkbox>(find.byKey(const ValueKey('composer-todo')))
+            .value!,
+        isFalse,
+      );
       expect(await tester.runAsync(() => local.meta('composer_kind')), 'text');
       await tester.pumpWidget(const SizedBox());
       await tester.runAsync(() async {
@@ -281,6 +350,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byType(InboxMessageBody).evaluate().length, lessThan(20));
+      await tester.ensureVisible(find.text('展开'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('展开'));
       await tester.pumpAndSettle();
       final original = find.descendant(
