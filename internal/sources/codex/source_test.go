@@ -64,8 +64,8 @@ func TestFetchReadsNewestDatabasesAndMapsSessionState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.TotalCount != 3 || snapshot.RunningCount != 2 {
-		t.Fatalf("counts = total %d running %d, want total 3 running 2", snapshot.TotalCount, snapshot.RunningCount)
+	if snapshot.TotalCount != 3 || snapshot.RunningCount != 1 {
+		t.Fatalf("counts = total %d running %d, want total 3 running 1", snapshot.TotalCount, snapshot.RunningCount)
 	}
 	if len(snapshot.Sessions) != 3 {
 		t.Fatalf("got %d sessions, want 3", len(snapshot.Sessions))
@@ -73,7 +73,7 @@ func TestFetchReadsNewestDatabasesAndMapsSessionState(t *testing.T) {
 	if got := snapshot.Sessions[0]; got.ID != "running" || got.Status != "running" || !got.ProcessAlive || got.DisplayName != "Active display" || got.ProjectName != "project" {
 		t.Fatalf("running session = %+v", got)
 	}
-	if got := snapshot.Sessions[1]; got.ID != "pending" || got.Status != "running" || got.DisplayName != "First prompt" {
+	if got := snapshot.Sessions[1]; got.ID != "pending" || got.Status != "interrupted" || got.DisplayName != "First prompt" {
 		t.Fatalf("pending session = %+v", got)
 	}
 	if got := snapshot.Sessions[2]; got.ID != "done" || got.Status != "completed" || got.ProcessAlive {
@@ -110,19 +110,55 @@ func TestTurnStatusCodes(t *testing.T) {
 	}
 }
 
-func TestPendingRunningHonorsGraceAndDelta(t *testing.T) {
-	now := time.Date(2026, 9, 3, 18, 0, 0, 0, time.Local)
-	completed := now.Add(-10 * time.Second)
-	turn := turnStatus{rawStatus: "interrupted", completedAt: &completed}
-	if !isPendingRunning(now.Add(-5*time.Second), turn, now) {
-		t.Fatal("recent state update was not treated as running")
-	}
-	if isPendingRunning(now.Add(-6*time.Minute), turn, now) {
-		t.Fatal("stale state update was treated as running")
-	}
-	completed = now.Add(-1 * time.Second)
-	if isPendingRunning(now.Add(-time.Second), turn, now) {
-		t.Fatal("state update with insufficient delta was treated as running")
+func TestFetchMetadataUpdatePreservesTerminalStatus(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	for _, status := range []string{"completed", "interrupted", "failed", "cancelled"} {
+		for _, withRollout := range []bool{false, true} {
+			name := status + "/missing-rollout"
+			if withRollout {
+				name = status + "/matching-rollout"
+			}
+			t.Run(name, func(t *testing.T) {
+				home := t.TempDir()
+				startedAt := now.Add(-26 * time.Hour)
+				completedAt := startedAt.Add(time.Minute)
+				rolloutPath := ""
+				if withRollout {
+					rolloutPath = filepath.Join(home, "rollout.jsonl")
+					eventType := "task_complete"
+					if status != "completed" {
+						eventType = "turn_aborted"
+					}
+					writeRolloutEvents(t, rolloutPath, []map[string]any{{
+						"type": "event_msg", "payload": map[string]any{
+							"type": eventType, "turn_id": "done-turn", "reason": status,
+							"started_at": startedAt.Unix(), "completed_at": completedAt.Unix(),
+						},
+					}, {
+						"type": "event_msg", "payload": map[string]any{"type": "thread_settings_applied"},
+					}})
+				}
+				createStateDB(t, filepath.Join(home, "state_1.sqlite"), true, []stateFixture{{
+					id: "done", source: "vscode", updatedAt: now, rolloutPath: rolloutPath,
+				}})
+				createHistoryDB(t, filepath.Join(home, "thread_history_1.sqlite"), []turnFixture{{
+					threadID: "done", turnID: "done-turn", status: status,
+					startedAt: startedAt, completedAt: completedAt,
+				}})
+				source, err := New(Config{Home: home})
+				if err != nil {
+					t.Fatal(err)
+				}
+				source.now = func() time.Time { return now }
+				snapshot, err := source.Fetch(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if snapshot.RunningCount != 0 || len(snapshot.Sessions) != 1 || snapshot.Sessions[0].Status != status {
+					t.Fatalf("metadata update snapshot = %+v, want status %s", snapshot, status)
+				}
+			})
+		}
 	}
 }
 
@@ -207,7 +243,8 @@ func TestFetchKeepsCurrentRolloutTurnRunning(t *testing.T) {
 		updatedAt: now, rolloutPath: rolloutPath,
 	}})
 	createHistoryDB(t, filepath.Join(home, "thread_history_1.sqlite"), []turnFixture{{
-		threadID: "running", turnID: "current-turn", status: "inProgress", startedAt: now,
+		threadID: "running", turnID: "old-turn", status: "completed",
+		startedAt: now.Add(-2 * time.Minute), completedAt: now.Add(-time.Minute),
 	}})
 
 	source, err := New(Config{Home: home, Limit: 10})

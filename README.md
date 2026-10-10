@@ -212,6 +212,9 @@ The Codex source reads local projection databases in read-only mode. Display
 names and project names are omitted unless their privacy flags are explicitly
 enabled. `include_display_name` is a deliberate opt-in because the value may
 come from a Codex title or first-user-message fallback.
+Running status requires an active turn in the history projection or a newer
+turn-start event in the rollout. Updating thread metadata alone does not restart
+a completed task.
 Unclosed Codex turns with no live tool process and no state, turn-start, or
 rollout-file activity for 24 hours are reported as unknown rather than running.
 

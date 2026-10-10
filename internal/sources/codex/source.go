@@ -21,13 +21,12 @@ import (
 )
 
 const (
-	defaultLimit            = 20
-	dayflowChatCLISuffix    = "/Library/Application Support/Dayflow/chatcli"
-	pendingTurnGrace        = 5 * time.Minute
-	pendingTurnMinimumDelta = 2 * time.Second
-	orphanedTurnGrace       = 24 * time.Hour
-	readBusyTimeout         = 2 * time.Second
-	rolloutTailBytes        = int64(1 << 20)
+	defaultLimit           = 20
+	dayflowChatCLISuffix   = "/Library/Application Support/Dayflow/chatcli"
+	projectionMinimumDelta = 2 * time.Second
+	orphanedTurnGrace      = 24 * time.Hour
+	readBusyTimeout        = 2 * time.Second
+	rolloutTailBytes       = int64(1 << 20)
 )
 
 // Config controls which Codex projection files are read and how sessions are filtered.
@@ -181,9 +180,6 @@ func (s *Source) Fetch(ctx context.Context) (Snapshot, error) {
 		if ok {
 			session.Status = turn.code()
 			session.ProcessAlive = processes[id]
-			if isPendingRunning(session.UpdatedAt, turn, now) {
-				session.Status = "running"
-			}
 		}
 		if isIgnored(record, s.ignoreCWD, s.ignoreSource) {
 			continue
@@ -270,18 +266,6 @@ func (turn turnStatus) code() string {
 	}
 }
 
-func isPendingRunning(updatedAt time.Time, turn turnStatus, now time.Time) bool {
-	if turn.code() == "running" {
-		return true
-	}
-	if updatedAt.IsZero() || turn.completedAt == nil {
-		return false
-	}
-	age := now.Sub(updatedAt)
-	delta := updatedAt.Sub(*turn.completedAt)
-	return age >= 0 && age <= pendingTurnGrace && delta >= pendingTurnMinimumDelta
-}
-
 func projectionMayBeStale(session Session, turn turnStatus) bool {
 	if session.UpdatedAt.IsZero() {
 		return false
@@ -289,7 +273,9 @@ func projectionMayBeStale(session Session, turn turnStatus) bool {
 	if turn.completedAt == nil {
 		return turn.code() == "running" && !session.ProcessAlive
 	}
-	return session.UpdatedAt.Sub(*turn.completedAt) >= pendingTurnMinimumDelta
+	// Metadata changes also update the thread timestamp. Use it to trigger
+	// rollout reconciliation, never as evidence that a new turn is running.
+	return session.UpdatedAt.Sub(*turn.completedAt) >= projectionMinimumDelta
 }
 
 func isNewerTurn(candidate, current turnStatus) bool {
