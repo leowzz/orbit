@@ -37,6 +37,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <activity
+            android:name=".InputMethodPickerActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/InputMethodPickerTheme"
+            android:label="切换输入法" />
         <service android:name=".OrbitService" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled continuous MQTT updates for Orbit home-screen status widgets" />
         </service>

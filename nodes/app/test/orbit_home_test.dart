@@ -58,11 +58,17 @@ void main() {
       await tester.enterText(find.byType(TextField).first, '保留草稿');
       await tester.tap(find.text('状态与组件'));
       await tester.pumpAndSettle();
+      expect(find.text('添加到桌面').hitTestable(), findsOneWidget);
+      await tester.ensureVisible(find.text('Android 桌面组件'));
+      await tester.tap(find.text('Android 桌面组件'));
+      await tester.pumpAndSettle();
       expect(find.text('开始同步').hitTestable(), findsOneWidget);
       expect(calls.where((method) => method == 'load'), hasLength(1));
       await tester.tap(find.text('开始同步'));
       await tester.pumpAndSettle();
       expect(calls, contains('start'));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await tester.tap(find.text('收件箱'));
       await tester.pumpAndSettle();
       expect(find.text('保留草稿').hitTestable(), findsOneWidget);

@@ -20,6 +20,11 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.orbit/node").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "showInputMethodPicker" -> {
+                        startActivity(InputMethodTools.pickerIntent(this))
+                        result.success(null)
+                    }
+                    "pinInputMethodShortcut" -> result.success(InputMethodTools.pin(this))
                     "load" -> result.success(ConfigVault(this).load()?.map())
                     "snapshot" -> result.success(ViewStore(this).snapshot())
                     "save" -> {
