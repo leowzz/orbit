@@ -81,6 +81,8 @@ type Sub2APICredentials struct {
 }
 
 type CodexConfig struct {
+	RateLimits      bool               `yaml:"rate_limits"`
+	Binary          string             `yaml:"binary"`
 	Enabled         bool               `yaml:"enabled"`
 	CodexHome       string             `yaml:"codex_home"`
 	PollInterval    Duration           `yaml:"poll_interval"`

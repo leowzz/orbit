@@ -95,12 +95,25 @@ void drawRight(U8G2& display, const char* text, uint8_t baseline) {
 }
 
 void drawView(U8G2& display, const DisplaySnapshot& snapshot) {
+  display.setFont(u8g2_font_6x10_tf);
+  const uint16_t secondary_width =
+      display.getStrWidth(snapshot.view.secondary.value);
+  const uint16_t footer_width = display.getStrWidth(snapshot.view.footer.value);
+  const uint16_t right_width =
+      secondary_width > footer_width ? secondary_width : footer_width;
+  const uint16_t primary_area_width =
+      right_width < kOledWidth ? kOledWidth - right_width : 0U;
+
   char primary[65];
   display.setFont(u8g2_font_helvB18_tf);
   const FontMetrics metrics = centeredMetrics(display);
   copyFitted(display, snapshot.view.primary.value, primary, sizeof(primary),
              kOledWidth);
-  display.drawStr(0, metrics.baseline, primary);
+  const uint16_t width = display.getStrWidth(primary);
+  const uint8_t x = width < primary_area_width
+                        ? static_cast<uint8_t>((primary_area_width - width) / 2U)
+                        : 0U;
+  display.drawStr(x, metrics.baseline, primary);
 
   display.setFont(u8g2_font_6x10_tf);
   drawRight(display, snapshot.view.secondary.value, kSecondaryBaseline);

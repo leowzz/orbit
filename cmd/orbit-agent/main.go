@@ -87,6 +87,8 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 	if cfg.Sources.Codex.Enabled {
 		source, sourceErr := codexsource.New(codexsource.Config{
 			Home:            cfg.Sources.Codex.CodexHome,
+			RateLimits:      cfg.Sources.Codex.RateLimits,
+			Binary:          cfg.Sources.Codex.Binary,
 			Limit:           cfg.Sources.Codex.SessionLimit,
 			IncludeArchived: cfg.Sources.Codex.IncludeArchived,
 			IgnoreCWD:       cfg.Sources.Codex.Ignore.CWD,

@@ -123,7 +123,7 @@ func (e *Engine) replaceRoutes(now time.Time, routes []Route, persist func() err
 	}
 	for _, route := range routes {
 		if node := e.nodeProducts[route.NodeID]; node != nil {
-			model := map[string]string{usageProfile: oledModel, webProfile: webModel, androidProfile: androidModel}[route.Profile]
+			model := map[string]string{usageProfile: oledModel, codexWeeklyProfile: oledModel, webProfile: webModel, androidProfile: androidModel}[route.Profile]
 			if node.ModelId != model {
 				return nil, fmt.Errorf("node %s model %s does not match %s", route.NodeID, node.ModelId, route.Profile)
 			}

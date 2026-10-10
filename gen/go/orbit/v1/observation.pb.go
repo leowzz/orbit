@@ -316,19 +316,88 @@ func (x *CodexSession) GetProcessAlive() bool {
 	return false
 }
 
+type CodexWeeklyLimit struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RemainingPercent float64                `protobuf:"fixed64,1,opt,name=remaining_percent,json=remainingPercent,proto3" json:"remaining_percent,omitempty"`
+	ResetsAt         *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=resets_at,json=resetsAt,proto3" json:"resets_at,omitempty"`
+	ObservedAt       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	FreshUntil       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *CodexWeeklyLimit) Reset() {
+	*x = CodexWeeklyLimit{}
+	mi := &file_orbit_v1_observation_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CodexWeeklyLimit) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CodexWeeklyLimit) ProtoMessage() {}
+
+func (x *CodexWeeklyLimit) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_observation_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CodexWeeklyLimit.ProtoReflect.Descriptor instead.
+func (*CodexWeeklyLimit) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CodexWeeklyLimit) GetRemainingPercent() float64 {
+	if x != nil {
+		return x.RemainingPercent
+	}
+	return 0
+}
+
+func (x *CodexWeeklyLimit) GetResetsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ResetsAt
+	}
+	return nil
+}
+
+func (x *CodexWeeklyLimit) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
+func (x *CodexWeeklyLimit) GetFreshUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FreshUntil
+	}
+	return nil
+}
+
 type CodexObservation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Sessions      []*CodexSession        `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
 	TotalCount    uint32                 `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
 	RunningCount  uint32                 `protobuf:"varint,3,opt,name=running_count,json=runningCount,proto3" json:"running_count,omitempty"`
 	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	WeeklyLimit   *CodexWeeklyLimit      `protobuf:"bytes,5,opt,name=weekly_limit,json=weeklyLimit,proto3" json:"weekly_limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CodexObservation) Reset() {
 	*x = CodexObservation{}
-	mi := &file_orbit_v1_observation_proto_msgTypes[2]
+	mi := &file_orbit_v1_observation_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -340,7 +409,7 @@ func (x *CodexObservation) String() string {
 func (*CodexObservation) ProtoMessage() {}
 
 func (x *CodexObservation) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_observation_proto_msgTypes[2]
+	mi := &file_orbit_v1_observation_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -353,7 +422,7 @@ func (x *CodexObservation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CodexObservation.ProtoReflect.Descriptor instead.
 func (*CodexObservation) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{2}
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CodexObservation) GetSessions() []*CodexSession {
@@ -384,6 +453,13 @@ func (x *CodexObservation) GetObservedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *CodexObservation) GetWeeklyLimit() *CodexWeeklyLimit {
+	if x != nil {
+		return x.WeeklyLimit
+	}
+	return nil
+}
+
 type Observation struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Metadata   *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -399,7 +475,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_orbit_v1_observation_proto_msgTypes[3]
+	mi := &file_orbit_v1_observation_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +487,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_observation_proto_msgTypes[3]
+	mi := &file_orbit_v1_observation_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +500,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{3}
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Observation) GetMetadata() *Metadata {
@@ -510,14 +586,22 @@ const file_orbit_v1_observation_proto_rawDesc = "" +
 	"\x06status\x18\x05 \x01(\x0e2\x1c.orbit.v1.CodexSessionStatusR\x06status\x129\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
-	"\rprocess_alive\x18\a \x01(\bR\fprocessAlive\"\xc9\x01\n" +
+	"\rprocess_alive\x18\a \x01(\bR\fprocessAlive\"\xf2\x01\n" +
+	"\x10CodexWeeklyLimit\x12+\n" +
+	"\x11remaining_percent\x18\x01 \x01(\x01R\x10remainingPercent\x127\n" +
+	"\tresets_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bresetsAt\x12;\n" +
+	"\vobserved_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAt\x12;\n" +
+	"\vfresh_until\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"freshUntil\"\x88\x02\n" +
 	"\x10CodexObservation\x122\n" +
 	"\bsessions\x18\x01 \x03(\v2\x16.orbit.v1.CodexSessionR\bsessions\x12\x1f\n" +
 	"\vtotal_count\x18\x02 \x01(\rR\n" +
 	"totalCount\x12#\n" +
 	"\rrunning_count\x18\x03 \x01(\rR\frunningCount\x12;\n" +
 	"\vobserved_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"observedAt\"\xd1\x01\n" +
+	"observedAt\x12=\n" +
+	"\fweekly_limit\x18\x05 \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\xd1\x01\n" +
 	"\vObservation\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x1f\n" +
 	"\vagent_epoch\x18\x02 \x01(\tR\n" +
@@ -551,33 +635,38 @@ func file_orbit_v1_observation_proto_rawDescGZIP() []byte {
 }
 
 var file_orbit_v1_observation_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_orbit_v1_observation_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_orbit_v1_observation_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_orbit_v1_observation_proto_goTypes = []any{
 	(ObservationType)(0),          // 0: orbit.v1.ObservationType
 	(CodexSessionStatus)(0),       // 1: orbit.v1.CodexSessionStatus
 	(*UsageObservation)(nil),      // 2: orbit.v1.UsageObservation
 	(*CodexSession)(nil),          // 3: orbit.v1.CodexSession
-	(*CodexObservation)(nil),      // 4: orbit.v1.CodexObservation
-	(*Observation)(nil),           // 5: orbit.v1.Observation
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
-	(*Metadata)(nil),              // 7: orbit.v1.Metadata
+	(*CodexWeeklyLimit)(nil),      // 4: orbit.v1.CodexWeeklyLimit
+	(*CodexObservation)(nil),      // 5: orbit.v1.CodexObservation
+	(*Observation)(nil),           // 6: orbit.v1.Observation
+	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*Metadata)(nil),              // 8: orbit.v1.Metadata
 }
 var file_orbit_v1_observation_proto_depIdxs = []int32{
-	6,  // 0: orbit.v1.UsageObservation.window_start:type_name -> google.protobuf.Timestamp
-	6,  // 1: orbit.v1.UsageObservation.window_end:type_name -> google.protobuf.Timestamp
-	6,  // 2: orbit.v1.UsageObservation.observed_at:type_name -> google.protobuf.Timestamp
+	7,  // 0: orbit.v1.UsageObservation.window_start:type_name -> google.protobuf.Timestamp
+	7,  // 1: orbit.v1.UsageObservation.window_end:type_name -> google.protobuf.Timestamp
+	7,  // 2: orbit.v1.UsageObservation.observed_at:type_name -> google.protobuf.Timestamp
 	1,  // 3: orbit.v1.CodexSession.status:type_name -> orbit.v1.CodexSessionStatus
-	6,  // 4: orbit.v1.CodexSession.updated_at:type_name -> google.protobuf.Timestamp
-	3,  // 5: orbit.v1.CodexObservation.sessions:type_name -> orbit.v1.CodexSession
-	6,  // 6: orbit.v1.CodexObservation.observed_at:type_name -> google.protobuf.Timestamp
-	7,  // 7: orbit.v1.Observation.metadata:type_name -> orbit.v1.Metadata
-	2,  // 8: orbit.v1.Observation.usage:type_name -> orbit.v1.UsageObservation
-	4,  // 9: orbit.v1.Observation.codex:type_name -> orbit.v1.CodexObservation
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	7,  // 4: orbit.v1.CodexSession.updated_at:type_name -> google.protobuf.Timestamp
+	7,  // 5: orbit.v1.CodexWeeklyLimit.resets_at:type_name -> google.protobuf.Timestamp
+	7,  // 6: orbit.v1.CodexWeeklyLimit.observed_at:type_name -> google.protobuf.Timestamp
+	7,  // 7: orbit.v1.CodexWeeklyLimit.fresh_until:type_name -> google.protobuf.Timestamp
+	3,  // 8: orbit.v1.CodexObservation.sessions:type_name -> orbit.v1.CodexSession
+	7,  // 9: orbit.v1.CodexObservation.observed_at:type_name -> google.protobuf.Timestamp
+	4,  // 10: orbit.v1.CodexObservation.weekly_limit:type_name -> orbit.v1.CodexWeeklyLimit
+	8,  // 11: orbit.v1.Observation.metadata:type_name -> orbit.v1.Metadata
+	2,  // 12: orbit.v1.Observation.usage:type_name -> orbit.v1.UsageObservation
+	5,  // 13: orbit.v1.Observation.codex:type_name -> orbit.v1.CodexObservation
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_observation_proto_init() }
@@ -587,7 +676,7 @@ func file_orbit_v1_observation_proto_init() {
 	}
 	file_orbit_v1_common_proto_init()
 	file_orbit_v1_observation_proto_msgTypes[0].OneofWrappers = []any{}
-	file_orbit_v1_observation_proto_msgTypes[3].OneofWrappers = []any{
+	file_orbit_v1_observation_proto_msgTypes[4].OneofWrappers = []any{
 		(*Observation_Usage)(nil),
 		(*Observation_Codex)(nil),
 	}
@@ -597,7 +686,7 @@ func file_orbit_v1_observation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orbit_v1_observation_proto_rawDesc), len(file_orbit_v1_observation_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

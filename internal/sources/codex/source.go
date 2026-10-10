@@ -33,6 +33,8 @@ const (
 // Config controls which Codex projection files are read and how sessions are filtered.
 type Config struct {
 	Home            string
+	RateLimits      bool
+	Binary          string
 	Limit           int
 	IncludeArchived bool
 	IgnoreCWD       []string
@@ -55,6 +57,7 @@ type Snapshot struct {
 	Sessions     []Session
 	TotalCount   int
 	RunningCount int
+	WeeklyLimit  *WeeklyLimit
 }
 
 // ErrorKind is stable for callers that need to preserve the previous observation.
@@ -91,14 +94,18 @@ func IsKind(err error, kind ErrorKind) bool {
 	return errors.As(err, &sourceErr) && sourceErr.Kind == kind
 }
 
-// Source reads Codex's local SQLite projections without modifying them.
+// Source reads local projections and optionally the authenticated account quota.
 type Source struct {
-	home            string
-	limit           int
-	includeArchived bool
-	ignoreCWD       []string
-	ignoreSource    map[string]struct{}
-	now             func() time.Time
+	home               string
+	rateLimitsEnabled  bool
+	codexBinary        string
+	nextRateLimitsRead time.Time
+	lastWeeklyLimit    *WeeklyLimit
+	limit              int
+	includeArchived    bool
+	ignoreCWD          []string
+	ignoreSource       map[string]struct{}
+	now                func() time.Time
 }
 
 // New validates the adapter configuration. The home directory is not accessed until Fetch.
@@ -123,13 +130,19 @@ func New(config Config) (*Source, error) {
 	if limit == 0 {
 		limit = defaultLimit
 	}
+	binary := config.Binary
+	if binary == "" {
+		binary = "codex"
+	}
 	return &Source{
-		home:            home,
-		limit:           limit,
-		includeArchived: config.IncludeArchived,
-		ignoreCWD:       append([]string(nil), config.IgnoreCWD...),
-		ignoreSource:    ignoreSource,
-		now:             time.Now,
+		rateLimitsEnabled: config.RateLimits,
+		codexBinary:       binary,
+		home:              home,
+		limit:             limit,
+		includeArchived:   config.IncludeArchived,
+		ignoreCWD:         append([]string(nil), config.IgnoreCWD...),
+		ignoreSource:      ignoreSource,
+		now:               time.Now,
 	}, nil
 }
 
@@ -221,6 +234,7 @@ func (s *Source) Fetch(ctx context.Context) (Snapshot, error) {
 	} else {
 		result.Sessions = visible[:s.limit]
 	}
+	result.WeeklyLimit = s.weeklyLimit(ctx, now.UTC())
 	return result, nil
 }
 

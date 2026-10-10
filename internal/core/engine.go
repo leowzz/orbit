@@ -16,17 +16,18 @@ import (
 )
 
 const (
-	displaySeries  = "display"
-	oledModel      = "oled-128x32"
-	ydVariant      = "yd-esp32-s3"
-	usageProfile   = "usage-oled-128x32"
-	webModel       = "web"
-	webVariant     = "browser"
-	webProfile     = "overview-web"
-	androidModel   = "android"
-	androidVariant = "flutter"
-	androidProfile = "overview-android"
-	appProfile     = "overview-app"
+	displaySeries      = "display"
+	oledModel          = "oled-128x32"
+	ydVariant          = "yd-esp32-s3"
+	usageProfile       = "usage-oled-128x32"
+	codexWeeklyProfile = "codex-weekly-oled-128x32"
+	webModel           = "web"
+	webVariant         = "browser"
+	webProfile         = "overview-web"
+	androidModel       = "android"
+	androidVariant     = "flutter"
+	androidProfile     = "overview-android"
+	appProfile         = "overview-app"
 )
 
 type RouteInput struct {
@@ -117,7 +118,7 @@ func New(config Config) (*Engine, error) {
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
 		}
-		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != webProfile && route.Profile != androidProfile && route.Profile != appProfile) || len(route.Inputs) == 0 {
+		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != codexWeeklyProfile && route.Profile != webProfile && route.Profile != androidProfile && route.Profile != appProfile) || len(route.Inputs) == 0 {
 			return nil, fmt.Errorf("invalid route for node %q", route.NodeID)
 		}
 		inputTypes := make(map[orbitv1.ObservationType]struct{}, len(route.Inputs))
@@ -134,6 +135,9 @@ func New(config Config) (*Engine, error) {
 			if len(route.Inputs) != 1 || route.Inputs[0].ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_USAGE {
 				return nil, fmt.Errorf("invalid usage route for node %q", route.NodeID)
 			}
+		}
+		if route.Profile == codexWeeklyProfile && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
+			return nil, fmt.Errorf("invalid Codex weekly route for node %q", route.NodeID)
 		}
 		if _, duplicate := seen[route.NodeID]; duplicate {
 			return nil, fmt.Errorf("duplicate route for node %q", route.NodeID)
@@ -228,7 +232,7 @@ func (e *Engine) ApplyNodeState(now time.Time, state *orbitv1.NodeState) ([]*orb
 	if route != nil && route.Profile == appProfile {
 		return nil, errors.New("HTTP App routes do not accept MQTT node state")
 	}
-	if route != nil && ((route.Profile == usageProfile && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel) || (route.Profile == androidProfile && state.ModelId != androidModel)) {
+	if route != nil && (((route.Profile == usageProfile || route.Profile == codexWeeklyProfile) && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel) || (route.Profile == androidProfile && state.ModelId != androidModel)) {
 		return nil, fmt.Errorf("node product %s does not match projection profile %s", state.ModelId, route.Profile)
 	}
 	producedAt, err := requiredTimestamp(state.Metadata.ProducedAt, "node produced_at")
@@ -408,6 +412,9 @@ func (e *Engine) validateCodex(now time.Time, metadata *orbitv1.Metadata, value 
 	if observedAt.After(now.Add(e.config.CodexPolicy.MaxFutureSkew)) {
 		return time.Time{}, errors.New("codex observed_at is too far in the future")
 	}
+	if err := validateWeeklyLimit(now, e.config.CodexPolicy.MaxFutureSkew, value.WeeklyLimit); err != nil {
+		return time.Time{}, err
+	}
 	if value.RunningCount > value.TotalCount || uint32(len(value.Sessions)) > value.TotalCount || len(value.Sessions) > 20 {
 		return time.Time{}, errors.New("codex counts or session limit are invalid")
 	}
@@ -520,6 +527,10 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 			})
 		}
 	}
+	if route.Profile == codexWeeklyProfile {
+		projectWeeklyLimit(now, codex.value.GetWeeklyLimit(), view)
+		view.Codex = nil
+	}
 	if route.Profile == androidProfile {
 		if !publishAndroid(now, e.lastAndroid[nodeID], view) {
 			return nil, nil
@@ -608,6 +619,14 @@ func (e *Engine) freshnessSignature(now time.Time, route Route) string {
 		case orbitv1.ObservationType_OBSERVATION_TYPE_CODEX:
 			value, ok := e.codex[input.AgentID]
 			parts = append(parts, freshnessPart(ok, now, value.expiresAt))
+			if route.Profile == codexWeeklyProfile {
+				limit := value.value.GetWeeklyLimit()
+				parts = append(parts, freshnessPart(limit != nil, now, limit.GetFreshUntil().AsTime()), freshnessPart(limit != nil, now, limit.GetResetsAt().AsTime()))
+				if limit != nil {
+					days, hours := weeklyRemaining(now, limit.ResetsAt.AsTime())
+					parts = append(parts, fmt.Sprintf("%d/%d", days, hours))
+				}
+			}
 		}
 	}
 	return fmt.Sprint(parts)

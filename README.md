@@ -301,8 +301,18 @@ observation type:
 | Profile | Inputs | Target |
 | --- | --- | --- |
 | `usage-oled-128x32` | Usage | OLED display |
+| `codex-weekly-oled-128x32` | Codex | Weekly remaining percent and reset date/time (Asia/Shanghai) |
 | `overview-web` | Usage and/or Codex | Web Node |
 | `overview-android` | Usage and/or Codex | Android widgets |
+
+For the weekly OLED view, enable `sources.codex.rate_limits: true` on the
+Agent. This reads the signed-in Codex account through `codex app-server` once
+per minute. Background services should set `sources.codex.binary` to an
+absolute executable path. The existing OLED firmware displays the percentage
+on the left, with remaining whole days beside `MM/DD` and remaining hours
+(0–23) beside `HH:mm` on the right. The countdown columns align left and the
+reset date/time align right; Core refreshes at hour/day boundaries. Cached quota readings become
+stale after three minutes; a passed reset shows placeholders until refreshed.
 
 Agents and Nodes can be configured before discovery. Keep the corresponding
 `observation_policies` in YAML. Saving a rule immediately updates runtime

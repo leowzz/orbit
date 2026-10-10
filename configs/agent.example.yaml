@@ -49,6 +49,8 @@ sources:
   # codex:
   #   enabled: true
   #   codex_home: ""
+  #   rate_limits: true # Read the signed-in account weekly quota once per minute.
+  #   binary: codex # Use an absolute path for background services.
   #   poll_interval: 5s
   #   observation_ttl: 15s
   #   session_limit: 3

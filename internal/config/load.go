@@ -216,7 +216,7 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
-		if route.Profile != "usage-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-android" && route.Profile != "overview-app" {
+		if route.Profile != "usage-oled-128x32" && route.Profile != "codex-weekly-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-android" && route.Profile != "overview-app" {
 			return fmt.Errorf("projection route %q: unsupported profile %q", nodeID, route.Profile)
 		}
 		if len(route.Inputs) == 0 {
@@ -237,6 +237,9 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		}
 		if route.Profile == "usage-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "usage") {
 			return fmt.Errorf("projection route %q: usage-oled-128x32 requires exactly one usage input", nodeID)
+		}
+		if route.Profile == "codex-weekly-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "codex") {
+			return fmt.Errorf("projection route %q: codex-weekly-oled-128x32 requires exactly one codex input", nodeID)
 		}
 	}
 

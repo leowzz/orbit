@@ -286,7 +286,12 @@ function Editor({
         setError("这个 Node 已有规则，请编辑现有规则。");
         return;
       }
-      if (!usage.trim() && (profile === "usage-oled-128x32" || !codex.trim())) {
+      if (
+        (profile === "codex-weekly-oled-128x32" && !codex.trim()) ||
+        (profile !== "codex-weekly-oled-128x32" &&
+          !usage.trim() &&
+          (profile === "usage-oled-128x32" || !codex.trim()))
+      ) {
         setError("请至少选择一个数据来源。");
         return;
       }
@@ -297,7 +302,7 @@ function Editor({
       routes[node] = {
         profile,
         inputs: [
-          ...(usage.trim()
+          ...(usage.trim() && profile !== "codex-weekly-oled-128x32"
             ? [{ agent_id: usage.trim(), observation_type: "usage" as const }]
             : []),
           ...(codex.trim() && profile !== "usage-oled-128x32"
@@ -397,6 +402,7 @@ function Editor({
               >
                 {[
                   "usage-oled-128x32",
+                  "codex-weekly-oled-128x32",
                   "overview-web",
                   "overview-android",
                   "overview-app",
@@ -414,6 +420,7 @@ function Editor({
               </label>
               <input
                 id="usage-source"
+                disabled={profile === "codex-weekly-oled-128x32"}
                 list="known-agents"
                 value={usage}
                 placeholder="选择或输入 Agent ID"
@@ -423,7 +430,10 @@ function Editor({
                 }}
               />
               <label htmlFor="codex-source">
-                <span className="source-glyph">C</span>Codex 会话
+                <span className="source-glyph">C</span>
+                {profile === "codex-weekly-oled-128x32"
+                  ? "Codex 周限"
+                  : "Codex 会话"}
               </label>
               <input
                 id="codex-source"

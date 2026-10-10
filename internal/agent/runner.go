@@ -251,6 +251,14 @@ func (r *Runner) PollCodexOnce(ctx context.Context) error {
 		RunningCount: uint32(snapshot.RunningCount),
 		ObservedAt:   timestamppb.New(now),
 	}
+	if limit := snapshot.WeeklyLimit; limit != nil {
+		payload.WeeklyLimit = &orbitv1.CodexWeeklyLimit{
+			RemainingPercent: limit.RemainingPercent,
+			ResetsAt:         timestamppb.New(limit.ResetsAt),
+			ObservedAt:       timestamppb.New(limit.ObservedAt),
+			FreshUntil:       timestamppb.New(limit.FreshUntil),
+		}
+	}
 	for _, session := range snapshot.Sessions {
 		item := &orbitv1.CodexSession{
 			SessionId:    boundedUTF8(session.ID, codexSessionIDMaxBytes),

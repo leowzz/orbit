@@ -43,11 +43,19 @@ message CodexSession {
   bool process_alive = 7;
 }
 
+message CodexWeeklyLimit {
+  double remaining_percent = 1;
+  google.protobuf.Timestamp resets_at = 2;
+  google.protobuf.Timestamp observed_at = 3;
+  google.protobuf.Timestamp fresh_until = 4;
+}
+
 message CodexObservation {
   repeated CodexSession sessions = 1;
   uint32 total_count = 2;
   uint32 running_count = 3;
   google.protobuf.Timestamp observed_at = 4;
+  CodexWeeklyLimit weekly_limit = 5;
 }
 
 message Observation {

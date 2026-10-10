@@ -187,6 +187,7 @@ func TestPollCodexOncePublishesSanitizedObservationAndHealthyState(t *testing.T)
 		}},
 		TotalCount:   1,
 		RunningCount: 1,
+		WeeklyLimit:  &codex.WeeklyLimit{RemainingPercent: 50, ResetsAt: updated.Add(7 * 24 * time.Hour), ObservedAt: updated, FreshUntil: updated.Add(3 * time.Minute)},
 	}}
 	publisher := &recordingPublisher{}
 	runner := newCodexTestRunner(t, source, publisher, false, false)
@@ -219,6 +220,10 @@ func TestPollCodexOncePublishesSanitizedObservationAndHealthyState(t *testing.T)
 	payload := observation.GetCodex()
 	if payload.GetTotalCount() != 1 || payload.GetRunningCount() != 1 || len(payload.GetSessions()) != 1 {
 		t.Fatalf("unexpected Codex payload: %+v", payload)
+	}
+	limit := payload.GetWeeklyLimit()
+	if limit == nil || limit.RemainingPercent != 50 || !limit.ResetsAt.AsTime().Equal(updated.Add(7*24*time.Hour)) || !limit.FreshUntil.AsTime().Equal(updated.Add(3*time.Minute)) {
+		t.Fatalf("unexpected weekly limit: %v", limit)
 	}
 	session := payload.GetSessions()[0]
 	if session.GetDisplayName() != "" || session.GetProjectName() != "" {

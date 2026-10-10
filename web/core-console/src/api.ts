@@ -96,6 +96,7 @@ export const date = (value?: string) =>
 export const profileName = (profile: string) =>
   ({
     "usage-oled-128x32": "OLED · 用量屏",
+    "codex-weekly-oled-128x32": "OLED · Codex 周限",
     "overview-web": "Web · 工作台",
     "overview-android": "Android · 小组件",
     "overview-app": "App · 收件箱",
