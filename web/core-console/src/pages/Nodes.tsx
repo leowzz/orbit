@@ -4,12 +4,15 @@ import { ArrowUpRight, Search } from "lucide-react";
 import type { NetworkState, RouteDocument } from "../api";
 import { date, modelName, profileName } from "../api";
 import { Badge, DeviceIcon, Empty, PageHead } from "../components";
+import OLEDModeSwitch from "../OLEDModeSwitch";
 export default function Nodes({
   state,
   document,
+  onChange,
 }: {
   state: NetworkState;
   document: RouteDocument;
+  onChange: (document: RouteDocument) => void;
 }) {
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all");
@@ -83,6 +86,13 @@ export default function Nodes({
                 {route ? (
                   <>
                     <strong>{profileName(route.profile)}</strong>
+                    {n.modelId === "oled-128x32" && (
+                      <OLEDModeSwitch
+                        nodeId={n.nodeId}
+                        document={document}
+                        onChange={onChange}
+                      />
+                    )}
                     {route.inputs.map((i) => (
                       <div key={i.observation_type}>
                         <span>{i.observation_type}</span>

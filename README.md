@@ -314,6 +314,11 @@ on the left, with remaining whole days beside `MM/DD` and remaining hours
 reset date/time align right; Core refreshes at hour/day boundaries. Cached quota readings become
 stale after three minutes; a passed reset shows placeholders until refreshed.
 
+In the console, OLED device cards and route rows offer **API 用量 / 账号周限**
+buttons. Switching saves and applies immediately, keeping the current source
+Agent. That Agent needs the corresponding Usage or Codex rate-limit source
+enabled.
+
 Agents and Nodes can be configured before discovery. Keep the corresponding
 `observation_policies` in YAML. Saving a rule immediately updates runtime
 routing; revision checks prevent one browser from overwriting another's edits.

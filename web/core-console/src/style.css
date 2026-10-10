@@ -784,6 +784,46 @@ dd {
   margin-top: 12px;
   color: var(--muted);
 }
+.oled-mode-switch {
+  margin: 10px 0;
+}
+.oled-mode-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  max-width: 100%;
+}
+.oled-mode-buttons button {
+  border: 0;
+  border-radius: 3px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.oled-mode-buttons button[aria-pressed="true"] {
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 1px 3px #00000012;
+}
+.oled-mode-buttons button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.oled-mode-switch p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+.oled-mode-switch .oled-mode-error {
+  color: #a3443a;
+}
 .node-link {
   display: flex;
   justify-content: space-between;

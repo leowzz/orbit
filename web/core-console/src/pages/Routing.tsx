@@ -13,6 +13,7 @@ import {
 import { api, errorText, profileName } from "../api";
 import type { AppDevice, NetworkState, Route, RouteDocument } from "../api";
 import { Badge, Empty, PageHead } from "../components";
+import OLEDModeSwitch from "../OLEDModeSwitch";
 interface Props {
   state: NetworkState;
   document: RouteDocument;
@@ -151,6 +152,11 @@ export default function Routing({ state, document, onChange }: Props) {
             </div>
             <div>
               <span className="profile-label">{profileName(r.profile)}</span>
+              <OLEDModeSwitch
+                nodeId={id}
+                document={document}
+                onChange={onChange}
+              />
             </div>
             <div className="route-inputs">
               {r.inputs.map((input) => (
@@ -193,7 +199,9 @@ export default function Routing({ state, document, onChange }: Props) {
         <p>
           保存后立即应用。移除来源或删除规则时，Core 会清空设备上的旧数据。
           <br />
-          <span>每种数据只能选择一个来源；OLED 用量屏仅支持 usage。</span>
+          <span>
+            每种数据只能选择一个来源；OLED 可快捷切换 API 用量或账号周限。
+          </span>
         </p>
         <Badge>本地持久化</Badge>
       </div>

@@ -258,7 +258,9 @@ export default function App() {
               />
               <Route
                 path="/nodes"
-                element={<Nodes state={state} document={routes} />}
+                element={
+                  <Nodes state={state} document={routes} onChange={setRoutes} />
+                }
               />
               <Route
                 path="/routes"
