@@ -55,11 +55,7 @@ void main() {
         c = InboxController(local, 'https://example.test', 'token', dir.path);
         await c.load();
       });
-      await tester.pumpWidget(
-        MaterialApp(
-          home: InboxScreen(controller: c, onSettings: () {}),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(home: InboxScreen(controller: c)));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       expect(find.text('整理本周的想法与待办'), findsOneWidget);
@@ -275,11 +271,7 @@ void main() {
         c = InboxController(local, 'https://example.test', 'token', dir.path);
         await c.load();
       });
-      await tester.pumpWidget(
-        MaterialApp(
-          home: InboxScreen(controller: c, onSettings: () {}),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(home: InboxScreen(controller: c)));
       await waitForLocalUpdate(
         tester,
         () => tester
@@ -340,11 +332,7 @@ void main() {
         c = InboxController(local, 'https://example.test', '', dir.path);
         await c.load();
       });
-      await tester.pumpWidget(
-        MaterialApp(
-          home: InboxScreen(controller: c, onSettings: () {}),
-        ),
-      );
+      await tester.pumpWidget(MaterialApp(home: InboxScreen(controller: c)));
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 100)),
       );

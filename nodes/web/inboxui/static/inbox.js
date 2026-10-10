@@ -735,6 +735,28 @@ $("remove-photo").onclick = async () => {
     storeError();
   }
 };
+function toggleSearch(open) {
+  $("search-field").hidden = !open;
+  $("toggle-search").setAttribute("aria-expanded", String(open));
+  $("toggle-search").setAttribute("aria-label", open ? "关闭搜索" : "搜索消息");
+  $("toggle-search").title = open ? "关闭搜索" : "搜索消息";
+  $("workspace").querySelector("header").classList.toggle("searching", open);
+  if (open) {
+    $("search").focus();
+  } else {
+    $("search").value = "";
+    limit = 100;
+    render();
+    $("toggle-search").focus();
+  }
+}
+$("toggle-search").onclick = () => toggleSearch($("search-field").hidden);
+$("search").onkeydown = (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    toggleSearch(false);
+  }
+};
 $("search").oninput = () => {
   limit = 100;
   render();

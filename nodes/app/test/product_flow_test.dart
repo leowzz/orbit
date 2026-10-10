@@ -80,7 +80,7 @@ void main() {
             home: OrbitHome(
               controller: c,
               widgetsEnabled: true,
-              inbox: InboxScreen(controller: c, onSettings: () {}),
+              inbox: InboxScreen(controller: c),
             ),
           ),
         ),
@@ -111,6 +111,8 @@ void main() {
           image.dispose();
         });
       }
+      await tester.tap(find.byTooltip('搜索消息'));
+      await tester.pumpAndSettle();
       await tester.enterText(find.widgetWithText(TextField, '搜索文字、链接…'), '到公司');
       await tester.pump(const Duration(milliseconds: 200));
       await tester.runAsync(c.load);

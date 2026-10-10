@@ -23,12 +23,7 @@ class InboxReadingNotification extends Notification {
 
 class InboxScreen extends StatefulWidget {
   final InboxController controller;
-  final VoidCallback onSettings;
-  const InboxScreen({
-    super.key,
-    required this.controller,
-    required this.onSettings,
-  });
+  const InboxScreen({super.key, required this.controller});
   @override
   State<InboxScreen> createState() => _InboxScreenState();
 }
@@ -37,6 +32,7 @@ class _InboxScreenState extends State<InboxScreen> {
   final text = TextEditingController();
   final searchText = TextEditingController();
   final composerBounds = GlobalKey();
+  bool searching = false;
   Timer? searchTimer;
   XFile? attachment;
   String kind = 'text', filter = 'all';
@@ -456,33 +452,59 @@ class _InboxScreenState extends State<InboxScreen> {
         child: Scaffold(
           appBar: AppBar(
             toolbarHeight: wide ? 76 : 66,
-            titleSpacing: wide ? 24 : 16,
-            title: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.radio_button_checked, size: 22),
-                const SizedBox(width: 6),
-                const Text(
-                  'Orbit',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                Container(
-                  height: 20,
-                  margin: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: const BoxDecoration(
-                    border: Border(left: BorderSide(color: _border)),
+            titleSpacing: wide ? 24 : 12,
+            title: searching
+                ? _searchField()
+                : wide
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.radio_button_checked, size: 22),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Orbit',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Container(
+                        height: 20,
+                        margin: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: const BoxDecoration(
+                          border: Border(left: BorderSide(color: _border)),
+                        ),
+                      ),
+                      const Flexible(
+                        child: Text(
+                          '收件箱',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : const Text(
+                    'Orbit',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                   ),
-                ),
-                const Flexible(
-                  child: Text(
-                    '收件箱',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
             actions: [
-              if (wide)
+              Semantics(
+                expanded: searching,
+                child: IconButton(
+                  tooltip: searching ? '关闭搜索' : '搜索消息',
+                  style: IconButton.styleFrom(
+                    fixedSize: const Size(40, 40),
+                    padding: const EdgeInsets.all(8),
+                  ),
+                  onPressed: toggleSearch,
+                  icon: Icon(searching ? Icons.close : Icons.search, size: 22),
+                ),
+              ),
+              _headerFilter(),
+              if (wide && !searching)
                 Text(
                   c.syncing
                       ? '正在同步…'
@@ -491,22 +513,22 @@ class _InboxScreenState extends State<InboxScreen> {
                       : '等待同步',
                   style: const TextStyle(color: _muted, fontSize: 13),
                 ),
-              IconButton(
-                tooltip: '同步',
-                onPressed: c.syncing ? null : c.sync,
-                icon: c.syncing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.sync_rounded, size: 22),
-              ),
-              IconButton(
-                tooltip: '连接设置',
-                onPressed: widget.onSettings,
-                icon: const Icon(Icons.settings_outlined, size: 22),
-              ),
+              if (!searching || wide)
+                IconButton(
+                  tooltip: '同步',
+                  onPressed: c.syncing ? null : c.sync,
+                  style: IconButton.styleFrom(
+                    fixedSize: const Size(40, 40),
+                    padding: const EdgeInsets.all(8),
+                  ),
+                  icon: c.syncing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.sync_rounded, size: 22),
+                ),
               const SizedBox(width: 8),
             ],
           ),
@@ -517,15 +539,6 @@ class _InboxScreenState extends State<InboxScreen> {
                 constraints: const BoxConstraints(maxWidth: 820),
                 child: Column(
                   children: [
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        wide ? 24 : 14,
-                        wide ? 24 : 18,
-                        wide ? 24 : 14,
-                        14,
-                      ),
-                      child: _toolbar(),
-                    ),
                     if (c.error != null)
                       Container(
                         margin: EdgeInsets.fromLTRB(
@@ -672,68 +685,67 @@ class _InboxScreenState extends State<InboxScreen> {
     },
   );
 
-  Widget _toolbar() => LayoutBuilder(
-    builder: (context, constraints) {
-      final search = TextField(
-        controller: searchText,
-        decoration: InputDecoration(
-          hintText: '搜索文字、链接…',
-          hintStyle: const TextStyle(color: _muted, fontSize: 14),
-          prefixIcon: const Icon(Icons.search, color: _muted, size: 22),
-          suffixIcon: searchText.text.isEmpty
-              ? null
-              : IconButton(
-                  tooltip: '清除搜索',
-                  icon: const Icon(Icons.close, size: 18),
-                  onPressed: () {
-                    searchTimer?.cancel();
-                    searchText.clear();
-                    setState(() {});
-                    setReading(false);
-                    c.search('', filter);
-                  },
-                ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 12,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _border),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _border),
-          ),
-        ),
-        onChanged: (value) {
-          setReading(false);
-          setState(() {});
-          searchTimer?.cancel();
-          searchTimer = Timer(
-            const Duration(milliseconds: 150),
-            () => c.search(value, filter),
-          );
-        },
-      );
-      final selection = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: _border),
-          borderRadius: BorderRadius.circular(10),
-        ),
+  void toggleSearch() {
+    searchTimer?.cancel();
+    setReading(false);
+    setState(() => searching = !searching);
+    if (!searching) {
+      searchText.clear();
+      c.search('', filter);
+      FocusScope.of(context).unfocus();
+    }
+  }
+
+  Widget _searchField() => CallbackShortcuts(
+    bindings: {const SingleActivator(LogicalKeyboardKey.escape): toggleSearch},
+    child: TextField(
+      controller: searchText,
+      autofocus: true,
+      style: const TextStyle(fontSize: 14),
+      decoration: const InputDecoration(
+        hintText: '搜索文字、链接…',
+        hintStyle: TextStyle(color: _muted, fontSize: 14),
+        filled: false,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: EdgeInsets.symmetric(vertical: 10),
+      ),
+      onChanged: (value) {
+        setReading(false);
+        searchTimer?.cancel();
+        searchTimer = Timer(
+          const Duration(milliseconds: 150),
+          () => c.search(value, filter),
+        );
+      },
+    ),
+  );
+
+  Widget _headerFilter() => Builder(
+    builder: (context) => Tooltip(
+      message: '筛选消息',
+      child: SizedBox(
+        width:
+            76 *
+            (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(1.0, 1.5),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
             value: filter,
             isExpanded: true,
-            icon: const Icon(Icons.expand_more_rounded, size: 20),
+            menuWidth: 170,
+            icon: const Icon(Icons.expand_more_rounded, size: 18),
             borderRadius: BorderRadius.circular(10),
             style: Theme.of(
               context,
             ).textTheme.bodyMedium?.copyWith(color: _ink, fontSize: 14),
+            selectedItemBuilder: (_) => const [
+              Align(alignment: Alignment.centerLeft, child: Text('全部')),
+              Align(alignment: Alignment.centerLeft, child: Text('链接')),
+              Align(alignment: Alignment.centerLeft, child: Text('未完成')),
+              Align(alignment: Alignment.centerLeft, child: Text('图片')),
+              Align(alignment: Alignment.centerLeft, child: Text('已完成')),
+            ],
             items: const [
               DropdownMenuItem(value: 'all', child: Text('全部消息')),
               DropdownMenuItem(value: 'links', child: Text('链接')),
@@ -750,19 +762,8 @@ class _InboxScreenState extends State<InboxScreen> {
             },
           ),
         ),
-      );
-      if (constraints.maxWidth < 400 &&
-          MediaQuery.textScalerOf(context).scale(14) > 18) {
-        return Column(children: [search, const SizedBox(height: 8), selection]);
-      }
-      return Row(
-        children: [
-          Expanded(child: search),
-          const SizedBox(width: 8),
-          SizedBox(width: 130, child: selection),
-        ],
-      );
-    },
+      ),
+    ),
   );
 
   Widget _composer(bool wide) => Container(

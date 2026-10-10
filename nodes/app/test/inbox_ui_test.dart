@@ -74,13 +74,20 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(scale)),
             child: child!,
           ),
-          home: InboxScreen(controller: c, onSettings: () {}),
+          home: InboxScreen(controller: c),
         ),
       );
       await tester.pumpAndSettle();
       expect(find.text('2026年10月9日'), findsOneWidget);
       expect(find.text('2026年10月8日'), findsOneWidget);
-      expect(find.widgetWithText(TextField, '搜索文字、链接…'), findsOneWidget);
+      expect(find.widgetWithText(TextField, '搜索文字、链接…'), findsNothing);
+      expect(find.byTooltip('搜索消息'), findsOneWidget);
+      expect(find.byTooltip('连接设置'), findsNothing);
+      final header = tester.getRect(find.byType(AppBar));
+      expect(
+        header.contains(tester.getCenter(find.byType(DropdownButton<String>))),
+        isTrue,
+      );
       expect(tester.takeException(), isNull);
       final card = tester.getRect(
         find.byKey(const ValueKey('message-card')).first,
@@ -96,6 +103,35 @@ void main() {
       );
       final body = tester.getRect(find.text('今天的第一条'));
       expect((checkbox.center.dy - body.center.dy).abs(), lessThanOrEqualTo(2));
+      final list = find.byKey(const PageStorageKey('inbox'));
+      final listBounds = tester.getRect(list);
+      await tester.tap(find.byTooltip('搜索消息'));
+      await tester.pumpAndSettle();
+      final search = find.widgetWithText(TextField, '搜索文字、链接…');
+      expect(search, findsOneWidget);
+      expect(header.contains(tester.getCenter(search)), isTrue);
+      expect(tester.getRect(list), listBounds);
+      await tester.enterText(search, '第一条');
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.runAsync(c.load);
+      await tester.pumpAndSettle();
+      expect(find.text('今天的第一条'), findsOneWidget);
+      expect(find.text('今天的第二条'), findsNothing);
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('图片').last);
+      await tester.runAsync(c.load);
+      await tester.pumpAndSettle();
+      // Closing cancels a pending debounce and leaves the selected filter intact.
+      await tester.enterText(search, '还未执行的搜索');
+      await tester.tap(find.byTooltip('关闭搜索'));
+      await tester.runAsync(c.load);
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(search, findsNothing);
+      expect(c.query, '');
+      expect(c.filter, 'image');
+      expect(tester.getRect(list), listBounds);
+      expect(tester.takeException(), isNull);
     });
   }
 
@@ -121,11 +157,7 @@ void main() {
       () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(picker, null),
     );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: InboxScreen(controller: c, onSettings: () {}),
-      ),
-    );
+    await tester.pumpWidget(MaterialApp(home: InboxScreen(controller: c)));
     await waitForLocalUpdate(
       tester,
       () =>

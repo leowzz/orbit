@@ -5,6 +5,7 @@ const vm = require("node:vm");
 const { randomUUID } = require("node:crypto");
 function client() {
   const elements = new Map();
+  const header = { classList: { toggle() {} } };
   const context = vm.createContext({
     document: {
       getElementById: (id) => {
@@ -14,6 +15,16 @@ function client() {
             disabled: false,
             hidden: false,
             textContent: "",
+            attributes: {},
+            setAttribute(name, value) {
+              this.attributes[name] = value;
+            },
+            focus() {
+              this.focused = true;
+            },
+            querySelector() {
+              return header;
+            },
             addEventListener() {},
           });
         return elements.get(id);
@@ -42,6 +53,37 @@ function client() {
     elements,
   };
 }
+test("header search opens on demand and closing clears only the query", () => {
+  const c = client();
+  c.run('$("search-field");$("filter");');
+  const field = c.elements.get("search-field");
+  const toggle = c.elements.get("toggle-search");
+  const search = c.elements.get("search");
+  const filter = c.elements.get("filter");
+  field.hidden = true;
+  filter.value = "todo";
+  c.run("let renders=0;render=()=>renders++;");
+  toggle.onclick();
+  assert.equal(field.hidden, false);
+  assert.equal(toggle.attributes["aria-expanded"], "true");
+  assert.equal(search.focused, true);
+  search.value = "find this";
+  search.oninput();
+  let prevented = false;
+  search.onkeydown({
+    key: "Escape",
+    preventDefault() {
+      prevented = true;
+    },
+  });
+  assert.equal(prevented, true);
+  assert.equal(field.hidden, true);
+  assert.equal(search.value, "");
+  assert.equal(filter.value, "todo");
+  assert.equal(toggle.attributes["aria-expanded"], "false");
+  assert.equal(toggle.focused, true);
+  assert.equal(c.run("renders"), 2);
+});
 test("failed snapshot pagination keeps the previous complete cache", async () => {
   const c = client();
   c.run(

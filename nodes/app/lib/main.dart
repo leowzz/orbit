@@ -188,17 +188,15 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
               ),
             ),
           )
-        : OrbitHome(
-            controller: controller,
-            widgetsEnabled: Platform.isAndroid,
-            inbox: controller == null
-                ? ConnectionScreen(onConnect: _connect)
-                : Builder(
-                    builder: (context) => InboxScreen(
-                      controller: controller!,
-                      onSettings: () => _settings(context),
-                    ),
-                  ),
+        : Builder(
+            builder: (context) => OrbitHome(
+              controller: controller,
+              onSettings: controller == null ? null : () => _settings(context),
+              widgetsEnabled: Platform.isAndroid,
+              inbox: controller == null
+                  ? ConnectionScreen(onConnect: _connect)
+                  : InboxScreen(controller: controller!),
+            ),
           ),
   );
 }

@@ -52,7 +52,7 @@ void main() {
         ),
         home: OrbitHome(
           widgetsEnabled: true,
-          inbox: InboxScreen(controller: controller, onSettings: () {}),
+          inbox: InboxScreen(controller: controller),
         ),
       ),
     );

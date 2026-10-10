@@ -78,9 +78,54 @@ void main() {
       ),
     );
     expect(find.text('消息'), findsOneWidget);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
     expect(calls, isEmpty);
   });
+
+  for (final widgetsEnabled in [true, false]) {
+    testWidgets(
+      'connection settings has its own page with widgets=$widgetsEnabled',
+      (tester) async {
+        var opened = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => OrbitHome(
+                widgetsEnabled: widgetsEnabled,
+                inbox: const Scaffold(body: TextField()),
+                onSettings: () {
+                  opened = true;
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(title: const Text('连接 Orbit')),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.enterText(find.byType(TextField), '设置页切换时保留草稿');
+        await tester.tap(find.widgetWithText(NavigationDestination, '设置'));
+        await tester.pumpAndSettle();
+        expect(find.text('连接设置'), findsOneWidget);
+        await tester.tap(find.text('连接设置'));
+        await tester.pumpAndSettle();
+        expect(opened, isTrue);
+        expect(find.text('连接 Orbit'), findsOneWidget);
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(NavigationDestination, '收件箱'));
+        await tester.pumpAndSettle();
+        expect(find.text('设置页切换时保留草稿'), findsOneWidget);
+        expect(calls, isEmpty);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   for (final width in [360.0, 900.0]) {
     testWidgets('inbox chrome follows scroll and preserves draft at $width', (
@@ -119,7 +164,7 @@ void main() {
         MaterialApp(
           home: OrbitHome(
             widgetsEnabled: true,
-            inbox: InboxScreen(controller: controller, onSettings: () {}),
+            inbox: InboxScreen(controller: controller),
           ),
         ),
       );
@@ -127,7 +172,7 @@ void main() {
       final list = find.byKey(const PageStorageKey('inbox'));
       final initialHeight = tester.getSize(list).height;
       // The header and navigation share the inbox label.
-      expect(find.text('收件箱'), findsNWidgets(2));
+      expect(find.text('收件箱'), width > 600 ? findsNWidgets(2) : findsOneWidget);
       expect(find.byType(ChoiceChip), findsNothing);
       expect(
         tester.getRect(find.byType(DropdownButton<String>)).top,
@@ -145,7 +190,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('composer-body')), findsNothing);
-      expect(find.widgetWithText(TextField, '搜索文字、链接…'), findsOneWidget);
+      expect(find.byTooltip('搜索消息'), findsOneWidget);
       expect(find.byType(NavigationBar), findsNothing);
       expect(tester.getSize(list).height, greaterThan(initialHeight + 100));
       final scrollable = tester.state<ScrollableState>(

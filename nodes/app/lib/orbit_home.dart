@@ -8,9 +8,11 @@ class OrbitHome extends StatefulWidget {
   final Widget inbox;
   final InboxController? controller;
   final bool widgetsEnabled;
+  final VoidCallback? onSettings;
   const OrbitHome({
     super.key,
     this.controller,
+    this.onSettings,
     required this.inbox,
     required this.widgetsEnabled,
   });
@@ -25,7 +27,6 @@ class _OrbitHomeState extends State<OrbitHome> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.widgetsEnabled) return widget.inbox;
     return Scaffold(
       body: NotificationListener<InboxReadingNotification>(
         onNotification: (notification) {
@@ -38,12 +39,16 @@ class _OrbitHomeState extends State<OrbitHome> {
           index: selected,
           children: [
             widget.inbox,
-            if (widget.controller != null)
+            if (widget.widgetsEnabled && widget.controller != null)
               _ConnectionStatus(controller: widget.controller!)
-            else if (selected == 1)
+            else if (widget.widgetsEnabled && selected == 1)
               const NodePage()
-            else
+            else if (widget.widgetsEnabled)
               const SizedBox.shrink(),
+            _AppSettings(
+              controller: widget.controller,
+              onSettings: widget.onSettings,
+            ),
           ],
         ),
       ),
@@ -58,22 +63,61 @@ class _OrbitHomeState extends State<OrbitHome> {
                   selected = value;
                   reading = false;
                 }),
-                destinations: const [
-                  NavigationDestination(
+                destinations: [
+                  const NavigationDestination(
                     icon: Icon(Icons.inbox_outlined),
                     selectedIcon: Icon(Icons.inbox),
                     label: '收件箱',
                   ),
-                  NavigationDestination(
-                    icon: Icon(Icons.widgets_outlined),
-                    selectedIcon: Icon(Icons.widgets),
-                    label: '状态与组件',
+                  if (widget.widgetsEnabled)
+                    const NavigationDestination(
+                      icon: Icon(Icons.widgets_outlined),
+                      selectedIcon: Icon(Icons.widgets),
+                      label: '状态与组件',
+                    ),
+                  const NavigationDestination(
+                    icon: Icon(Icons.settings_outlined),
+                    selectedIcon: Icon(Icons.settings),
+                    label: '设置',
                   ),
                 ],
               ),
       ),
     );
   }
+}
+
+class _AppSettings extends StatelessWidget {
+  final InboxController? controller;
+  final VoidCallback? onSettings;
+  const _AppSettings({this.controller, this.onSettings});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('设置')),
+    body: Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760),
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.link),
+              title: const Text('连接设置'),
+              subtitle: Text(
+                controller == null
+                    ? '连接收件箱后可更换连接。'
+                    : Uri.parse(controller!.server).host,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onSettings,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _ConnectionStatus extends StatelessWidget {
