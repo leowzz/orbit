@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:orbit_android/main.dart' show NodePage;
 import 'inbox_screen.dart' show InboxReadingNotification;
 import 'inbox_controller.dart';
+import 'input_method_tools.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -39,12 +40,8 @@ class _OrbitHomeState extends State<OrbitHome> {
           index: selected,
           children: [
             widget.inbox,
-            if (widget.widgetsEnabled && widget.controller != null)
-              _ConnectionStatus(controller: widget.controller!)
-            else if (widget.widgetsEnabled && selected == 1)
-              const NodePage()
-            else if (widget.widgetsEnabled)
-              const SizedBox.shrink(),
+            if (widget.widgetsEnabled)
+              _ConnectionStatus(controller: widget.controller),
             _AppSettings(
               controller: widget.controller,
               onSettings: widget.onSettings,
@@ -121,18 +118,20 @@ class _AppSettings extends StatelessWidget {
 }
 
 class _ConnectionStatus extends StatelessWidget {
-  final InboxController controller;
+  final InboxController? controller;
   const _ConnectionStatus({required this.controller});
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: controller,
+    animation: controller ?? const AlwaysStoppedAnimation(0),
     builder: (context, _) {
-      final view = controller.view;
+      final view = controller?.view;
       final usage = view?['usage'] as Map?;
       final codex = view?['codex'] as Map?;
       final until = DateTime.tryParse(view?['freshUntil'] ?? '');
       final fresh =
-          controller.online && until != null && until.isAfter(DateTime.now());
+          (controller?.online ?? false) &&
+          until != null &&
+          until.isAfter(DateTime.now());
       final cost = num.tryParse('${usage?['actualCostMicros']}');
       return Scaffold(
         appBar: AppBar(title: const Text('状态与组件')),
@@ -145,22 +144,31 @@ class _ConnectionStatus extends StatelessWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(
-                    controller.online
+                    (controller?.online ?? false)
                         ? Icons.cloud_done_outlined
                         : Icons.cloud_off_outlined,
                   ),
-                  title: Text(controller.online ? '收件箱已连接' : '收件箱等待同步'),
-                  subtitle: Text(Uri.parse(controller.server).host),
+                  title: Text(
+                    controller == null
+                        ? '尚未连接收件箱'
+                        : (controller!.online ? '收件箱已连接' : '收件箱等待同步'),
+                  ),
+                  subtitle: controller == null
+                      ? const Text('在收件箱页面连接 Orbit 服务。')
+                      : Text(Uri.parse(controller!.server).host),
                   trailing: IconButton(
                     tooltip: '同步',
-                    onPressed: controller.syncing ? null : controller.sync,
+                    onPressed: controller == null || controller!.syncing
+                        ? null
+                        : controller!.sync,
                     icon: const Icon(Icons.sync),
                   ),
                 ),
-                const Text(
-                  '消息和状态共用当前连接，无需额外填写连接参数。',
-                  style: TextStyle(height: 1.6),
-                ),
+                if (controller != null)
+                  const Text(
+                    '消息和状态共用当前连接，无需额外填写连接参数。',
+                    style: TextStyle(height: 1.6),
+                  ),
                 const SizedBox(height: 24),
                 if (view != null) ...[
                   Text(
@@ -195,6 +203,9 @@ class _ConnectionStatus extends StatelessWidget {
                     style: TextStyle(color: Colors.black54, height: 1.6),
                   ),
                 const SizedBox(height: 32),
+                const Divider(),
+                const InputMethodTools(),
+                const SizedBox(height: 24),
                 const Divider(),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
