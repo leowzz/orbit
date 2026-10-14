@@ -312,9 +312,10 @@ For the weekly OLED view, enable `sources.codex.rate_limits: true` on the
 Agent. This reads the signed-in Codex account through `codex app-server` once
 per minute. Background services should set `sources.codex.binary` to an
 absolute executable path. The existing OLED firmware displays the percentage
-on the left, with remaining whole days beside `MM/DD` and remaining hours
-(0–23) beside `HH:mm` on the right. The countdown columns align left and the
-reset date/time align right; Core refreshes at hour/day boundaries. Cached quota readings become
+in the middle, centered between remaining whole days and hours (0–23) on the
+far left and the reset `MM/DD` / `HH:mm` on the right. The countdown columns
+align left and the reset date/time align right; Core refreshes at hour/day
+boundaries. Cached quota readings become
 stale after three minutes; a passed reset shows placeholders until refreshed.
 
 In the console, OLED device cards and route rows offer **API 用量 / 账号周限**

@@ -94,30 +94,71 @@ void drawRight(U8G2& display, const char* text, uint8_t baseline) {
   display.drawStr(x, baseline, fitted);
 }
 
+bool splitCountdown(const char* text, char separator, char (&count)[3],
+                    const char*& reset) {
+  // Core formats weekly rows as "%-2d MM/DD" and "%-2d HH:mm".
+  if (std::strlen(text) != 8U || text[2] != ' ' || text[5] != separator) {
+    return false;
+  }
+  for (size_t i = 0; i < 8U; ++i) {
+    if (i == 2U || i == 5U) continue;
+    if ((text[i] >= '0' && text[i] <= '9') || text[i] == '-') continue;
+    if (i == 1U && text[i] == ' ') continue;
+    return false;
+  }
+  count[0] = text[0];
+  count[1] = text[1] == ' ' ? '\0' : text[1];
+  count[2] = '\0';
+  reset = text + 3;
+  return true;
+}
+
 void drawView(U8G2& display, const DisplaySnapshot& snapshot) {
+  char days[3], hours[3];
+  const char* secondary = snapshot.view.secondary.value;
+  const char* footer = snapshot.view.footer.value;
+  const size_t primary_length = std::strlen(snapshot.view.primary.value);
+  const bool countdown =
+      primary_length > 0U &&
+      snapshot.view.primary.value[primary_length - 1U] == '%' &&
+      splitCountdown(secondary, '/', days, secondary) &&
+      splitCountdown(footer, ':', hours, footer);
+  // Failed recognition must leave both original rows intact.
+  if (!countdown) {
+    secondary = snapshot.view.secondary.value;
+    footer = snapshot.view.footer.value;
+  }
   display.setFont(u8g2_font_6x10_tf);
-  const uint16_t secondary_width =
-      display.getStrWidth(snapshot.view.secondary.value);
-  const uint16_t footer_width = display.getStrWidth(snapshot.view.footer.value);
+  const uint16_t secondary_width = display.getStrWidth(secondary);
+  const uint16_t footer_width = display.getStrWidth(footer);
   const uint16_t right_width =
       secondary_width > footer_width ? secondary_width : footer_width;
+  // Reserve two characters so the percentage stays still at hour/day changes.
+  const uint16_t left_width = countdown ? display.getStrWidth("00") : 0U;
   const uint16_t primary_area_width =
-      right_width < kOledWidth ? kOledWidth - right_width : 0U;
+      left_width + right_width < kOledWidth
+          ? kOledWidth - left_width - right_width
+          : 0U;
 
   char primary[65];
   display.setFont(u8g2_font_helvB18_tf);
   const FontMetrics metrics = centeredMetrics(display);
   copyFitted(display, snapshot.view.primary.value, primary, sizeof(primary),
-             kOledWidth);
+             countdown ? primary_area_width : kOledWidth);
   const uint16_t width = display.getStrWidth(primary);
   const uint8_t x = width < primary_area_width
-                        ? static_cast<uint8_t>((primary_area_width - width) / 2U)
-                        : 0U;
+                        ? static_cast<uint8_t>(left_width +
+                                               (primary_area_width - width) / 2U)
+                        : static_cast<uint8_t>(left_width);
   display.drawStr(x, metrics.baseline, primary);
 
   display.setFont(u8g2_font_6x10_tf);
-  drawRight(display, snapshot.view.secondary.value, kSecondaryBaseline);
-  drawRight(display, snapshot.view.footer.value, kFooterBaseline);
+  if (countdown) {
+    display.drawStr(0, kSecondaryBaseline, days);
+    display.drawStr(0, kFooterBaseline, hours);
+  }
+  drawRight(display, secondary, kSecondaryBaseline);
+  drawRight(display, footer, kFooterBaseline);
 
   if (snapshot.stale) {
     display.drawBox(kOledStaleMarkerX, 2, 2, 2);
