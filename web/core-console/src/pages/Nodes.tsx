@@ -85,7 +85,9 @@ export default function Nodes({
                 <span className="eyebrow">数据来源</span>
                 {route ? (
                   <>
-                    <strong>{profileName(route.profile)}</strong>
+                    {n.modelId !== "oled-128x32" && (
+                      <strong>{profileName(route.profile)}</strong>
+                    )}
                     {n.modelId === "oled-128x32" && (
                       <OLEDModeSwitch
                         nodeId={n.nodeId}

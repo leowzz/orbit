@@ -216,7 +216,7 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
-		if route.Profile != "usage-oled-128x32" && route.Profile != "codex-weekly-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-android" && route.Profile != "overview-app" {
+		if route.Profile != "usage-oled-128x32" && route.Profile != "codex-weekly-oled-128x32" && route.Profile != "rotating-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-android" && route.Profile != "overview-app" {
 			return fmt.Errorf("projection route %q: unsupported profile %q", nodeID, route.Profile)
 		}
 		if len(route.Inputs) == 0 {
@@ -240,6 +240,13 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		}
 		if route.Profile == "codex-weekly-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "codex") {
 			return fmt.Errorf("projection route %q: codex-weekly-oled-128x32 requires exactly one codex input", nodeID)
+		}
+		if route.Profile == "rotating-oled-128x32" {
+			if len(seen) != 2 || route.RotationSeconds < 0 || route.RotationSeconds > 3600 {
+				return fmt.Errorf("projection route %q: rotating OLED requires usage and codex inputs and an interval of 1–3600 seconds (0 defaults to 3)", nodeID)
+			}
+		} else if route.RotationSeconds != 0 {
+			return fmt.Errorf("projection route %q: rotation_seconds requires rotating-oled-128x32", nodeID)
 		}
 	}
 

@@ -1,6 +1,7 @@
 export type InputKind = "usage" | "codex";
 export interface Route {
   profile: string;
+  rotation_seconds?: number;
   inputs: { agent_id: string; observation_type: InputKind }[];
 }
 export interface RouteDocument {
@@ -97,6 +98,7 @@ export const profileName = (profile: string) =>
   ({
     "usage-oled-128x32": "OLED · 用量屏",
     "codex-weekly-oled-128x32": "OLED · Codex 周限",
+    "rotating-oled-128x32": "OLED · 循环显示",
     "overview-web": "Web · 工作台",
     "overview-android": "Android · 小组件",
     "overview-app": "App · 收件箱",

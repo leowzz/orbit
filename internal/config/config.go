@@ -172,8 +172,9 @@ type CoreIdentity struct {
 }
 
 type ProjectionRoute struct {
-	Profile string            `yaml:"profile" json:"profile"`
-	Inputs  []ProjectionInput `yaml:"inputs" json:"inputs"`
+	Profile         string            `yaml:"profile" json:"profile"`
+	Inputs          []ProjectionInput `yaml:"inputs" json:"inputs"`
+	RotationSeconds int               `yaml:"rotation_seconds,omitempty" json:"rotation_seconds,omitempty"`
 }
 
 type ProjectionInput struct {

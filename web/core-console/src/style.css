@@ -815,13 +815,42 @@ dd {
   cursor: wait;
   opacity: 0.6;
 }
-.oled-mode-switch p {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--muted);
-  margin: 8px 0 0;
+.oled-rotation-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
 }
-.oled-mode-switch .oled-mode-error {
+.oled-rotation-controls input {
+  width: 48px;
+  min-width: 0;
+  height: 34px;
+  min-height: 0;
+  padding: 4px;
+  font-size: 13px;
+  text-align: center;
+  appearance: textfield;
+}
+.oled-rotation-controls input::-webkit-inner-spin-button,
+.oled-rotation-controls input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.oled-mode-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 200;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px #24344914;
+  font-size: 14px;
+  color: var(--text);
+}
+.oled-mode-toast.error {
   color: #a3443a;
 }
 .node-link {

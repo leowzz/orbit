@@ -151,7 +151,9 @@ export default function Routing({ state, document, onChange }: Props) {
               </small>
             </div>
             <div>
-              <span className="profile-label">{profileName(r.profile)}</span>
+              {!r.profile.endsWith("-oled-128x32") && (
+                <span className="profile-label">{profileName(r.profile)}</span>
+              )}
               <OLEDModeSwitch
                 nodeId={id}
                 document={document}
@@ -199,9 +201,7 @@ export default function Routing({ state, document, onChange }: Props) {
         <p>
           保存后立即应用。移除来源或删除规则时，Core 会清空设备上的旧数据。
           <br />
-          <span>
-            每种数据只能选择一个来源；OLED 可快捷切换 API 用量或账号周限。
-          </span>
+          <span>每种数据只能选择一个来源；OLED 可选择固定展示或循环显示。</span>
         </p>
         <Badge>本地持久化</Badge>
       </div>
@@ -260,6 +260,9 @@ function Editor({
       editing.route?.inputs.find((i) => i.observation_type === "codex")
         ?.agent_id ?? "",
     ),
+    [rotationSeconds, setRotationSeconds] = useState(
+      editing.route?.rotation_seconds || 3,
+    ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [dirty, setDirty] = useState(false),
@@ -286,6 +289,17 @@ function Editor({
     setError("");
     const node = id.trim();
     if (!deleted) {
+      if (
+        profile === "rotating-oled-128x32" &&
+        (!usage.trim() ||
+          !codex.trim() ||
+          !Number.isInteger(rotationSeconds) ||
+          rotationSeconds < 1 ||
+          rotationSeconds > 3600)
+      ) {
+        setError("循环显示需要两种数据来源，间隔为 1–3600 秒。");
+        return;
+      }
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(node)) {
         setError("Node ID 需以小写字母或数字开头，最多 64 位，可包含 - 和 _。");
         return;
@@ -309,6 +323,9 @@ function Editor({
     else
       routes[node] = {
         profile,
+        ...(profile === "rotating-oled-128x32"
+          ? { rotation_seconds: rotationSeconds }
+          : {}),
         inputs: [
           ...(usage.trim() && profile !== "codex-weekly-oled-128x32"
             ? [{ agent_id: usage.trim(), observation_type: "usage" as const }]
@@ -411,6 +428,7 @@ function Editor({
                 {[
                   "usage-oled-128x32",
                   "codex-weekly-oled-128x32",
+                  "rotating-oled-128x32",
                   "overview-web",
                   "overview-android",
                   "overview-app",
@@ -420,6 +438,27 @@ function Editor({
                   </option>
                 ))}
               </select>
+              {profile === "rotating-oled-128x32" && (
+                <>
+                  <label htmlFor="rotation-seconds">循环间隔（秒）</label>
+                  <input
+                    id="rotation-seconds"
+                    type="number"
+                    min={1}
+                    max={3600}
+                    step={1}
+                    value={rotationSeconds}
+                    onChange={(e) => {
+                      setRotationSeconds(Number(e.target.value));
+                      setDirty(true);
+                    }}
+                    required
+                  />
+                  <p className="field-hint">
+                    由 Core 持续切换，关闭控制台后仍会循环。
+                  </p>
+                </>
+              )}
             </div>
             <div className="form-section">
               <span className="step-label">02 / 数据来源</span>
@@ -439,7 +478,8 @@ function Editor({
               />
               <label htmlFor="codex-source">
                 <span className="source-glyph">C</span>
-                {profile === "codex-weekly-oled-128x32"
+                {profile === "codex-weekly-oled-128x32" ||
+                profile === "rotating-oled-128x32"
                   ? "Codex 周限"
                   : "Codex 会话"}
               </label>
@@ -466,7 +506,9 @@ function Editor({
                 ))}
               </datalist>
               <p className="field-hint">
-                留空表示不转发这一类数据。两种数据可以来自不同 Agent。
+                {profile === "rotating-oled-128x32"
+                  ? "循环显示需要两种数据来源，可来自不同 Agent。"
+                  : "留空表示不转发这一类数据。两种数据可以来自不同 Agent。"}
               </p>
             </div>
             {error && (

@@ -305,6 +305,7 @@ observation type:
 | --- | --- | --- |
 | `usage-oled-128x32` | Usage | OLED display |
 | `codex-weekly-oled-128x32` | Codex | Weekly remaining percent and reset date/time (Asia/Shanghai) |
+| `rotating-oled-128x32` | Usage and Codex | Alternate API usage and account weekly quota |
 | `overview-web` | Usage and/or Codex | Web Node |
 | `overview-android` | Usage and/or Codex | Android widgets |
 
@@ -318,10 +319,15 @@ align left and the reset date/time align right; Core refreshes at hour/day
 boundaries. Cached quota readings become
 stale after three minutes; a passed reset shows placeholders until refreshed.
 
-In the console, OLED device cards and route rows offer **API 用量 / 账号周限**
-buttons. Switching saves and applies immediately, keeping the current source
-Agent. That Agent needs the corresponding Usage or Codex rate-limit source
-enabled.
+In the console, OLED device cards and route rows offer **API 用量 / 账号周限 /
+循环显示** buttons. Switching saves and applies immediately, keeping the current
+source Agent. That Agent needs the corresponding Usage or Codex rate-limit
+source enabled. Cycling runs in Core, including while the console is closed.
+The default interval is 3 seconds; edit the number beside **循环显示** and press
+Enter to apply (1–3600 seconds). A brief toast confirms the update.
+Selecting either fixed page stops cycling. The route stores `rotation_seconds`
+and requires both input types; the full route editor also supports separate
+Agents for the two pages. A missing source shows placeholders on its page.
 
 Agents and Nodes can be configured before discovery. Keep the corresponding
 `observation_policies` in YAML. Saving a rule immediately updates runtime

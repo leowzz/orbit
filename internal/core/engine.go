@@ -16,18 +16,19 @@ import (
 )
 
 const (
-	displaySeries      = "display"
-	oledModel          = "oled-128x32"
-	ydVariant          = "yd-esp32-s3"
-	usageProfile       = "usage-oled-128x32"
-	codexWeeklyProfile = "codex-weekly-oled-128x32"
-	webModel           = "web"
-	webVariant         = "browser"
-	webProfile         = "overview-web"
-	androidModel       = "android"
-	androidVariant     = "flutter"
-	androidProfile     = "overview-android"
-	appProfile         = "overview-app"
+	displaySeries       = "display"
+	oledModel           = "oled-128x32"
+	ydVariant           = "yd-esp32-s3"
+	usageProfile        = "usage-oled-128x32"
+	codexWeeklyProfile  = "codex-weekly-oled-128x32"
+	rotatingOLEDProfile = "rotating-oled-128x32"
+	webModel            = "web"
+	webVariant          = "browser"
+	webProfile          = "overview-web"
+	androidModel        = "android"
+	androidVariant      = "flutter"
+	androidProfile      = "overview-android"
+	appProfile          = "overview-app"
 )
 
 type RouteInput struct {
@@ -36,10 +37,11 @@ type RouteInput struct {
 }
 
 type Route struct {
-	NodeID  string
-	AgentID string
-	Profile string
-	Inputs  []RouteInput
+	NodeID          string
+	AgentID         string
+	Profile         string
+	Inputs          []RouteInput
+	RotationSeconds int
 }
 
 type UsagePolicy struct {
@@ -99,6 +101,7 @@ type Engine struct {
 	codex           map[string]canonicalCodex
 	viewRevision    map[string]uint64
 	lastFresh       map[string]string
+	rotationStarted map[string]time.Time
 	lastAndroid     map[string]*orbitv1.DeviceView
 	intentCommands  map[string]cachedIntentCommand
 	intentOrder     []string
@@ -118,7 +121,7 @@ func New(config Config) (*Engine, error) {
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
 		}
-		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != codexWeeklyProfile && route.Profile != webProfile && route.Profile != androidProfile && route.Profile != appProfile) || len(route.Inputs) == 0 {
+		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != codexWeeklyProfile && route.Profile != rotatingOLEDProfile && route.Profile != webProfile && route.Profile != androidProfile && route.Profile != appProfile) || len(route.Inputs) == 0 {
 			return nil, fmt.Errorf("invalid route for node %q", route.NodeID)
 		}
 		inputTypes := make(map[orbitv1.ObservationType]struct{}, len(route.Inputs))
@@ -139,6 +142,16 @@ func New(config Config) (*Engine, error) {
 		if route.Profile == codexWeeklyProfile && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
 			return nil, fmt.Errorf("invalid Codex weekly route for node %q", route.NodeID)
 		}
+		if route.Profile == rotatingOLEDProfile {
+			if len(inputTypes) != 2 || route.RotationSeconds < 0 || route.RotationSeconds > 3600 {
+				return nil, fmt.Errorf("invalid rotating OLED route for node %q", route.NodeID)
+			}
+			if route.RotationSeconds == 0 {
+				route.RotationSeconds = 3
+			}
+		} else if route.RotationSeconds != 0 {
+			return nil, fmt.Errorf("rotation interval on non-rotating route for node %q", route.NodeID)
+		}
 		if _, duplicate := seen[route.NodeID]; duplicate {
 			return nil, fmt.Errorf("duplicate route for node %q", route.NodeID)
 		}
@@ -153,17 +166,18 @@ func New(config Config) (*Engine, error) {
 		return nil, errors.New("codex max TTL must be positive and future skew cannot be negative")
 	}
 	return &Engine{
-		config:         config,
-		agentDetails:   make(map[string]*orbitv1.AgentState),
-		agents:         make(map[string]participantState),
-		nodes:          make(map[string]participantState),
-		nodeProducts:   make(map[string]*orbitv1.NodeState),
-		usage:          make(map[string]canonicalUsage),
-		codex:          make(map[string]canonicalCodex),
-		viewRevision:   make(map[string]uint64),
-		lastFresh:      make(map[string]string),
-		lastAndroid:    make(map[string]*orbitv1.DeviceView),
-		intentCommands: make(map[string]cachedIntentCommand),
+		config:          config,
+		agentDetails:    make(map[string]*orbitv1.AgentState),
+		agents:          make(map[string]participantState),
+		nodes:           make(map[string]participantState),
+		nodeProducts:    make(map[string]*orbitv1.NodeState),
+		usage:           make(map[string]canonicalUsage),
+		codex:           make(map[string]canonicalCodex),
+		viewRevision:    make(map[string]uint64),
+		lastFresh:       make(map[string]string),
+		rotationStarted: make(map[string]time.Time),
+		lastAndroid:     make(map[string]*orbitv1.DeviceView),
+		intentCommands:  make(map[string]cachedIntentCommand),
 	}, nil
 }
 
@@ -232,7 +246,7 @@ func (e *Engine) ApplyNodeState(now time.Time, state *orbitv1.NodeState) ([]*orb
 	if route != nil && route.Profile == appProfile {
 		return nil, errors.New("HTTP App routes do not accept MQTT node state")
 	}
-	if route != nil && (((route.Profile == usageProfile || route.Profile == codexWeeklyProfile) && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel) || (route.Profile == androidProfile && state.ModelId != androidModel)) {
+	if route != nil && (((route.Profile == usageProfile || route.Profile == codexWeeklyProfile || route.Profile == rotatingOLEDProfile) && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel) || (route.Profile == androidProfile && state.ModelId != androidModel)) {
 		return nil, fmt.Errorf("node product %s does not match projection profile %s", state.ModelId, route.Profile)
 	}
 	producedAt, err := requiredTimestamp(state.Metadata.ProducedAt, "node produced_at")
@@ -467,10 +481,13 @@ func (e *Engine) AppView(now time.Time, nodeID string) *orbitv1.DeviceView {
 }
 
 func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.DeviceView, error) {
+	configured := route
+	rotating := route.Profile == rotatingOLEDProfile
+	route = e.displayRoute(now, route)
 	nodeID := route.NodeID
 	usage, hasUsage := e.usageForRoute(route)
 	codex, hasCodex := e.codexForRoute(route)
-	if !hasUsage && !hasCodex {
+	if !hasUsage && !hasCodex && !rotating {
 		return nil, nil
 	}
 	freshness, freshUntil, retainUntil := e.routeFreshness(now, route, usage, hasUsage, codex, hasCodex)
@@ -487,6 +504,11 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 		Freshness:   freshness,
 		FreshUntil:  timestamppb.New(freshUntil),
 		RetainUntil: timestamppb.New(retainUntil),
+	}
+	if rotating && !hasUsage && !hasCodex {
+		view.Primary = &orbitv1.DisplaySlot{Text: "--"}
+		view.Secondary = &orbitv1.DisplaySlot{Text: "--"}
+		view.Footer = &orbitv1.DisplaySlot{Text: "--"}
 	}
 	if hasUsage {
 		cost := usage.value.GetActualCostMicros()
@@ -538,7 +560,7 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 		e.lastAndroid[nodeID] = proto.Clone(view).(*orbitv1.DeviceView)
 	}
 	e.viewRevision[nodeID]++
-	e.lastFresh[nodeID] = e.freshnessSignature(now, route)
+	e.lastFresh[nodeID] = e.freshnessSignature(now, configured)
 	return []*orbitv1.DeviceView{view}, nil
 }
 
@@ -610,6 +632,10 @@ func (e *Engine) routeFreshness(now time.Time, route Route, usage canonicalUsage
 }
 
 func (e *Engine) freshnessSignature(now time.Time, route Route) string {
+	if route.Profile == rotatingOLEDProfile {
+		active := e.displayRoute(now, route)
+		return active.Profile + ":" + e.freshnessSignature(now, active)
+	}
 	parts := make([]string, 0, len(route.Inputs))
 	for _, input := range route.Inputs {
 		switch input.ObservationType {
@@ -630,6 +656,35 @@ func (e *Engine) freshnessSignature(now time.Time, route Route) string {
 		}
 	}
 	return fmt.Sprint(parts)
+}
+
+// displayRoute selects one OLED page without changing the persisted route.
+func (e *Engine) displayRoute(now time.Time, route Route) Route {
+	if route.Profile != rotatingOLEDProfile {
+		return route
+	}
+	start, ok := e.rotationStarted[route.NodeID]
+	if !ok || now.Before(start) {
+		start = now
+		e.rotationStarted[route.NodeID] = start
+	}
+	seconds := route.RotationSeconds
+	if seconds == 0 {
+		seconds = 3
+	}
+	kind := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
+	route.Profile = usageProfile
+	if int64(now.Sub(start)/(time.Duration(seconds)*time.Second))%2 == 1 {
+		kind = orbitv1.ObservationType_OBSERVATION_TYPE_CODEX
+		route.Profile = codexWeeklyProfile
+	}
+	for _, input := range route.Inputs {
+		if input.ObservationType == kind {
+			route.Inputs = []RouteInput{input}
+			break
+		}
+	}
+	return route
 }
 
 func freshnessPart(exists bool, now, expiresAt time.Time) string {
