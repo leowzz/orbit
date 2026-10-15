@@ -158,3 +158,11 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 功能提交 `a1a3b87`：设备详情标题旁增加归档/恢复操作，「已归档」入口支持查看、搜索及恢复。归档设备从默认列表、总览和数据流向隐藏，数据配置、名称、同步和访问权限保留；状态按稳定设备 ID 存入 Core `node_archives` 表，重启、自描述刷新或暂时未发现设备均不会丢失。
 - tx Core 更新为 `orbit-core:device-archive-a1a3b87-20261015`。发布与验证记录位于 `/srv/orbit-deploy/releases/device-archive-a1a3b87-20261015`，停机备份位于 `/srv/orbit-deploy/backups/device-archive-20261015T113124Z`。路由修订 164、4 条路由、4 个设备授权、已有名称及快捷设置保留，数据库完整性、线上资源和运行二进制摘要、设备状态与导航接口检查通过，Web 容器未变。
 - Go 相关测试及 race、前端测试、构建和格式检查通过。本地隔离服务验证 MQTT/App 归档和恢复、默认页面隐藏、刷新与后端重启持久化、原令牌继续可用、暂未发现记录恢复，以及 390px 窄屏入口和按钮对齐。未代用户选择或归档在线设备。
+
+## 2026-10-15：Web 状态与收件箱统一设备
+
+- 功能提交 `c0d6d9e`：配置 `web.inbox` 后，Web 的状态、会话打开及收件箱共用令牌对应的 HTTP 设备身份，不再连接 MQTT 或发布另一份 NodeState。首页继续显示状态，`/inbox/` 继续使用原访问密码与服务器端令牌；没有 HTTP 配置的旧 MQTT 节点继续兼容。`6e62920` 补充 HTTP 最近访问状态，区分持续连接、最近活跃和未连接。
+- tx 保留设备 ID `app-de96c414-5400-40a3-81f2-5eca731d1486`，沿用原状态设备名称「web-node 线上」。将 `node_web_overview_tx` 的数据来源、显示模式、会话开关、轮播间隔和快捷设置迁入该设备，路由 profile 转为 `overview-app`，修订升至 168；4 条路由、4 个设备授权保留，令牌摘要、撤销状态、收件箱历史与附件不变。
+- 迁移前停止 Core/Web 并备份，在数据库副本上演练，核对仅预期配置表变化。迁移同时转移旧 `navigation_configs` 与 `navigation_settings`，防止启动时从旧配置重新生成旧设备设置；清理旧 MQTT retained state/view，移除 Web 配置中的旧 MQTT 连接。旧设备通过身份迁移退出列表，没有用归档隐藏重复记录。
+- Web 镜像为 `orbit-web:unify-web-c0d6d9e-20261015`；Core 最终镜像为 `orbit-core:web-activity-6e62920-20261015`。迁移脚本、清理工具源码、构建清单与验证记录位于 `/srv/orbit-deploy/releases/unify-web-c0d6d9e-20261015`，迁移前备份为 `/srv/orbit-deploy/backups/unify-web-20261015T114828Z`；连接提示更新位于 `/srv/orbit-deploy/releases/web-activity-6e62920-20261015`，对应备份为 `/srv/orbit-deploy/backups/web-activity-20261015T115021Z`。
+- Web/配置/启动相关 Go 测试、Web/Core/App API race、Web 15 项脚本测试、管理台 5 项测试、构建与格式检查通过。线上数据库完整性、运行二进制和公开资源摘要、原令牌 JSON/Protobuf 状态与导航接口均通过；浏览器确认 Web 分类只有一张设备卡，旧 ID 无入口，状态页与收件箱身份一致，消息正常同步，原循环显示与快捷来源保留，390px 窄屏无横向溢出。未触发真实会话打开操作。
