@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'inbox_controller.dart';
 import 'navigation_bar.dart';
 import 'app_theme.dart';
+import 'app_appearance.dart';
 import 'local_store.dart' show Json;
 
 /// Native counterpart of the Web Node's short landscape dashboard.
@@ -307,6 +308,20 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                     )
                   : const SizedBox(),
             ),
+            if (AppAppearance.maybeOf(context) case final appearance?)
+              IconButton(
+                tooltip: appearance.dark ? '切换到浅色模式' : '切换到暗色模式',
+                onPressed: appearance.saving
+                    ? null
+                    : () => appearance.onChanged(!appearance.dark),
+                icon: Icon(
+                  appearance.dark
+                      ? Icons.light_mode_outlined
+                      : Icons.dark_mode_outlined,
+                ),
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+              ),
             TextButton.icon(
               onPressed: widget.controller == null || widget.controller!.syncing
                   ? null

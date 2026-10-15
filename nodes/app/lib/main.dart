@@ -18,6 +18,7 @@ import 'scan_connection_screen.dart';
 import 'app_viewport.dart';
 import 'app_location.dart';
 import 'app_theme.dart';
+import 'app_appearance.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +34,10 @@ class OrbitApp extends StatefulWidget {
 class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   final secure = const FlutterSecureStorage();
   final locationStore = AppLocationStore();
+  final appearanceStore = AppearanceStore();
+  final messenger = GlobalKey<ScaffoldMessengerState>();
+  bool darkMode = false;
+  bool savingAppearance = false;
   AppLocation initialLocation = AppLocation.inbox;
   InboxController? controller;
   Json? connection;
@@ -48,6 +53,7 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   Future<void> _restore() async {
     initialLocation = await locationStore.read();
     try {
+      darkMode = await appearanceStore.read();
       final value = await secure.read(key: 'connection');
       if (value != null) {
         connection = jsonDecode(value) as Json;
@@ -57,6 +63,21 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
       failure = '无法读取本机数据，请重试';
     }
     if (mounted) setState(() => loading = false);
+  }
+
+  Future<void> _setDarkMode(bool value) async {
+    if (savingAppearance || value == darkMode) return;
+    setState(() => savingAppearance = true);
+    try {
+      await appearanceStore.write(value);
+      if (mounted) setState(() => darkMode = value);
+    } catch (_) {
+      messenger.currentState?.showSnackBar(
+        const SnackBar(content: Text('未能保存外观设置，请重试')),
+      );
+    } finally {
+      if (mounted) setState(() => savingAppearance = false);
+    }
   }
 
   Future<void> _open(Json config) async {
@@ -144,13 +165,19 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Orbit',
     debugShowCheckedModeBanner: false,
+    scaffoldMessengerKey: messenger,
     builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
       value: orbitSystemUi(Theme.of(context).brightness),
-      child: AppViewport(child: child!),
+      child: AppAppearance(
+        dark: darkMode,
+        saving: savingAppearance,
+        onChanged: _setDarkMode,
+        child: AppViewport(child: child!),
+      ),
     ),
     theme: orbitTheme(Brightness.light),
     darkTheme: orbitTheme(Brightness.dark),
-    themeMode: ThemeMode.system,
+    themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
     home: loading
         ? const Scaffold(body: Center(child: CircularProgressIndicator()))
         : failure != null

@@ -2,6 +2,7 @@ package dev.orbit.orbit_android
 
 import android.Manifest
 import android.appwidget.AppWidgetManager
+import android.content.Context
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,6 +18,10 @@ import io.flutter.plugin.common.MethodChannel
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(OrbitAppearance.themedContext(newBase))
+    }
+
     private val io = Executors.newSingleThreadExecutor()
     private var matrixFullscreen = false
     private var previousOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -59,6 +64,12 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.orbit/node").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "getDarkMode" -> result.success(OrbitAppearance.isDark(this))
+                    "setDarkMode" -> {
+                        OrbitAppearance.save(this, call.arguments == true)
+                        OrbitWidgets.updateAll(this, force = true)
+                        result.success(null)
+                    }
                     "deviceModel" -> result.success(Build.MODEL)
                     "appConnection" -> {
                         val args = call.arguments as? Map<*, *>

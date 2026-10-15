@@ -45,7 +45,8 @@ object OrbitWidgets {
         else -> ""
     }
     @Synchronized
-    fun updateAll(context: Context, force: Boolean = false) {
+    fun updateAll(baseContext: Context, force: Boolean = false) {
+        val context = OrbitAppearance.themedContext(baseContext)
         if (!context.getSystemService(PowerManager::class.java).isInteractive) return
         val manager = AppWidgetManager.getInstance(context)
         val nightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
@@ -77,6 +78,18 @@ object OrbitWidgets {
                         usage -> R.layout.usage_widget
                         else -> R.layout.session_widget
                     })
+                    // Explicit actions retain the app preference when the launcher reapplies
+                    // RemoteViews under a different system theme.
+                    views.setInt(R.id.widget_root, "setBackgroundResource",
+                        if (dark) R.drawable.widget_background_dark else R.drawable.widget_background_light)
+                    views.setTextColor(R.id.widget_label, context.getColor(if (usage) R.color.widget_muted else R.color.widget_label))
+                    views.setTextColor(R.id.widget_hint, context.getColor(if (usage) R.color.widget_hint else R.color.widget_muted))
+                    if (usage) {
+                        views.setTextColor(R.id.widget_amount, context.getColor(R.color.widget_amount))
+                        views.setTextColor(R.id.widget_metrics, context.getColor(R.color.widget_muted))
+                    } else {
+                        views.setTextColor(R.id.widget_empty, context.getColor(R.color.widget_muted))
+                    }
                     fun pixels(dp: Int) = (dp * context.resources.displayMetrics.density).toInt()
                     val vertical = if (usage) (size.height / 12).toInt().coerceIn(4, 18) else layout.padding
                     views.setViewPadding(R.id.widget_root, pixels(layout.padding), pixels(vertical), pixels(layout.padding), pixels(vertical))
@@ -129,14 +142,8 @@ object OrbitWidgets {
                             val (label, color) = WidgetPresentation.status(session.statusValue, dark)
                             row.setTextViewText(R.id.session_status, label)
                             val status = if (state.isBlank()) session.statusValue else 0
-                            if (Build.VERSION.SDK_INT >= 31) {
-                                // Resolve against the host configuration when RemoteViews is reapplied.
-                                row.setColorInt(R.id.session_status, "setTextColor",
-                                    WidgetPresentation.status(status).second,
-                                    WidgetPresentation.status(status, true).second)
-                            } else {
-                                row.setTextColor(R.id.session_status, WidgetPresentation.status(status, dark).second)
-                            }
+                            row.setTextColor(R.id.session_status, WidgetPresentation.status(status, dark).second)
+                            row.setTextColor(R.id.session_name, context.getColor(R.color.widget_text))
                             val name = session.displayName.ifBlank { session.projectName }
                                 .ifBlank { session.model }.ifBlank { session.sessionId.take(8) }.take(80)
                             row.setTextViewText(R.id.session_name, name)

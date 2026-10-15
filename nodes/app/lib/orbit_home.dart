@@ -8,6 +8,7 @@ import 'matrix_screen.dart';
 import 'app_viewport.dart';
 import 'workbench_screen.dart';
 import 'app_location.dart';
+import 'app_appearance.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -239,6 +240,14 @@ class _AppSettings extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            if (AppAppearance.maybeOf(context) case final appearance?)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.dark_mode_outlined),
+                title: const Text('暗色模式'),
+                value: appearance.dark,
+                onChanged: appearance.saving ? null : appearance.onChanged,
+              ),
             if (controller != null)
               ListTile(
                 contentPadding: EdgeInsets.zero,
