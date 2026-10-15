@@ -140,3 +140,9 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 运行二进制、HTTPS 页面引用及 JS/CSS 哈希与构建产物一致；原设备令牌的 JSON/Protobuf 状态和快捷导航接口通过。Core 正常运行，MQTT 连接和订阅正常。
 - 更新前的 `orbit-core:device-pairings-20261015-174547` 镜像保留。当前镜像未推送仓库，重建使用 `docker compose up -d --no-deps --pull never orbit-core`。
 - 合并后前端构建、格式检查和相关 Core/App API/嵌入资源 Go 测试通过；桌面及 390px 窄屏交互使用本地模拟数据验证，未增加本次真机操作验收。
+
+### Core 来源状态提示修正
+
+- 修复 `a7b76d9`：Core 的 Agent State 使用 Protobuf JSON 枚举（`OBSERVATION_TYPE_USAGE` / `OBSERVATION_TYPE_CODEX`），前端曾错误地与 `usage` / `codex` 比较，导致正常来源显示未启用，且无法自动推荐。现在统一按协议字段识别，区分明确关闭与尚未报告采集状态。
+- tx 更新为 `orbit-core:source-status-a7b76d9-20261015`，发布及验证记录位于 `/srv/orbit-deploy/releases/source-status-a7b76d9-20261015`，停机备份位于 `/srv/orbit-deploy/backups/source-status-20261015T111406Z`。路由修订 158、4 条路由、4 个设备授权和既有数据保留，数据库、线上资源哈希及设备状态/导航接口检查通过，Web 容器未变。
+- 新增基于实际 Protobuf JSON 格式的 3 项回归测试，前端构建和格式检查通过。
