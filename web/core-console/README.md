@@ -40,6 +40,7 @@ API 代理目标在 `vite.config.ts`，默认为 `http://127.0.0.1:7620`，需�
 
 ```sh
 pnpm check
+pnpm test
 pnpm build
 ```
 

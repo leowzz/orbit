@@ -32,6 +32,13 @@ export interface Agent {
     sources?: Source[];
   };
 }
+export function agentSource(agent: Agent, kind: InputKind): Source | undefined {
+  const observationType =
+    kind === "usage" ? "OBSERVATION_TYPE_USAGE" : "OBSERVATION_TYPE_CODEX";
+  return agent.state.sources?.find(
+    (source) => source.observationType === observationType,
+  );
+}
 export interface Node {
   nodeId: string;
   modelId: string;

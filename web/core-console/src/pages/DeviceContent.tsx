@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Check, RefreshCw } from "lucide-react";
 import {
   api,
+  agentSource,
   APIError,
   displayMode,
   displayModes,
@@ -13,8 +14,8 @@ import { Empty } from "../components";
 
 function suggestedInputs(state: NetworkState): Route["inputs"] {
   return (["usage", "codex"] as const).flatMap((kind) => {
-    const candidates = state.agents.filter((a) =>
-      a.state.sources?.some((s) => s.observationType === kind && s.enabled),
+    const candidates = state.agents.filter(
+      (a) => agentSource(a, kind)?.enabled,
     );
     return candidates.length === 1
       ? [{ agent_id: candidates[0].id, observation_type: kind }]
@@ -235,16 +236,21 @@ export default function DeviceContent({
           {selected && !state.agents.some((a) => a.id === selected) && (
             <option value={selected}>{selected}（暂未发现）</option>
           )}
-          {state.agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.state.hostLabel || a.id}
-              {a.state.sources?.some(
-                (s) => s.observationType === kind && s.enabled,
-              )
-                ? ""
-                : "（未启用此来源）"}
-            </option>
-          ))}
+          {state.agents.map((a) => {
+            const status = agentSource(a, kind);
+            return (
+              <option key={a.id} value={a.id}>
+                {a.state.hostLabel || a.id}
+                {status
+                  ? status.enabled
+                    ? ""
+                    : kind === "usage"
+                      ? "（未开启用量采集）"
+                      : "（未开启 Codex 采集）"
+                  : "（未报告采集状态）"}
+              </option>
+            );
+          })}
         </select>
       </label>
     );
