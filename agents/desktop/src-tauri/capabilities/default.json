@@ -1,0 +1,6 @@
+{
+  "identifier": "main",
+  "description": "Local settings window",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:allow-open"]
+}

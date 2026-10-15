@@ -492,6 +492,10 @@ make dev AGENT_CONFIG=configs/agent.local.yaml \
   CORE_CONFIG=configs/core.local.yaml
 ~~~
 
+### Desktop Agent (Tauri / Rust)
+
+An independent tray app with a settings window is available in [agents/desktop](agents/desktop/README.md). It implements collection, MQTT, and session opening in Rust and shares the existing protobuf contract. macOS is locally verified; Windows build checks are defined in a dedicated workflow, with native acceptance still pending.
+
 ### Run Agent as a macOS background service
 
 Install the Agent as a per-user launchd service after preparing the local Agent

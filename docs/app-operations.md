@@ -106,3 +106,11 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 
 后续覆盖升级至 versionCode 4012：成功打开会话时不再弹提示，仅保留异常提示；
 工作台剩余时间使用 `4d23h` 格式。工作台 7 项测试通过，首次安装时间保持不变。
+
+### 2026-10-15：本机切换到 Tauri Agent
+
+- 新 Agent 安装于 `~/Applications/Orbit Agent.app`，复用 `macos_agent` 标识及原服务配置；凭据保存到系统钥匙串。旧 `com.leo.orbit.agent` 与 legacy dev 服务已停止并禁用登录启动，原二进制和配置保留供回退。
+- 新登录启动项为 `~/Library/LaunchAgents/Orbit Agent.plist`，启动已安装应用并带 `--background`。退出后通过该启动项重新启动，配置、凭据、连接和采集均恢复。
+- 修复 YAML 导入将 `~/.codex` 错当成配置文件相对路径的问题；配置回归测试 4 项及格式检查通过，macOS 应用重新构建安装。
+- 137 工作台显示实时连接、20 条会话和账号周限；Agent 上报 1967 个会话、1 个运行中，Codex 与 Sub2API 均健康。标题点击进入全屏、左上角标题退出全屏均已验证。
+- 普通模式与重启后的全屏模式各点击一次「同步 app node 布局与交互」，指令 `af76bc3767e64b82092cbf9398d3a8ac`、`6e7850b32524146f5803786a2af95e4d` 均由新 Agent 返回 `COMMAND_STATUS_SUCCEEDED`。用户已确认 Mac 上打开了对应 Codex 会话，工作台点击到本机打开的完整链路验证通过。

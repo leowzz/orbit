@@ -166,3 +166,15 @@ build-console:
 
 build-core: build-console
 	$(GO) build -trimpath -o dist/orbit-core ./cmd/orbit-core
+
+.PHONY: dev-desktop-agent test-desktop-agent build-desktop-agent
+dev-desktop-agent:
+	cd agents/desktop && $(PNPM) tauri dev
+
+test-desktop-agent:
+	cd agents/desktop && $(PNPM) check
+	cargo test --locked --manifest-path agents/desktop/src-tauri/Cargo.toml
+	cargo clippy --locked --manifest-path agents/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
+
+build-desktop-agent:
+	cd agents/desktop && $(PNPM) tauri build
