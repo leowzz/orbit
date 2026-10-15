@@ -107,9 +107,9 @@ class _MatrixScreenState extends State<MatrixScreen> {
           '像素密度',
           '${style.density}',
           style.density.toDouble(),
-          64,
-          128,
           16,
+          128,
+          28,
           (value) => setState(
             () => style = MatrixStyle(
               density: value.round(),

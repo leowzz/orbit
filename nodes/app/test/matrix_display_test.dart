@@ -95,7 +95,7 @@ void main() {
       'glowRadius': 100,
       'glowStrength': 'NaN',
     });
-    expect(style.density, 64);
+    expect(style.density, 16);
     expect(style.glowRadius, 2.5);
     expect(style.glowStrength, .65);
     final disabled = MatrixStyle.fromJson(

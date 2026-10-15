@@ -157,7 +157,7 @@ class MatrixStyle {
     }
 
     return MatrixStyle(
-      density: read('density', 72, 64, 128).round(),
+      density: read('density', 72, 16, 128).round(),
       glowRadius: read('glowRadius', 1.1, 0, 2.5),
       glowStrength: read('glowStrength', .65, 0, 1),
     );
@@ -230,7 +230,7 @@ class _MatrixDisplayState extends State<MatrixDisplay> {
           final height = widget.style.density;
           // Letterbox unusually square windows instead of squeezing the text.
           final aspect = math.max(16 / 9, bounds.maxWidth / bounds.maxHeight);
-          final width = (height * aspect).round().clamp(112, 512);
+          final width = (height * aspect).round().clamp(1, 512);
           rasterize(width, height);
           return CustomPaint(
             painter: _LedPainter(pixels, columns, rows, widget.style),

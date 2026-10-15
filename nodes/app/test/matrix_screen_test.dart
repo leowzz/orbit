@@ -47,12 +47,18 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.widget<MatrixDisplay>(find.byType(MatrixDisplay)).style.density,
-        96,
+        72,
+      );
+      await tester.drag(slider, Offset(-tester.getSize(slider).width, 0));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<MatrixDisplay>(find.byType(MatrixDisplay)).style.density,
+        16,
       );
       final saved = await const FlutterSecureStorage().read(
         key: 'matrix_style',
       );
-      expect(saved, contains('96'));
+      expect(saved, contains('"density":16'));
       await tester.ensureVisible(find.text('横向全屏'));
       await tester.tap(find.text('横向全屏'));
       await tester.pumpAndSettle();
@@ -68,7 +74,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester.widget<MatrixDisplay>(find.byType(MatrixDisplay)).style.density,
-        96,
+        16,
       );
       await tester.pumpWidget(const SizedBox());
     });
