@@ -161,33 +161,51 @@ void main() {
     () async {
       bool loseResponse = true;
       final payloads = <String>[];
+      final unexpectedRequests = <String>[];
       final c = InboxController(
         local,
         'https://example.test',
         'token',
         dir.path,
         client: MockClient((r) async {
-          if (r.url.path.endsWith('snapshot')) {
-            return response(page('1', [item('1')]));
+          switch ((r.method, r.url.path)) {
+            case ('GET', '/api/v1/sync/snapshot'):
+              return response(page('1', [item('1')]));
+            case ('GET', '/api/v1/changes'):
+              return response(page('1', []));
+            case ('GET', '/api/v1/status'):
+              return response({'view': null});
+            case ('GET', '/api/v1/navigation'):
+              return response({
+                'revision': 0,
+                'show_titles': false,
+                'items': <Json>[],
+              });
+            case ('POST', '/api/v1/operations'):
+              payloads.add(r.body);
+              if (loseResponse) throw const SocketException('response lost');
+              return response({'code': 'conflict', 'current': item('2')}, 409);
+            default:
+              unexpectedRequests.add('${r.method} ${r.url}');
+              return response({'code': 'not_found'}, 404);
           }
-          if (r.url.path.endsWith('changes')) return response(page('1', []));
-          if (r.url.path.endsWith('status')) return response({'view': null});
-          payloads.add(r.body);
-          if (loseResponse) throw const SocketException('response lost');
-          return response({'code': 'conflict', 'current': item('2')}, 409);
         }),
       );
       await c.submit('update', item: item('1'), body: 'keep my draft');
       await c.sync();
+      expect(payloads, hasLength(1));
       expect((await local.pending()).single['state'], 'pending');
       loseResponse = false;
       await c.sync();
+      expect(payloads, hasLength(2));
       expect(payloads[0], payloads[1]);
       final pending = (await local.pending()).single;
       expect(pending['state'], 'conflict');
       expect(jsonDecode(pending['payload'])['body'], 'keep my draft');
       await c.sync();
       expect(payloads.length, 2);
+      expect(unexpectedRequests, isEmpty);
+      expect(c.navigationError, isNull);
       c.client.close();
     },
   );
