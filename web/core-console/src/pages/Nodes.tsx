@@ -14,7 +14,7 @@ import {
   Search,
 } from "lucide-react";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
-import { api, date, modelName } from "../api";
+import { api, appConnectionLabel, date, modelName } from "../api";
 import { Badge, DeviceIcon, Empty, PageHead } from "../components";
 import DeviceContent from "./DeviceContent";
 import DeviceName from "../DeviceName";
@@ -437,9 +437,7 @@ export default function Nodes({
                       : device.revoked
                         ? "已撤销访问"
                         : device.app
-                          ? device.app.activity.connections > 0
-                            ? "已连接"
-                            : "未连接"
+                          ? appConnectionLabel(device.app.activity)
                           : device.discovered
                             ? "已发现"
                             : "预配置"}

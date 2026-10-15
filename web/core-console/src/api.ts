@@ -76,6 +76,14 @@ export interface AppDevice {
   revoked: boolean;
   activity: { connections: number; last_seen?: string; last_sync?: string };
 }
+export function appConnectionLabel(
+  activity: AppDevice["activity"],
+  now = Date.now(),
+): string {
+  if (activity.connections > 0) return "已连接";
+  const age = now - Date.parse(activity.last_seen ?? "");
+  return age >= -5000 && age <= 30000 ? "最近活跃" : "未连接";
+}
 export interface SystemInfo {
   started_at: string;
   policies: Record<string, { max_ttl: string; max_future_skew: string }>;

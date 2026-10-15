@@ -8,7 +8,7 @@ import {
   X,
   Image as ImageIcon,
 } from "lucide-react";
-import { api, APIError, date } from "../api";
+import { api, APIError, appConnectionLabel, date } from "../api";
 import type { AppDevice, RouteDocument } from "../api";
 import { Badge, Empty, PageHead } from "../components";
 
@@ -271,11 +271,7 @@ export default function Apps({
                               : "neutral"
                         }
                       >
-                        {d.revoked
-                          ? "已撤销"
-                          : d.activity.connections > 0
-                            ? "已连接"
-                            : "未连接"}
+                        {d.revoked ? "已撤销" : appConnectionLabel(d.activity)}
                       </Badge>
                     </div>
                     <dl>

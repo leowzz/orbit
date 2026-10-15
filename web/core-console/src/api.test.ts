@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { agentSource, visibleDeviceRoutes } from "./api.ts";
+import { agentSource, appConnectionLabel, visibleDeviceRoutes } from "./api.ts";
 import type { Agent, Source, NetworkState, RouteDocument } from "./api.ts";
 
 function agent(sources?: Source[]): Agent {
@@ -17,6 +17,28 @@ function agent(sources?: Source[]): Agent {
     },
   };
 }
+
+test("HTTP polling activity is distinct from a persistent connection", () => {
+  const now = Date.parse("2026-10-15T12:00:00Z");
+  assert.equal(appConnectionLabel({ connections: 1 }, now), "已连接");
+  assert.equal(
+    appConnectionLabel(
+      { connections: 0, last_seen: "2026-10-15T11:59:45Z" },
+      now,
+    ),
+    "最近活跃",
+  );
+  for (const last_seen of [
+    undefined,
+    "invalid",
+    "2026-10-15T11:59:00Z",
+    "2026-10-15T13:00:00Z",
+  ])
+    assert.equal(
+      appConnectionLabel({ connections: 0, last_seen }, now),
+      "未连接",
+    );
+});
 
 test("recognizes the protobuf JSON source types returned by Core", () => {
   const sources: Source[] = JSON.parse(`[
