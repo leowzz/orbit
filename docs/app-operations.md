@@ -166,3 +166,9 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 迁移前停止 Core/Web 并备份，在数据库副本上演练，核对仅预期配置表变化。迁移同时转移旧 `navigation_configs` 与 `navigation_settings`，防止启动时从旧配置重新生成旧设备设置；清理旧 MQTT retained state/view，移除 Web 配置中的旧 MQTT 连接。旧设备通过身份迁移退出列表，没有用归档隐藏重复记录。
 - Web 镜像为 `orbit-web:unify-web-c0d6d9e-20261015`；Core 最终镜像为 `orbit-core:web-activity-6e62920-20261015`。迁移脚本、清理工具源码、构建清单与验证记录位于 `/srv/orbit-deploy/releases/unify-web-c0d6d9e-20261015`，迁移前备份为 `/srv/orbit-deploy/backups/unify-web-20261015T114828Z`；连接提示更新位于 `/srv/orbit-deploy/releases/web-activity-6e62920-20261015`，对应备份为 `/srv/orbit-deploy/backups/web-activity-20261015T115021Z`。
 - Web/配置/启动相关 Go 测试、Web/Core/App API race、Web 15 项脚本测试、管理台 5 项测试、构建与格式检查通过。线上数据库完整性、运行二进制和公开资源摘要、原令牌 JSON/Protobuf 状态与导航接口均通过；浏览器确认 Web 分类只有一张设备卡，旧 ID 无入口，状态页与收件箱身份一致，消息正常同步，原循环显示与快捷来源保留，390px 窄屏无横向溢出。未触发真实会话打开操作。
+
+## 2026-10-15：设备卡片配置摘要
+
+- 提交 `5594b16`：设备列表卡片用实际显示内容、数据来源及 Codex 会话开关替换「已设置数据内容」。循环显示补充切换间隔；相同来源合并，不同来源分别标注用量、周限或会话来源，名称未知时保留来源 ID。兼容旧显示配置，OLED 不显示不支持的会话开关，未配置设备提供简短说明。卡片高度保持紧凑，同排摘要和管理入口对齐，长名称自然换行。
+- tx Core 更新为 `orbit-core:card-summary-5594b16-20261015`，发布记录位于 `/srv/orbit-deploy/releases/card-summary-5594b16-20261015`，备份位于 `/srv/orbit-deploy/backups/card-summary-20261015T115604Z`。路由修订 168、4 条路由与 4 个设备授权保留，数据库、运行二进制及 HTTPS 资源摘要、原设备状态和导航接口验证通过，Web 容器未变。
+- 前端构建、5 项已有回归测试、格式检查、嵌入资源 Go 测试与差异检查通过。本地以线上配置快照验证不同来源、未知来源、长名称、旧会话模式及 OLED 默认轮播；线上浏览器确认五张卡片摘要与配置一致，同排摘要顶沿和底部入口坐标一致，390px 窄屏无横向溢出。本次仅增加只读摘要，没有修改设备配置。
