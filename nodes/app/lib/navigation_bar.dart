@@ -79,14 +79,17 @@ class _WorkbenchNavigationState extends State<WorkbenchNavigation> {
     final config = widget.controller.navigation;
     final items = (config['items'] as List? ?? []).cast<Json>();
     final titles = config['show_titles'] == true;
+    final atTop = config['at_top'] == true;
     const height = 60.0;
     final itemWidth = titles ? 104.0 : height;
     return Container(
       key: const ValueKey('workbench-navigation'),
       height: height,
-      decoration: const BoxDecoration(
-        color: Color(0xfff6f9f7),
-        border: Border(top: BorderSide(color: Color(0xffe1e8e3))),
+      decoration: BoxDecoration(
+        color: const Color(0xfff6f9f7),
+        border: atTop
+            ? const Border(bottom: BorderSide(color: Color(0xffe1e8e3)))
+            : const Border(top: BorderSide(color: Color(0xffe1e8e3))),
       ),
       child: LayoutBuilder(
         builder: (context, bounds) {

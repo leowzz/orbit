@@ -59,6 +59,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.orbit/node").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "deviceModel" -> result.success(Build.MODEL)
                     "appConnection" -> {
                         val args = call.arguments as? Map<*, *>
                         val vault = ConfigVault(this, "orbit_app_connection")

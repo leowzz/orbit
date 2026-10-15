@@ -25,12 +25,27 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   static const _channel = MethodChannel('dev.orbit/node');
   final _opening = <String>{};
   bool _leaving = false;
+  bool _isAlipayBox = false;
   bool get _android => defaultTargetPlatform == TargetPlatform.android;
 
   @override
   void initState() {
     super.initState();
+    if (_android) unawaited(_readDeviceModel());
     if (widget.fullscreen && _android) unawaited(_enter());
+  }
+
+  Future<void> _readDeviceModel() async {
+    try {
+      final model = await _channel.invokeMethod<String>('deviceModel');
+      if (mounted && model == 'NFCD_AlipayBoxN5DEL') {
+        setState(() => _isAlipayBox = true);
+      }
+    } on PlatformException {
+      // An unavailable device identity keeps the general layout.
+    } on MissingPluginException {
+      // Desktop and older Android hosts keep the general layout.
+    }
   }
 
   Future<void> _enter() async {
@@ -120,16 +135,26 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                 final compact =
                     bounds.maxWidth >= 600 &&
                     bounds.maxHeight <= 640 &&
-                    bounds.maxWidth > bounds.maxHeight;
+                    bounds.maxWidth > bounds.maxHeight &&
+                    MediaQuery.textScalerOf(context).scale(18) <= 18;
                 final view = widget.controller?.view;
                 final enabled =
                     view?['sessionsEnabled'] == true ||
                     (view?['sessionsEnabled'] == null &&
                         view?['displayKind'] == null);
                 final metrics = _metrics(view);
+                final navigationAtTop =
+                    widget.controller?.navigation['at_top'] == true;
+                final statusBar = _header(view, compact, bounds.maxWidth);
+                final navigation = widget.controller == null
+                    ? const SizedBox.shrink()
+                    : WorkbenchNavigation(
+                        key: const ValueKey('workbench-navigation-widget'),
+                        controller: widget.controller!,
+                      );
                 return Column(
                   children: [
-                    _header(view, compact, bounds.maxWidth),
+                    navigationAtTop ? navigation : statusBar,
                     Expanded(
                       child: view == null
                           ? Center(
@@ -140,7 +165,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                                       ? '连接 Orbit 后查看工作台'
                                       : widget.controller!.online
                                       ? '等待状态数据，请在管理台为此设备选择来源'
-                                      : '未能同步状态，请点击右上角重试',
+                                      : '未能同步状态，请点击连接状态重试',
                                 ),
                               ),
                             )
@@ -168,7 +193,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: enabled
-                                        ? _sessions(view, compact: true)
+                                        ? _sessions(
+                                            view,
+                                            compact: true,
+                                            fourRows: _isAlipayBox,
+                                          )
                                         : const Center(
                                             child: Text(
                                               '未开启会话信息',
@@ -181,8 +210,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                             )
                           : _regular(view, metrics, enabled),
                     ),
-                    if (widget.controller != null)
-                      WorkbenchNavigation(controller: widget.controller!),
+                    navigationAtTop ? statusBar : navigation,
                   ],
                 );
               },
@@ -208,6 +236,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         ? '实时连接'
         : '等待更新';
     return SizedBox(
+      key: const ValueKey('workbench-status-bar'),
       height: compact ? 40 : 58,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: compact ? 18 : 20),
@@ -370,12 +399,17 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     ),
   );
 
-  Widget _sessions(Json view, {required bool compact}) => CustomScrollView(
-    key: const PageStorageKey('workbench-sessions'),
-    slivers: [_sessionSliver(view, compact: compact)],
-  );
+  Widget _sessions(Json view, {required bool compact, bool fourRows = false}) =>
+      CustomScrollView(
+        key: const PageStorageKey('workbench-sessions'),
+        slivers: [_sessionSliver(view, compact: compact, fourRows: fourRows)],
+      );
 
-  Widget _sessionSliver(Json view, {required bool compact}) {
+  Widget _sessionSliver(
+    Json view, {
+    required bool compact,
+    bool fourRows = false,
+  }) {
     final sessions = (view['codex']?['sessions'] as List? ?? [])
         .whereType<Map>()
         .toList();
@@ -392,25 +426,59 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     }
     return SliverLayoutBuilder(
       builder: (context, bounds) {
+        if (fourRows) {
+          const gap = 6.0;
+          final height = (bounds.viewportMainAxisExtent - 3 * gap) / 4;
+          return SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisExtent: height,
+              mainAxisSpacing: gap,
+              crossAxisSpacing: gap,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) => _session(sessions[index], rowHeight: height),
+              childCount: sessions.length,
+            ),
+          );
+        }
         final columns = bounds.crossAxisExtent >= 560 ? 2 : 1;
-        final scale = MediaQuery.textScalerOf(context).scale(1);
-        return SliverGrid(
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            mainAxisExtent: (compact ? 76 : 94) * math.max(1, scale),
-            mainAxisSpacing: compact ? 6 : 12,
-            crossAxisSpacing: compact ? 6 : 12,
-          ),
+        final rows = (sessions.length / columns).ceil();
+        final gap = compact ? 6.0 : 12.0;
+        return SliverList(
           delegate: SliverChildBuilderDelegate(
-            (context, index) => _session(sessions[index], compact),
-            childCount: sessions.length,
+            (context, row) => Padding(
+              padding: EdgeInsets.only(bottom: row + 1 < rows ? gap : 0),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var column = 0; column < columns; column++) ...[
+                      if (column > 0) SizedBox(width: gap),
+                      Expanded(
+                        child: row * columns + column < sessions.length
+                            ? _session(sessions[row * columns + column])
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            childCount: rows,
           ),
         );
       },
     );
   }
 
-  Widget _session(Map session, bool compact) {
+  Widget _session(Map session, {double? rowHeight}) {
+    // Keep breathing room without overflowing the four-row layout outside fullscreen.
+    final verticalPadding = rowHeight == null
+        ? 8.0
+        : ((rowHeight - 42) / 2).clamp(4.0, 10.0);
+    final titleLines =
+        rowHeight == null || rowHeight - verticalPadding * 2 >= 64 ? 2 : 1;
     final running = session['status'] == 'CODEX_SESSION_STATUS_RUNNING';
     final status = switch (session['status']) {
       'CODEX_SESSION_STATUS_RUNNING' => '运行中',
@@ -419,6 +487,12 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       'CODEX_SESSION_STATUS_INTERRUPTED' => '已中断',
       'CODEX_SESSION_STATUS_CANCELLED' => '已取消',
       _ => '未知',
+    };
+    final statusColor = switch (session['status']) {
+      'CODEX_SESSION_STATUS_RUNNING' => _green,
+      'CODEX_SESSION_STATUS_FAILED' => const Color(0xffb42318),
+      'CODEX_SESSION_STATUS_INTERRUPTED' => const Color(0xff9a6700),
+      _ => _muted,
     };
     final pending = _opening.contains(session['sessionId']);
     final title = '${session['displayName'] ?? '未命名会话'}';
@@ -441,83 +515,110 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
               ),
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          padding: EdgeInsets.symmetric(
+            horizontal: rowHeight == null ? 10 : 14,
+            vertical: verticalPadding,
+          ),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Tooltip(
-                message: title,
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Text(
-                      '${session['projectName'] ?? '项目未公开'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: _muted,
-                        height: 1.15,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '${session['model'] ?? '模型未知'}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: _muted,
-                        height: 1.15,
+                    child: Tooltip(
+                      message: title,
+                      child: Text(
+                        title,
+                        maxLines: titleLines,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          height: 1.2,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xff1f2328),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Icon(Icons.circle, size: 6, color: running ? _green : _muted),
-                  const SizedBox(width: 4),
-                  Text(
-                    pending ? '发送中' : status,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: running ? _green : _muted,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _relative(session['updatedAt']),
-                    style: const TextStyle(fontSize: 10, color: _muted),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      pending ? '发送中' : status,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.2,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              if (!compact) ...[
-                const SizedBox(height: 4),
-                Text(
-                  '${session['sessionId'] ?? ''}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: _muted),
-                ),
-              ],
+              SizedBox(height: rowHeight == null ? 6 : 4),
+              Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Flexible(
+                          child: _sessionDetail(
+                            '${session['projectName'] ?? '项目未公开'}',
+                          ),
+                        ),
+                        const Text(
+                          ' · ',
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.2,
+                            color: _muted,
+                          ),
+                        ),
+                        Flexible(
+                          child: _sessionDetail(
+                            '${session['model'] ?? '模型未知'}',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    _relative(session['updatedAt']),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.2,
+                      color: _muted,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
     );
   }
+
+  Widget _sessionDetail(String text) => Tooltip(
+    message: text,
+    child: Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(fontSize: 13, height: 1.2, color: _muted),
+    ),
+  );
 }
 
 class _Metric {

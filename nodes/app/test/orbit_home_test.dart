@@ -19,6 +19,7 @@ void main() {
     calls.clear();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'deviceModel') return null;
           calls.add(call.method);
           if (call.method == 'load') {
             return {

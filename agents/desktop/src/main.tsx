@@ -212,6 +212,7 @@ function App() {
         imported.config.shortcutsRevision = settings.config.shortcutsRevision;
         imported.config.shortcutsShowTitles =
           settings.config.shortcutsShowTitles;
+        imported.config.shortcutsAtTop = settings.config.shortcutsAtTop;
       }
       setSettings(imported);
       setNotice("配置已导入，检查后保存即可生效");
@@ -731,6 +732,8 @@ function App() {
                   items={settings.config.shortcuts}
                   showTitles={settings.config.shortcutsShowTitles}
                   onShowTitles={(value) => config("shortcutsShowTitles", value)}
+                  atTop={settings.config.shortcutsAtTop}
+                  onAtTop={(value) => config("shortcutsAtTop", value)}
                   onChange={(items) => config("shortcuts", items)}
                 />
               )}

@@ -56,7 +56,7 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 	if err = api.StartNavigation(ctx, transport, "core", func() map[string][]string { return map[string][]string{"a": {"mac"}, "b": {"other"}} }); err != nil {
 		t.Fatal(err)
 	}
-	catalog := &v.AgentShortcuts{AgentId: "mac", HostLabel: "My Mac", Revision: 10, Items: []*v.AgentShortcut{{Id: "app1", Title: "Calendar", Kind: "app"}}}
+	catalog := &v.AgentShortcuts{AgentId: "mac", HostLabel: "My Mac", Revision: 10, AtTop: true, Items: []*v.AgentShortcut{{Id: "app1", Title: "Calendar", Kind: "app"}}}
 	publish := func() {
 		raw, _ := proto.Marshal(catalog)
 		if e := transport.handler(ctx, mqtt.Message{Topic: "orbit/v1/agents/mac/shortcuts", Payload: raw, Retain: true}); e != nil {
@@ -82,7 +82,7 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil || len(d.Items) != 1 {
+	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil || len(d.Items) != 1 || !d.AtTop {
 		t.Fatal(d, err)
 	}
 	entry := d.Items[0].ID
@@ -105,7 +105,7 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 			retained = retained || (m.Retain && len(m.Payload) > 0)
 			var nav v.Navigation
 			_ = proto.Unmarshal(m.Payload, &nav)
-			if nav.ShowTitles || (len(nav.Items) > 0 && nav.Revision != 1) {
+			if nav.ShowTitles || (len(nav.Items) > 0 && (nav.Revision != 1 || !nav.AtTop)) {
 				t.Error("wrong snapshot", &nav)
 			}
 		}
@@ -137,7 +137,7 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 	}
 	defer second.Close()
 	saved, err := second.Navigation(ctx, "a")
-	if err != nil || saved.Revision != 2 || len(saved.Items) != 0 {
+	if err != nil || saved.Revision != 2 || len(saved.Items) != 0 || !saved.AtTop {
 		t.Fatal("not durable", saved, err)
 	}
 }

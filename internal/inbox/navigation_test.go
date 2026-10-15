@@ -45,3 +45,28 @@ func TestNavigationTracksAgentOrderTitlesAndRouteRemoval(t *testing.T) {
 		t.Fatal("deleted route retained open access")
 	}
 }
+
+func TestNavigationPositionChangesWithoutChangingItems(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	c := &v.AgentShortcuts{AgentId: "mac", Items: []*v.AgentShortcut{{Id: "one", Title: "One", Kind: "app"}}}
+	for i, atTop := range []bool{false, true, false} {
+		c.Revision = uint64(i + 1)
+		c.AtTop = atTop
+		if err := s.AcceptShortcutCatalog(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+		d, err := s.ProjectNavigation(ctx, "node", []string{"mac"})
+		if err != nil || d.AtTop != atTop || d.Revision != int64(i+1) || d.Proto("node").AtTop != atTop {
+			t.Fatal("position update did not reach navigation", d, err)
+		}
+		if saved, err := s.Navigation(ctx, "node"); err != nil || saved.AtTop != atTop {
+			t.Fatal("position not persisted", saved, err)
+		}
+	}
+}

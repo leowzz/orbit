@@ -11,6 +11,7 @@ pub struct Config {
     pub shortcuts: Vec<crate::shortcuts::Shortcut>,
     pub shortcuts_revision: u64,
     pub shortcuts_show_titles: bool,
+    pub shortcuts_at_top: bool,
     pub agent_id: String,
     pub host_label: String,
     pub mqtt: Mqtt,
@@ -101,6 +102,7 @@ impl Default for Config {
             shortcuts: vec![],
             shortcuts_revision: 1,
             shortcuts_show_titles: false,
+            shortcuts_at_top: false,
             agent_id: default_id(),
             host_label: std::env::var("COMPUTERNAME")
                 .or_else(|_| std::env::var("HOSTNAME"))

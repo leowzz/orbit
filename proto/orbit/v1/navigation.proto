@@ -15,6 +15,7 @@ message AgentShortcuts {
   uint64 revision = 3;
   repeated AgentShortcut items = 4;
   bool show_titles = 5;
+  bool at_top = 6;
 }
 message NavigationItem {
   string id = 1;
@@ -31,4 +32,5 @@ message Navigation {
   uint64 revision = 2;
   bool show_titles = 3;
   repeated NavigationItem items = 4;
+  bool at_top = 5;
 }

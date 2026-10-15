@@ -87,6 +87,7 @@ pub fn catalog(c: &Config) -> wire::AgentShortcuts {
         host_label: c.host_label.clone(),
         revision: c.shortcuts_revision.max(1),
         show_titles: c.shortcuts_show_titles,
+        at_top: c.shortcuts_at_top,
         items: c
             .shortcuts
             .iter()
@@ -298,6 +299,20 @@ pub(crate) async fn open_shortcut(item: Shortcut) -> Result<(), ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn navigation_position_defaults_to_bottom_and_survives_settings_roundtrip() {
+        let mut c: Config = serde_json::from_str(r#"{"agentId":"test"}"#).unwrap();
+        assert!(!c.shortcuts_at_top);
+        assert!(!catalog(&c).at_top);
+        for at_top in [true, false] {
+            c.shortcuts_at_top = at_top;
+            let saved = serde_json::to_value(&c).unwrap();
+            assert_eq!(saved["shortcutsAtTop"], at_top);
+            c = serde_json::from_value(saved).unwrap();
+            assert_eq!(catalog(&c).at_top, at_top);
+        }
+    }
+
     #[test]
     fn website_fetch_only_accepts_http_without_credentials() {
         for v in [

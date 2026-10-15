@@ -9,6 +9,7 @@ export interface Config {
   shortcuts: Shortcut[];
   shortcutsRevision: number;
   shortcutsShowTitles: boolean;
+  shortcutsAtTop: boolean;
   agentId: string;
   hostLabel: string;
   allowOpen: boolean;

@@ -42,10 +42,14 @@ export function Shortcuts({
   onChange,
   showTitles,
   onShowTitles,
+  atTop,
+  onAtTop,
 }: {
   items: Shortcut[];
   showTitles: boolean;
   onShowTitles: (value: boolean) => void;
+  atTop: boolean;
+  onAtTop: (value: boolean) => void;
   onChange: (items: Shortcut[]) => void;
 }) {
   const current = useRef(items);
@@ -280,7 +284,7 @@ export function Shortcuts({
   return (
     <section className="shortcuts-section">
       <div className="shortcut-heading">
-        <h2>底栏预览</h2>
+        <h2>{atTop ? "顶栏预览" : "底栏预览"}</h2>
         <div className="shortcut-toolbar">
           <button
             type="button"
@@ -319,7 +323,7 @@ export function Shortcuts({
       <div
         ref={dock}
         className={`shortcut-dock ${externalDrag ? "dragging" : ""}`}
-        aria-label="工作台底栏预览"
+        aria-label={atTop ? "工作台顶栏预览" : "工作台底栏预览"}
       >
         <div className="shortcut-dock-row">
           {items.length === 0 && (
@@ -375,6 +379,21 @@ export function Shortcuts({
             </button>
           ))}
         </div>
+      </div>
+      <div className="toggle-row shortcut-title-toggle">
+        <span>
+          <strong id="shortcut-position-label">导航栏置顶</strong>
+          <small>开启后，工作台状态栏移到底部</small>
+        </span>
+        <label className="shortcut-title-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-labelledby="shortcut-position-label"
+            checked={atTop}
+            onChange={(e) => onAtTop(e.target.checked)}
+          />
+        </label>
       </div>
       <div className="toggle-row shortcut-title-toggle">
         <span>

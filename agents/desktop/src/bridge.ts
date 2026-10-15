@@ -14,6 +14,7 @@ const settings: Settings = {
     shortcuts: [],
     shortcutsRevision: 1,
     shortcutsShowTitles: false,
+    shortcutsAtTop: false,
     hostLabel: "我的电脑",
     allowOpen: false,
     ntpServer: "ntp.aliyun.com",

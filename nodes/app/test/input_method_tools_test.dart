@@ -16,7 +16,9 @@ void main() {
     fail = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-          if (call.method == 'appConnection') return null;
+          if (call.method == 'appConnection' || call.method == 'deviceModel') {
+            return null;
+          }
           calls.add(call.method);
           if (fail) throw PlatformException(code: 'operation_failed');
           return call.method == 'pinInputMethodShortcut' ? pinResult : null;
