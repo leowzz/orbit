@@ -2,6 +2,7 @@ export type InputKind = "usage" | "codex";
 export interface Route {
   profile: string;
   sessions_enabled?: boolean;
+  nfcd_metrics_left_padding?: number;
   display_mode?: "usage" | "codex" | "sessions" | "rotating";
   rotation_seconds?: number;
   inputs: { agent_id: string; observation_type: InputKind }[];

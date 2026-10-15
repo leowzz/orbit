@@ -1,6 +1,7 @@
 package core
 
 import (
+	"google.golang.org/protobuf/proto"
 	orbitv1 "orbit/gen/go/orbit/v1"
 	"testing"
 	"time"
@@ -150,5 +151,28 @@ func TestLegacySessionModeBecomesQuotaWithSessionDetails(t *testing.T) {
 	views, _ := e.projectRouteLocked(now, route)
 	if len(views) != 1 || views[0].DisplayKind != "codex" || !views[0].GetSessionsEnabled() {
 		t.Fatal(views)
+	}
+}
+
+func TestNFCDPaddingPublishesOverrideAndRemoval(t *testing.T) {
+	now := time.Now().UTC()
+	e := rotatingEngine(t, now, 3)
+	route := e.config.Routes[0]
+	route.Profile, route.DisplayMode, route.RotationSeconds = appProfile, "codex", 0
+	var previous *orbitv1.DeviceView
+	for i, padding := range []*uint32{nil, proto.Uint32(0), proto.Uint32(64), nil} {
+		route.NFCDMetricsLeftPadding = padding
+		views, err := e.projectRouteLocked(now.Add(time.Duration(i)*time.Second), route)
+		if err != nil || len(views) != 1 {
+			t.Fatal(views, err)
+		}
+		view := views[0]
+		if (view.NfcdMetricsLeftPadding == nil) != (padding == nil) || (padding != nil && view.GetNfcdMetricsLeftPadding() != *padding) {
+			t.Fatal("missing device override", view)
+		}
+		if previous != nil && !publishAndroid(now.Add(time.Duration(i)*time.Second), previous, view) {
+			t.Fatal("padding change delayed")
+		}
+		previous = view
 	}
 }

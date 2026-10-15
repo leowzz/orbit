@@ -16,6 +16,7 @@ message AgentShortcuts {
   repeated AgentShortcut items = 4;
   bool show_titles = 5;
   bool at_top = 6;
+  optional uint32 nfcd_metrics_left_padding = 7;
 }
 message NavigationItem {
   string id = 1;
@@ -33,4 +34,5 @@ message Navigation {
   bool show_titles = 3;
   repeated NavigationItem items = 4;
   bool at_top = 5;
+  optional uint32 nfcd_metrics_left_padding = 6;
 }

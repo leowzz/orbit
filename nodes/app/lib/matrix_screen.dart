@@ -9,7 +9,14 @@ import 'matrix_display.dart';
 
 class MatrixScreen extends StatefulWidget {
   final InboxController? controller;
-  const MatrixScreen({super.key, this.controller});
+  final bool initialFullscreen;
+  final ValueChanged<bool>? onFullscreenChanged;
+  const MatrixScreen({
+    super.key,
+    this.controller,
+    this.initialFullscreen = false,
+    this.onFullscreenChanged,
+  });
   @override
   State<MatrixScreen> createState() => _MatrixScreenState();
 }
@@ -44,6 +51,22 @@ class _MatrixScreenState extends State<MatrixScreen> {
       }
     }
     if (mounted) setState(() => loading = false);
+    if (mounted && widget.initialFullscreen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) openFullscreen();
+      });
+    }
+  }
+
+  Future<void> openFullscreen() async {
+    widget.onFullscreenChanged?.call(true);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            MatrixFullscreen(controller: widget.controller, style: style),
+      ),
+    );
+    if (mounted) widget.onFullscreenChanged?.call(false);
   }
 
   void save() {
@@ -153,16 +176,7 @@ class _MatrixScreenState extends State<MatrixScreen> {
       ],
     );
     final launch = FilledButton.icon(
-      onPressed: loading
-          ? null
-          : () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => MatrixFullscreen(
-                  controller: widget.controller,
-                  style: style,
-                ),
-              ),
-            ),
+      onPressed: loading ? null : openFullscreen,
       icon: const Icon(Icons.fullscreen),
       label: const Text('横向全屏'),
     );

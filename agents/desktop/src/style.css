@@ -741,3 +741,15 @@ button.recommendation {
   flex-basis: 100%;
   line-height: 1.5;
 }
+
+.nfcd-padding-control {
+  margin: 24px 0;
+}
+.nfcd-padding-control input[type="range"] {
+  padding: 0;
+  accent-color: var(--accent, #277765);
+}
+.nfcd-padding-control small {
+  color: #68736c;
+  line-height: 1.5;
+}

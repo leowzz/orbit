@@ -91,15 +91,16 @@ func (x *AgentShortcut) GetIconPng() []byte {
 }
 
 type AgentShortcuts struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AgentId       string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	HostLabel     string                 `protobuf:"bytes,2,opt,name=host_label,json=hostLabel,proto3" json:"host_label,omitempty"`
-	Revision      uint64                 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`
-	Items         []*AgentShortcut       `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
-	ShowTitles    bool                   `protobuf:"varint,5,opt,name=show_titles,json=showTitles,proto3" json:"show_titles,omitempty"`
-	AtTop         bool                   `protobuf:"varint,6,opt,name=at_top,json=atTop,proto3" json:"at_top,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	AgentId                string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	HostLabel              string                 `protobuf:"bytes,2,opt,name=host_label,json=hostLabel,proto3" json:"host_label,omitempty"`
+	Revision               uint64                 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`
+	Items                  []*AgentShortcut       `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
+	ShowTitles             bool                   `protobuf:"varint,5,opt,name=show_titles,json=showTitles,proto3" json:"show_titles,omitempty"`
+	AtTop                  bool                   `protobuf:"varint,6,opt,name=at_top,json=atTop,proto3" json:"at_top,omitempty"`
+	NfcdMetricsLeftPadding *uint32                `protobuf:"varint,7,opt,name=nfcd_metrics_left_padding,json=nfcdMetricsLeftPadding,proto3,oneof" json:"nfcd_metrics_left_padding,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *AgentShortcuts) Reset() {
@@ -172,6 +173,13 @@ func (x *AgentShortcuts) GetAtTop() bool {
 		return x.AtTop
 	}
 	return false
+}
+
+func (x *AgentShortcuts) GetNfcdMetricsLeftPadding() uint32 {
+	if x != nil && x.NfcdMetricsLeftPadding != nil {
+		return *x.NfcdMetricsLeftPadding
+	}
+	return 0
 }
 
 type NavigationItem struct {
@@ -275,14 +283,15 @@ func (x *NavigationItem) GetIconName() string {
 }
 
 type Navigation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Revision      uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
-	ShowTitles    bool                   `protobuf:"varint,3,opt,name=show_titles,json=showTitles,proto3" json:"show_titles,omitempty"`
-	Items         []*NavigationItem      `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
-	AtTop         bool                   `protobuf:"varint,5,opt,name=at_top,json=atTop,proto3" json:"at_top,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	NodeId                 string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Revision               uint64                 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
+	ShowTitles             bool                   `protobuf:"varint,3,opt,name=show_titles,json=showTitles,proto3" json:"show_titles,omitempty"`
+	Items                  []*NavigationItem      `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
+	AtTop                  bool                   `protobuf:"varint,5,opt,name=at_top,json=atTop,proto3" json:"at_top,omitempty"`
+	NfcdMetricsLeftPadding *uint32                `protobuf:"varint,6,opt,name=nfcd_metrics_left_padding,json=nfcdMetricsLeftPadding,proto3,oneof" json:"nfcd_metrics_left_padding,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Navigation) Reset() {
@@ -350,6 +359,13 @@ func (x *Navigation) GetAtTop() bool {
 	return false
 }
 
+func (x *Navigation) GetNfcdMetricsLeftPadding() uint32 {
+	if x != nil && x.NfcdMetricsLeftPadding != nil {
+		return *x.NfcdMetricsLeftPadding
+	}
+	return 0
+}
+
 var File_orbit_v1_navigation_proto protoreflect.FileDescriptor
 
 const file_orbit_v1_navigation_proto_rawDesc = "" +
@@ -359,7 +375,7 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
 	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x19\n" +
-	"\bicon_png\x18\x04 \x01(\fR\aiconPng\"\xcd\x01\n" +
+	"\bicon_png\x18\x04 \x01(\fR\aiconPng\"\xab\x02\n" +
 	"\x0eAgentShortcuts\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
 	"\n" +
@@ -368,7 +384,9 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"\x05items\x18\x04 \x03(\v2\x17.orbit.v1.AgentShortcutR\x05items\x12\x1f\n" +
 	"\vshow_titles\x18\x05 \x01(\bR\n" +
 	"showTitles\x12\x15\n" +
-	"\x06at_top\x18\x06 \x01(\bR\x05atTop\"\xd6\x01\n" +
+	"\x06at_top\x18\x06 \x01(\bR\x05atTop\x12>\n" +
+	"\x19nfcd_metrics_left_padding\x18\a \x01(\rH\x00R\x16nfcdMetricsLeftPadding\x88\x01\x01B\x1c\n" +
+	"\x1a_nfcd_metrics_left_padding\"\xd6\x01\n" +
 	"\x0eNavigationItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
@@ -378,7 +396,7 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"\vshortcut_id\x18\x06 \x01(\tR\n" +
 	"shortcutId\x12\x19\n" +
 	"\bicon_url\x18\a \x01(\tR\aiconUrl\x12\x1b\n" +
-	"\ticon_name\x18\b \x01(\tR\biconName\"\xa9\x01\n" +
+	"\ticon_name\x18\b \x01(\tR\biconName\"\x87\x02\n" +
 	"\n" +
 	"Navigation\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1a\n" +
@@ -386,7 +404,9 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"\vshow_titles\x18\x03 \x01(\bR\n" +
 	"showTitles\x12.\n" +
 	"\x05items\x18\x04 \x03(\v2\x18.orbit.v1.NavigationItemR\x05items\x12\x15\n" +
-	"\x06at_top\x18\x05 \x01(\bR\x05atTopB\x1fZ\x1dorbit/gen/go/orbit/v1;orbitv1b\x06proto3"
+	"\x06at_top\x18\x05 \x01(\bR\x05atTop\x12>\n" +
+	"\x19nfcd_metrics_left_padding\x18\x06 \x01(\rH\x00R\x16nfcdMetricsLeftPadding\x88\x01\x01B\x1c\n" +
+	"\x1a_nfcd_metrics_left_paddingB\x1fZ\x1dorbit/gen/go/orbit/v1;orbitv1b\x06proto3"
 
 var (
 	file_orbit_v1_navigation_proto_rawDescOnce sync.Once
@@ -422,6 +442,8 @@ func file_orbit_v1_navigation_proto_init() {
 	if File_orbit_v1_navigation_proto != nil {
 		return
 	}
+	file_orbit_v1_navigation_proto_msgTypes[1].OneofWrappers = []any{}
+	file_orbit_v1_navigation_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

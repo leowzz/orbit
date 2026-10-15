@@ -10,6 +10,7 @@ export interface Config {
   shortcutsRevision: number;
   shortcutsShowTitles: boolean;
   shortcutsAtTop: boolean;
+  nfcdMetricsLeftPadding: number;
   agentId: string;
   hostLabel: string;
   allowOpen: boolean;

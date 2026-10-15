@@ -122,3 +122,12 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 137 覆盖安装 ARM64 profile APK versionCode 4014，首次安装时间仍为 `2026-10-15 12:10:41`。普通与全屏底栏均显示居中的大图标、默认隐藏标题，没有配置入口；Agent 新增和排序后自动同步，工作台数据恢复实时更新。
 - 在普通模式点击网址与 Microsoft Edge，Agent 分别回报指令 `80b94e72-8cf2-4a78-a837-30dde109e22c`、`8a8a0ca1-1ec1-4b85-aa49-130ecdfea7ce` 为 `COMMAND_STATUS_SUCCEEDED`；全屏点击亦成功。验证未修改用户现有入口。
 - 已安装最新 Mac Agent，保留原凭据和入口；修复后台运行时重新打开应用不能显示设置窗口的问题。Go 全量及 API/Core race、Rust 22 项测试和 Clippy、Flutter analyze 与工作台/导航 10 项测试、Protobuf lint 通过。Windows 的应用选择、图标提取和打开仍待真机验收。
+
+
+## NFCD 工作台边距配置（2026-10-15）
+
+- Mac Agent「快捷导航」新增「NFCD 指标左侧留白」，范围 0–64，默认 16，保存并应用后随快捷导航目录下发。设置字段 `nfcdMetricsLeftPadding`，目录和导航 JSON 字段 `nfcd_metrics_left_padding`。
+- Core「转发规则」的 App 规则可开启「单独设置 NFCD 指标左侧留白」。规则字段 `nfcd_metrics_left_padding` 投影到 DeviceView 的同名 Protobuf 字段（JSON 为 `nfcdMetricsLeftPadding`）；关闭后恢复跟随 Agent。显式 0 与未设置分别保留。
+- App 只在原生型号为 `NFCD_AlipayBoxN5DEL` 且使用横屏紧凑工作台时应用：Core 设备规则优先，随后使用 Agent 默认值，最后回退到 16。多个 Agent 来源按规则输入顺序取第一个已配置值。其他型号不受该设置影响。
+- tx Core 镜像 `orbit-core:nfcd-layout-20261015`；发布目录 `/srv/orbit-deploy/releases/nfcd-layout-20261015`；停机备份 `/srv/orbit-deploy/backups/nfcd-layout-20261015T085159Z`。部署保留 4 条规则、4 个设备授权，两份数据库完整性、二进制摘要、HTTPS 与原令牌验证通过。
+- Mac Agent 已更新，137 覆盖安装 build 4022。实测 Core 设为 0 后立即生效，取消覆盖后恢复 Agent 当前值 24；测试后 Core 保持跟随 Agent（规则修订 156）。Go 全量、Flutter 92 项、Agent Rust 31 项及 Clippy、前端构建和 Protobuf lint 通过。

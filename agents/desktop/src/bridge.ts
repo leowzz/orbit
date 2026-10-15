@@ -15,6 +15,7 @@ const settings: Settings = {
     shortcutsRevision: 1,
     shortcutsShowTitles: false,
     shortcutsAtTop: false,
+    nfcdMetricsLeftPadding: 16,
     hostLabel: "我的电脑",
     allowOpen: false,
     ntpServer: "ntp.aliyun.com",

@@ -98,7 +98,7 @@ func (s *RouteStore) save(d RouteDocument) error {
 func RoutesFromConfig(routes map[string]config.ProjectionRoute) []Route {
 	result := make([]Route, 0, len(routes))
 	for id, r := range routes {
-		item := Route{NodeID: id, Profile: r.Profile, DisplayMode: r.DisplayMode, SessionsEnabled: r.SessionsEnabled, RotationSeconds: r.RotationSeconds}
+		item := Route{NodeID: id, Profile: r.Profile, DisplayMode: r.DisplayMode, SessionsEnabled: r.SessionsEnabled, NFCDMetricsLeftPadding: r.NFCDMetricsLeftPadding, RotationSeconds: r.RotationSeconds}
 		for _, input := range r.Inputs {
 			kind := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
 			if input.ObservationType == "codex" {

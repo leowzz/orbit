@@ -210,6 +210,9 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 
 	for nodeID, route := range routes {
+		if route.NFCDMetricsLeftPadding != nil && (route.Profile != "overview-app" || *route.NFCDMetricsLeftPadding > 64) {
+			return fmt.Errorf("projection route %q: NFCD metrics padding requires an App route and a value from 0 to 64", nodeID)
+		}
 		if _, ok := cfg.App.Devices[nodeID]; ok && route.Profile != "overview-app" {
 			return errors.New("app devices require overview-app routes")
 		}

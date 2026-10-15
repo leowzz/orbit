@@ -74,4 +74,6 @@ message DeviceView {
   string display_kind = 12;
   // Session details are independent of the active metrics page.
   optional bool sessions_enabled = 13;
+  // Device-specific override; absent uses the Agent preference.
+  optional uint32 nfcd_metrics_left_padding = 14;
 }

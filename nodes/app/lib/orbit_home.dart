@@ -6,6 +6,7 @@ import 'input_method_tools.dart';
 import 'matrix_screen.dart';
 import 'app_viewport.dart';
 import 'workbench_screen.dart';
+import 'app_location.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -13,10 +14,14 @@ class OrbitHome extends StatefulWidget {
   final InboxController? controller;
   final bool widgetsEnabled;
   final VoidCallback? onSettings;
+  final AppLocation initialLocation;
+  final ValueChanged<AppLocation>? onLocationChanged;
   const OrbitHome({
     super.key,
     this.controller,
     this.onSettings,
+    this.initialLocation = AppLocation.inbox,
+    this.onLocationChanged,
     required this.inbox,
     required this.widgetsEnabled,
   });
@@ -33,7 +38,51 @@ class _OrbitHomeState extends State<OrbitHome> {
   @override
   void initState() {
     super.initState();
+    selected = widget.initialLocation.tab;
     syncConnection();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      switch (widget.initialLocation) {
+        case AppLocation.workbenchFullscreen:
+          openWorkbench();
+        case AppLocation.matrix:
+        case AppLocation.matrixFullscreen:
+          openMatrix(
+            fullscreen: widget.initialLocation == AppLocation.matrixFullscreen,
+          );
+        default:
+          break;
+      }
+    });
+  }
+
+  Future<void> openWorkbench() async {
+    widget.onLocationChanged?.call(AppLocation.workbenchFullscreen);
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            WorkbenchScreen(controller: widget.controller, fullscreen: true),
+      ),
+    );
+    if (mounted) widget.onLocationChanged?.call(AppLocation.workbench);
+  }
+
+  Future<void> openMatrix({bool fullscreen = false}) async {
+    widget.onLocationChanged?.call(
+      fullscreen ? AppLocation.matrixFullscreen : AppLocation.matrix,
+    );
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => MatrixScreen(
+          controller: widget.controller,
+          initialFullscreen: fullscreen,
+          onFullscreenChanged: (value) => widget.onLocationChanged?.call(
+            value ? AppLocation.matrixFullscreen : AppLocation.matrix,
+          ),
+        ),
+      ),
+    );
+    if (mounted) widget.onLocationChanged?.call(AppLocation.data);
   }
 
   @override
@@ -70,10 +119,14 @@ class _OrbitHomeState extends State<OrbitHome> {
       index: selected,
       children: [
         widget.inbox,
-        WorkbenchScreen(controller: widget.controller),
+        WorkbenchScreen(
+          controller: widget.controller,
+          onEnterFullscreen: openWorkbench,
+        ),
         _ConnectionStatus(
           controller: widget.controller,
           widgetsEnabled: widget.widgetsEnabled,
+          onMatrix: openMatrix,
         ),
         _AppSettings(
           controller: widget.controller,
@@ -81,10 +134,13 @@ class _OrbitHomeState extends State<OrbitHome> {
         ),
       ],
     );
-    void select(int value) => setState(() {
-      selected = value;
-      reading = false;
-    });
+    void select(int value) {
+      setState(() {
+        selected = value;
+        reading = false;
+      });
+      widget.onLocationChanged?.call(AppLocation.fromTab(value));
+    }
 
     return Scaffold(
       body: NotificationListener<InboxReadingNotification>(
@@ -204,9 +260,11 @@ class _AppSettings extends StatelessWidget {
 class _ConnectionStatus extends StatelessWidget {
   final InboxController? controller;
   final bool widgetsEnabled;
+  final VoidCallback onMatrix;
   const _ConnectionStatus({
     required this.controller,
     required this.widgetsEnabled,
+    required this.onMatrix,
   });
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -264,11 +322,7 @@ class _ConnectionStatus extends StatelessWidget {
                   title: const Text('点阵屏'),
                   subtitle: const Text('按转发规则展示 · 横向全屏'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => MatrixScreen(controller: controller),
-                    ),
-                  ),
+                  onTap: onMatrix,
                 ),
                 if (view != null) ...[
                   Text(

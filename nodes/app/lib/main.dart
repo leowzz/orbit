@@ -16,6 +16,7 @@ import 'orbit_home.dart';
 import 'connection_config.dart';
 import 'scan_connection_screen.dart';
 import 'app_viewport.dart';
+import 'app_location.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,8 @@ class OrbitApp extends StatefulWidget {
 
 class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   final secure = const FlutterSecureStorage();
+  final locationStore = AppLocationStore();
+  AppLocation initialLocation = AppLocation.inbox;
   InboxController? controller;
   Json? connection;
   String? failure;
@@ -42,6 +45,7 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   }
 
   Future<void> _restore() async {
+    initialLocation = await locationStore.read();
     try {
       final value = await secure.read(key: 'connection');
       if (value != null) {
@@ -192,6 +196,16 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
           )
         : Builder(
             builder: (context) => OrbitHome(
+              initialLocation: initialLocation,
+              onLocationChanged: (page) {
+                locationStore.write(page).catchError((Object _) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('未能保存当前页面，下次打开可能无法恢复')),
+                    );
+                  }
+                });
+              },
               controller: controller,
               onSettings: controller == null ? null : () => _settings(context),
               widgetsEnabled: Platform.isAndroid,

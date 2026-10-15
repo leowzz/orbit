@@ -2,6 +2,7 @@ package inbox
 
 import (
 	"context"
+	"google.golang.org/protobuf/proto"
 	v "orbit/gen/go/orbit/v1"
 	"testing"
 )
@@ -68,5 +69,35 @@ func TestNavigationPositionChangesWithoutChangingItems(t *testing.T) {
 		if saved, err := s.Navigation(ctx, "node"); err != nil || saved.AtTop != atTop {
 			t.Fatal("position not persisted", saved, err)
 		}
+	}
+}
+
+func TestNFCDPaddingCatalogProjection(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	for i, padding := range []*uint32{nil, proto.Uint32(0), proto.Uint32(64), nil} {
+		c := &v.AgentShortcuts{AgentId: "mac", Revision: uint64(i + 1), NfcdMetricsLeftPadding: padding}
+		if err := s.AcceptShortcutCatalog(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+		d, err := s.ProjectNavigation(ctx, "node", []string{"mac"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		wire := d.Proto("node")
+		if (wire.NfcdMetricsLeftPadding == nil) != (padding == nil) || (padding != nil && wire.GetNfcdMetricsLeftPadding() != *padding) {
+			t.Fatal("lost padding presence/value", d)
+		}
+		saved, err := s.Navigation(ctx, "node")
+		if err != nil || (saved.NFCDMetricsLeftPadding == nil) != (padding == nil) {
+			t.Fatal("lost persisted padding", saved, err)
+		}
+	}
+	if err := s.AcceptShortcutCatalog(ctx, &v.AgentShortcuts{AgentId: "mac", Revision: 5, NfcdMetricsLeftPadding: proto.Uint32(65)}); err == nil {
+		t.Fatal("accepted out of range padding")
 	}
 }

@@ -44,12 +44,16 @@ export function Shortcuts({
   onShowTitles,
   atTop,
   onAtTop,
+  nfcdLeftPadding,
+  onNfcdLeftPadding,
 }: {
   items: Shortcut[];
   showTitles: boolean;
   onShowTitles: (value: boolean) => void;
   atTop: boolean;
   onAtTop: (value: boolean) => void;
+  nfcdLeftPadding: number;
+  onNfcdLeftPadding: (value: number) => void;
   onChange: (items: Shortcut[]) => void;
 }) {
   const current = useRef(items);
@@ -380,6 +384,21 @@ export function Shortcuts({
           ))}
         </div>
       </div>
+      <label className="field nfcd-padding-control">
+        <span>NFCD 指标左侧留白 · {nfcdLeftPadding}</span>
+        <input
+          type="range"
+          min={0}
+          max={64}
+          step={1}
+          value={nfcdLeftPadding}
+          onChange={(e) => onNfcdLeftPadding(Number(e.target.value))}
+        />
+        <small>
+          仅用于 NFCD 设备工作台，默认 16；Core
+          的设备规则可单独覆盖。保存并应用后生效。
+        </small>
+      </label>
       <div className="toggle-row shortcut-title-toggle">
         <span>
           <strong id="shortcut-position-label">导航栏置顶</strong>

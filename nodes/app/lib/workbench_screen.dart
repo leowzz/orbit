@@ -15,7 +15,13 @@ const _line = Color(0xffdce1e2);
 class WorkbenchScreen extends StatefulWidget {
   final InboxController? controller;
   final bool fullscreen;
-  const WorkbenchScreen({super.key, this.controller, this.fullscreen = false});
+  final VoidCallback? onEnterFullscreen;
+  const WorkbenchScreen({
+    super.key,
+    this.controller,
+    this.fullscreen = false,
+    this.onEnterFullscreen,
+  });
 
   @override
   State<WorkbenchScreen> createState() => _WorkbenchScreenState();
@@ -27,6 +33,24 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   bool _leaving = false;
   bool _isAlipayBox = false;
   bool get _android => defaultTargetPlatform == TargetPlatform.android;
+
+  double get _metricsLeftPadding {
+    if (!_isAlipayBox) return 16;
+    // A device rule overrides the Agent default; zero is an explicit value.
+    for (final value in [
+      widget.controller?.view?['nfcdMetricsLeftPadding'],
+      widget.controller?.navigation['nfcd_metrics_left_padding'],
+    ]) {
+      if (value is num &&
+          value.isFinite &&
+          value >= 0 &&
+          value <= 64 &&
+          value == value.roundToDouble()) {
+        return value.toDouble();
+      }
+    }
+    return 16;
+  }
 
   @override
   void initState() {
@@ -77,6 +101,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       if (_leaving) return;
       _leaving = true;
       Navigator.of(context).pop();
+    } else if (widget.onEnterFullscreen != null) {
+      widget.onEnterFullscreen!();
     } else {
       Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -356,6 +382,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     bool compact = false,
     bool divider = false,
   }) => Container(
+    width: double.infinity,
     decoration: BoxDecoration(
       border: Border(
         top: BorderSide(
@@ -363,24 +390,24 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         ),
       ),
     ),
-    padding: EdgeInsets.fromLTRB(compact ? 30 : 0, 4, 14, 4),
-    child: LayoutBuilder(
-      builder: (context, bounds) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            metric.label,
-            style: const TextStyle(fontSize: 12, color: _muted, height: 1.15),
-          ),
-          const SizedBox(height: 3),
-          FittedBox(
+    padding: EdgeInsets.fromLTRB(compact ? _metricsLeftPadding : 0, 4, 14, 4),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          metric.label,
+          style: const TextStyle(fontSize: 13, color: _muted, height: 1.15),
+        ),
+        const SizedBox(height: 3),
+        Flexible(
+          child: FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
               metric.value,
               style: TextStyle(
-                fontSize: compact ? 23 : 29,
+                fontSize: metric.prominent ? 44 : (compact ? 25 : 29),
                 height: 1.15,
                 fontWeight: FontWeight.w700,
                 color: metric.accent
@@ -389,13 +416,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
               ),
             ),
           ),
-          if (!compact || bounds.maxHeight >= 64)
-            Text(
-              metric.note,
-              style: const TextStyle(fontSize: 11, color: _muted, height: 1.15),
-            ),
-        ],
-      ),
+        ),
+      ],
     ),
   );
 
@@ -622,9 +644,14 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
 }
 
 class _Metric {
-  final String label, value, note;
-  final bool accent;
-  const _Metric(this.label, this.value, this.note, {this.accent = false});
+  final String label, value;
+  final bool accent, prominent;
+  const _Metric(
+    this.label,
+    this.value, {
+    this.accent = false,
+    this.prominent = false,
+  });
 }
 
 List<_Metric> _metrics(Json? view) {
@@ -636,13 +663,11 @@ List<_Metric> _metrics(Json? view) {
       r'^(\d+)\s+(\d{2}:\d{2})$',
     ).firstMatch(view?['footer']?['text'] ?? '');
     return [
-      _Metric('剩余额度', view?['primary']?['text'] ?? '--%', '剩余'),
-      _Metric('重置日期', days?[2] ?? '--/--', '月 / 日'),
-      _Metric('重置时间', hours?[2] ?? '--:--', '时 / 分'),
+      _Metric('剩余额度', view?['primary']?['text'] ?? '--%', prominent: true),
+      _Metric('重置时间', '${days?[2] ?? '--/--'} ${hours?[2] ?? '--:--'}'),
       _Metric(
         '剩余时间',
         days != null && hours != null ? '${days[1]}d${hours[1]}h' : '--',
-        '距重置',
         accent: true,
       ),
     ];
@@ -653,15 +678,13 @@ List<_Metric> _metrics(Json? view) {
     _Metric(
       '实际成本',
       cost == null ? '--' : '\$${(cost / 1000000).toStringAsFixed(2)}',
-      '${usage?['currencyCode'] ?? 'USD'}',
     ),
-    _Metric('Token', _compact(usage?['tokenCount']), '今日累计'),
-    _Metric('TPM', _compact(usage?['tpm']), '当前吞吐'),
+    _Metric('Token', _compact(usage?['tokenCount'])),
+    _Metric('TPM', _compact(usage?['tpm'])),
     if (view?['displayKind'] == null)
       _Metric(
         '运行任务',
         '${view?['codex']?['runningCount'] ?? '--'}',
-        '共 ${view?['codex']?['totalCount'] ?? '--'} 个',
         accent: true,
       ),
   ];

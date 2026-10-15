@@ -213,6 +213,8 @@ function App() {
         imported.config.shortcutsShowTitles =
           settings.config.shortcutsShowTitles;
         imported.config.shortcutsAtTop = settings.config.shortcutsAtTop;
+        imported.config.nfcdMetricsLeftPadding =
+          settings.config.nfcdMetricsLeftPadding;
       }
       setSettings(imported);
       setNotice("配置已导入，检查后保存即可生效");
@@ -734,6 +736,10 @@ function App() {
                   onShowTitles={(value) => config("shortcutsShowTitles", value)}
                   atTop={settings.config.shortcutsAtTop}
                   onAtTop={(value) => config("shortcutsAtTop", value)}
+                  nfcdLeftPadding={settings.config.nfcdMetricsLeftPadding}
+                  onNfcdLeftPadding={(value) =>
+                    config("nfcdMetricsLeftPadding", value)
+                  }
                   onChange={(items) => config("shortcuts", items)}
                 />
               )}

@@ -12,6 +12,7 @@ pub struct Config {
     pub shortcuts_revision: u64,
     pub shortcuts_show_titles: bool,
     pub shortcuts_at_top: bool,
+    pub nfcd_metrics_left_padding: u32,
     pub agent_id: String,
     pub host_label: String,
     pub mqtt: Mqtt,
@@ -103,6 +104,7 @@ impl Default for Config {
             shortcuts_revision: 1,
             shortcuts_show_titles: false,
             shortcuts_at_top: false,
+            nfcd_metrics_left_padding: 16,
             agent_id: default_id(),
             host_label: std::env::var("COMPUTERNAME")
                 .or_else(|_| std::env::var("HOSTNAME"))
@@ -157,6 +159,9 @@ impl Settings {
 impl Config {
     pub fn validate(&self, secrets: &Secrets) -> Result<(), String> {
         crate::shortcuts::validate(&self.shortcuts)?;
+        if self.nfcd_metrics_left_padding > 64 {
+            return Err("NFCD 指标左侧留白需在 0–64 之间".into());
+        }
         if self.agent_id.is_empty()
             || self.agent_id.len() > 128
             || !self

@@ -27,18 +27,20 @@ type NavigationItem struct {
 	IconName   string `json:"icon_name,omitempty"`
 }
 type Navigation struct {
-	Revision   int64            `json:"revision"`
-	ShowTitles bool             `json:"show_titles"`
-	AtTop      bool             `json:"at_top"`
-	Items      []NavigationItem `json:"items"`
+	NFCDMetricsLeftPadding *uint32          `json:"nfcd_metrics_left_padding,omitempty"`
+	Revision               int64            `json:"revision"`
+	ShowTitles             bool             `json:"show_titles"`
+	AtTop                  bool             `json:"at_top"`
+	Items                  []NavigationItem `json:"items"`
 }
 type ShortcutCatalog struct {
-	AgentID    string           `json:"agent_id"`
-	HostLabel  string           `json:"host_label"`
-	Revision   uint64           `json:"revision"`
-	ShowTitles bool             `json:"show_titles"`
-	AtTop      bool             `json:"at_top"`
-	Items      []NavigationItem `json:"items"`
+	NFCDMetricsLeftPadding *uint32          `json:"nfcd_metrics_left_padding,omitempty"`
+	AgentID                string           `json:"agent_id"`
+	HostLabel              string           `json:"host_label"`
+	Revision               uint64           `json:"revision"`
+	ShowTitles             bool             `json:"show_titles"`
+	AtTop                  bool             `json:"at_top"`
+	Items                  []NavigationItem `json:"items"`
 }
 
 var navID = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
@@ -93,6 +95,9 @@ func (s *Store) ProjectNavigation(ctx context.Context, node string, agents []str
 			}
 			d.ShowTitles = d.ShowTitles || cat.ShowTitles
 			d.AtTop = d.AtTop || cat.AtTop
+			if d.NFCDMetricsLeftPadding == nil {
+				d.NFCDMetricsLeftPadding = cat.NFCDMetricsLeftPadding
+			}
 			for _, entry := range cat.Items {
 				item := entry
 				sum := sha256.Sum256([]byte(agent + "\x00" + entry.ID))
@@ -137,10 +142,10 @@ func (s *Store) NavigationIcon(ctx context.Context, id string) ([]byte, error) {
 	return b, err
 }
 func (s *Store) AcceptShortcutCatalog(ctx context.Context, c *v.AgentShortcuts) error {
-	if !navID.MatchString(c.AgentId) || c.Revision == 0 || c.Revision > 1<<63-1 || len(c.Items) > 24 || len(c.HostLabel) > 192 {
+	if (c.NfcdMetricsLeftPadding != nil && *c.NfcdMetricsLeftPadding > 64) || !navID.MatchString(c.AgentId) || c.Revision == 0 || c.Revision > 1<<63-1 || len(c.Items) > 24 || len(c.HostLabel) > 192 {
 		return navigationFault()
 	}
-	d := ShortcutCatalog{AgentID: c.AgentId, HostLabel: c.HostLabel, Revision: c.Revision, ShowTitles: c.ShowTitles, AtTop: c.AtTop, Items: []NavigationItem{}}
+	d := ShortcutCatalog{AgentID: c.AgentId, HostLabel: c.HostLabel, Revision: c.Revision, ShowTitles: c.ShowTitles, AtTop: c.AtTop, NFCDMetricsLeftPadding: c.NfcdMetricsLeftPadding, Items: []NavigationItem{}}
 	seen := map[string]bool{}
 	for _, item := range c.Items {
 		if item == nil || !navID.MatchString(item.Id) || seen[item.Id] || strings.TrimSpace(item.Title) == "" || len(item.Title) > 160 || (item.Kind != "app" && item.Kind != "url") {
@@ -206,7 +211,7 @@ func (s *Store) ResolveShortcut(ctx context.Context, node, id string) (string, s
 	return "", "", 0, &Fault{Code: "shortcut_unavailable"}
 }
 func (d Navigation) Proto(node string) *v.Navigation {
-	out := &v.Navigation{NodeId: node, Revision: uint64(d.Revision), ShowTitles: d.ShowTitles, AtTop: d.AtTop}
+	out := &v.Navigation{NodeId: node, Revision: uint64(d.Revision), ShowTitles: d.ShowTitles, AtTop: d.AtTop, NfcdMetricsLeftPadding: d.NFCDMetricsLeftPadding}
 	for _, i := range d.Items {
 		out.Items = append(out.Items, &v.NavigationItem{Id: i.ID, Title: i.Title, Kind: i.Kind, Target: i.Target, AgentId: i.AgentID, ShortcutId: i.ShortcutID, IconUrl: i.IconURL, IconName: i.IconName})
 	}

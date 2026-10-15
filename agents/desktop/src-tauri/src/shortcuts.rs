@@ -88,6 +88,7 @@ pub fn catalog(c: &Config) -> wire::AgentShortcuts {
         revision: c.shortcuts_revision.max(1),
         show_titles: c.shortcuts_show_titles,
         at_top: c.shortcuts_at_top,
+        nfcd_metrics_left_padding: Some(c.nfcd_metrics_left_padding),
         items: c
             .shortcuts
             .iter()
@@ -311,6 +312,21 @@ mod tests {
             c = serde_json::from_value(saved).unwrap();
             assert_eq!(catalog(&c).at_top, at_top);
         }
+    }
+
+    #[test]
+    fn nfcd_padding_defaults_and_roundtrips_zero() {
+        let mut c: Config = serde_json::from_str(r#"{"agentId":"test"}"#).unwrap();
+        assert_eq!(c.nfcd_metrics_left_padding, 16);
+        c.mqtt.url = "mqtts://example.test:8883".into();
+        for padding in [0, 16, 64] {
+            c.nfcd_metrics_left_padding = padding;
+            c = serde_json::from_value(serde_json::to_value(&c).unwrap()).unwrap();
+            assert_eq!(catalog(&c).nfcd_metrics_left_padding, Some(padding));
+            assert!(c.validate(&crate::config::Secrets::default()).is_ok());
+        }
+        c.nfcd_metrics_left_padding = 65;
+        assert!(c.validate(&crate::config::Secrets::default()).is_err());
     }
 
     #[test]

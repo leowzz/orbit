@@ -13,7 +13,7 @@ func publishAndroid(now time.Time, previous, next *orbitv1.DeviceView) bool {
 	if previous == nil {
 		return true
 	}
-	if previous.GetSessionsEnabled() != next.GetSessionsEnabled() || previous.DisplayKind != next.DisplayKind || previous.Freshness != next.Freshness || previous.GetUsage().GetFreshness() != next.GetUsage().GetFreshness() ||
+	if (previous.NfcdMetricsLeftPadding == nil) != (next.NfcdMetricsLeftPadding == nil) || previous.GetNfcdMetricsLeftPadding() != next.GetNfcdMetricsLeftPadding() || previous.GetSessionsEnabled() != next.GetSessionsEnabled() || previous.DisplayKind != next.DisplayKind || previous.Freshness != next.Freshness || previous.GetUsage().GetFreshness() != next.GetUsage().GetFreshness() ||
 		previous.GetCodex().GetFreshness() != next.GetCodex().GetFreshness() ||
 		(previous.Usage == nil) != (next.Usage == nil) || !proto.Equal(androidSessions(previous.Codex), androidSessions(next.Codex)) {
 		return true

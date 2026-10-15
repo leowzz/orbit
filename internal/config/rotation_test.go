@@ -67,3 +67,17 @@ func TestSessionSwitchRequiresCodexAndDetailDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNFCDPaddingValidation(t *testing.T) {
+	cfg := CoreConfig{ObservationPolicies: map[string]ObservationPolicy{"usage": {MaxTTL: Duration{Duration: time.Minute}}}}
+	for _, n := range []uint32{0, 16, 64, 65} {
+		route := ProjectionRoute{Profile: "overview-app", NFCDMetricsLeftPadding: &n, Inputs: []ProjectionInput{{AgentID: "agent", ObservationType: "usage"}}}
+		if err := cfg.ValidateRoutes(map[string]ProjectionRoute{"node": route}); (err == nil) != (n <= 64) {
+			t.Fatalf("padding %d: %v", n, err)
+		}
+		route.Profile = "overview-web"
+		if err := cfg.ValidateRoutes(map[string]ProjectionRoute{"node": route}); err == nil {
+			t.Fatal("accepted padding for non-App route")
+		}
+	}
+}

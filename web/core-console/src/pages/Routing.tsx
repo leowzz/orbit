@@ -277,6 +277,9 @@ function Editor({
     [sessions, setSessions] = useState(
       editing.route ? sessionsEnabled(editing.route) : false,
     ),
+    [nfcdPadding, setNfcdPadding] = useState<number | undefined>(
+      editing.route?.nfcd_metrics_left_padding,
+    ),
     [usage, setUsage] = useState(
       editing.route?.inputs.find((i) => i.observation_type === "usage")
         ?.agent_id ?? "",
@@ -349,6 +352,9 @@ function Editor({
     else
       routes[node] = {
         profile,
+        ...(profile === "overview-app" && nfcdPadding !== undefined
+          ? { nfcd_metrics_left_padding: nfcdPadding }
+          : {}),
         sessions_enabled: sessions && supportsSessions({ profile } as Route),
         ...(mode ? { display_mode: mode as Route["display_mode"] } : {}),
         ...(mode === "rotating" ? { rotation_seconds: rotationSeconds } : {}),
@@ -495,6 +501,43 @@ function Editor({
                   />
                   转发 Session 信息（会话列表详情）
                 </label>
+              )}
+              {profile === "overview-app" && (
+                <>
+                  <label className="session-info-option">
+                    <input
+                      type="checkbox"
+                      checked={nfcdPadding !== undefined}
+                      onChange={(e) => {
+                        setNfcdPadding(e.target.checked ? 16 : undefined);
+                        setDirty(true);
+                      }}
+                    />
+                    单独设置 NFCD 指标左侧留白
+                  </label>
+                  {nfcdPadding !== undefined && (
+                    <>
+                      <label htmlFor="nfcd-padding">
+                        左侧留白 · {nfcdPadding}
+                      </label>
+                      <input
+                        id="nfcd-padding"
+                        type="range"
+                        min={0}
+                        max={64}
+                        step={1}
+                        value={nfcdPadding}
+                        onChange={(e) => {
+                          setNfcdPadding(Number(e.target.value));
+                          setDirty(true);
+                        }}
+                      />
+                    </>
+                  )}
+                  <p className="field-hint">
+                    仅影响 NFCD 设备工作台。关闭后跟随 Agent，未配置时为 16。
+                  </p>
+                </>
               )}
               {mode === "rotating" && (
                 <>

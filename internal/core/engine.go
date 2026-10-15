@@ -37,13 +37,14 @@ type RouteInput struct {
 }
 
 type Route struct {
-	SessionsEnabled *bool
-	DisplayMode     string
-	NodeID          string
-	AgentID         string
-	Profile         string
-	Inputs          []RouteInput
-	RotationSeconds int
+	NFCDMetricsLeftPadding *uint32
+	SessionsEnabled        *bool
+	DisplayMode            string
+	NodeID                 string
+	AgentID                string
+	Profile                string
+	Inputs                 []RouteInput
+	RotationSeconds        int
 }
 
 type UsagePolicy struct {
@@ -120,6 +121,9 @@ func New(config Config) (*Engine, error) {
 	seen := make(map[string]struct{}, len(config.Routes))
 	for index := range config.Routes {
 		route := &config.Routes[index]
+		if route.NFCDMetricsLeftPadding != nil && (route.Profile != appProfile || *route.NFCDMetricsLeftPadding > 64) {
+			return nil, fmt.Errorf("invalid NFCD metrics padding for node %q", route.NodeID)
+		}
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
 		}
@@ -524,13 +528,14 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 			ProducedAt: timestamppb.New(now),
 			ExpiresAt:  timestamppb.New(retainUntil),
 		},
-		SessionsEnabled: proto.Bool(configured.sessionsEnabled()),
-		DisplayKind:     route.DisplayMode,
-		NodeId:          nodeID,
-		CoreEpoch:       e.config.CoreEpoch,
-		Freshness:       freshness,
-		FreshUntil:      timestamppb.New(freshUntil),
-		RetainUntil:     timestamppb.New(retainUntil),
+		SessionsEnabled:        proto.Bool(configured.sessionsEnabled()),
+		NfcdMetricsLeftPadding: configured.NFCDMetricsLeftPadding,
+		DisplayKind:            route.DisplayMode,
+		NodeId:                 nodeID,
+		CoreEpoch:              e.config.CoreEpoch,
+		Freshness:              freshness,
+		FreshUntil:             timestamppb.New(freshUntil),
+		RetainUntil:            timestamppb.New(retainUntil),
 	}
 	if explicitPage && !hasUsage && !hasCodex {
 		view.Primary = &orbitv1.DisplaySlot{Text: "--"}

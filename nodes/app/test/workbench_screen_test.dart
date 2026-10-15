@@ -468,6 +468,51 @@ void main() {
       oldCore.client.close();
     },
   );
+  for (final model in ['NFCD_AlipayBoxN5DEL', 'other-device']) {
+    testWidgets(
+      'NFCD padding follows live Core override then Agent on $model',
+      (tester) async {
+        deviceModel = model;
+        tester.view.physicalSize = const Size(800, 360);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        controller.view = fixture();
+        controller.navigation = {'items': []};
+        await tester.pumpWidget(
+          MaterialApp(home: WorkbenchScreen(controller: controller)),
+        );
+        await tester.pumpAndSettle();
+        double left() => tester.getTopLeft(find.text('剩余额度')).dx;
+        final initial = left();
+        final nfcd = model == 'NFCD_AlipayBoxN5DEL';
+        controller.navigation['nfcd_metrics_left_padding'] = 0;
+        controller.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(left(), initial - (nfcd ? 16 : 0));
+        controller.view!['nfcdMetricsLeftPadding'] = 64;
+        controller.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(left(), initial + (nfcd ? 48 : 0));
+        controller.view!['nfcdMetricsLeftPadding'] = 0;
+        controller.navigation['nfcd_metrics_left_padding'] = 32;
+        controller.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(left(), initial - (nfcd ? 16 : 0));
+        controller.view!.remove('nfcdMetricsLeftPadding');
+        controller.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(left(), initial + (nfcd ? 16 : 0));
+        controller.navigation['nfcd_metrics_left_padding'] = 100;
+        controller.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(left(), initial);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
   testWidgets('render short landscape and portrait previews', (tester) async {
     // Use a local system font for optional review artifacts, never a test dependency.
     final font = Platform.environment['WORKBENCH_PREVIEW_FONT'];
