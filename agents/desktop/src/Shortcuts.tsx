@@ -40,20 +40,8 @@ function AppIcon({ item }: { item: Shortcut }) {
 export function Shortcuts({
   items,
   onChange,
-  showTitles,
-  onShowTitles,
-  atTop,
-  onAtTop,
-  nfcdLeftPadding,
-  onNfcdLeftPadding,
 }: {
   items: Shortcut[];
-  showTitles: boolean;
-  onShowTitles: (value: boolean) => void;
-  atTop: boolean;
-  onAtTop: (value: boolean) => void;
-  nfcdLeftPadding: number;
-  onNfcdLeftPadding: (value: number) => void;
   onChange: (items: Shortcut[]) => void;
 }) {
   const current = useRef(items);
@@ -84,7 +72,7 @@ export function Shortcuts({
   } | null>(null);
   const lastDrag = useRef(0);
   const [opening, setOpening] = useState<string | null>(null);
-  const dock = useRef<HTMLDivElement>(null);
+  const catalog = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
   const refreshBusy = useRef(false);
 
@@ -252,15 +240,16 @@ export function Shortcuts({
     if (!g) return;
     if (!g.active && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 7) return;
     g.active = true;
-    const bounds = dock.current?.getBoundingClientRect();
-    if (bounds && dock.current) {
-      if (e.clientX > bounds.right - 28) dock.current.scrollLeft += 16;
-      if (e.clientX < bounds.left + 28) dock.current.scrollLeft -= 16;
+    const scroll = catalog.current?.closest<HTMLElement>(".scroll");
+    const bounds = scroll?.getBoundingClientRect();
+    if (bounds && scroll) {
+      if (e.clientY > bounds.bottom - 28) scroll.scrollTop += 16;
+      if (e.clientY < bounds.top + 28) scroll.scrollTop -= 16;
     }
     const target = document
       .elementFromPoint(e.clientX, e.clientY)
-      ?.closest<HTMLElement>("[data-dock-id]");
-    if (target?.dataset.dockId) g.over = target.dataset.dockId;
+      ?.closest<HTMLElement>("[data-shortcut-id]");
+    if (target?.dataset.shortcutId) g.over = target.dataset.shortcutId;
     setDrag({ id: g.id, over: g.over });
   }
   function endDrag(e: PointerEvent<HTMLButtonElement>, cancel = false) {
@@ -288,7 +277,7 @@ export function Shortcuts({
   return (
     <section className="shortcuts-section">
       <div className="shortcut-heading">
-        <h2>{atTop ? "顶栏预览" : "底栏预览"}</h2>
+        <h2>已添加的入口</h2>
         <div className="shortcut-toolbar">
           <button
             type="button"
@@ -317,7 +306,7 @@ export function Shortcuts({
         </div>
       </div>
       <p className="shortcut-help">
-        拖拽调整顺序 · 双击打开 · 右键编辑或删除，也可直接拖入应用
+        拖拽调整顺序 · 双击在本机打开 · 右键编辑或删除，也可直接拖入应用
       </p>
       {error && (
         <div role="alert" className="alert error">
@@ -325,24 +314,24 @@ export function Shortcuts({
         </div>
       )}
       <div
-        ref={dock}
-        className={`shortcut-dock ${externalDrag ? "dragging" : ""}`}
-        aria-label={atTop ? "工作台顶栏预览" : "工作台底栏预览"}
+        ref={catalog}
+        className={`shortcut-catalog ${externalDrag ? "dragging" : ""}`}
+        aria-label="已添加的快捷入口"
       >
-        <div className="shortcut-dock-row">
+        <div className="shortcut-catalog-grid">
           {items.length === 0 && (
             <span className="shortcut-empty">
-              从下方推荐中添加，或将应用拖到这里
+              添加应用或网址，也可从下方最近使用中选择
             </span>
           )}
           {items.map((item) => (
             <button
               type="button"
               key={item.id}
-              data-dock-id={item.id}
+              data-shortcut-id={item.id}
               data-shortcut-icon={item.id}
-              className={`dock-item ${showTitles ? "with-title" : ""} ${drag?.id === item.id ? "is-dragging" : ""} ${drag?.over === item.id && drag.id !== item.id ? "drop-target" : ""}`}
-              title={`${item.title} · 双击打开，右键编辑`}
+              className={`shortcut-card ${drag?.id === item.id ? "is-dragging" : ""} ${drag?.over === item.id && drag.id !== item.id ? "drop-target" : ""}`}
+              title={`${item.title} · 双击在本机打开，右键编辑`}
               aria-label={item.title}
               aria-busy={opening === item.id}
               onDoubleClick={() => void launch(item)}
@@ -379,55 +368,20 @@ export function Shortcuts({
               }}
             >
               <AppIcon item={item} />
-              {showTitles && <span>{item.title}</span>}
+              <span className="shortcut-card-info">
+                <span className="shortcut-card-title">{item.title}</span>
+                <span className="shortcut-card-kind">
+                  {item.kind === "app" ? "应用" : "网址"}
+                </span>
+              </span>
             </button>
           ))}
         </div>
       </div>
-      <label className="field nfcd-padding-control">
-        <span>NFCD 指标左侧留白 · {nfcdLeftPadding}</span>
-        <input
-          type="range"
-          min={0}
-          max={64}
-          step={1}
-          value={nfcdLeftPadding}
-          onChange={(e) => onNfcdLeftPadding(Number(e.target.value))}
-        />
-        <small>
-          仅用于 NFCD 设备工作台，默认 16；Core
-          的设备规则可单独覆盖。保存并应用后生效。
-        </small>
-      </label>
-      <div className="toggle-row shortcut-title-toggle">
-        <span>
-          <strong id="shortcut-position-label">导航栏置顶</strong>
-          <small>开启后，工作台状态栏移到底部</small>
-        </span>
-        <label className="shortcut-title-switch">
-          <input
-            type="checkbox"
-            role="switch"
-            aria-labelledby="shortcut-position-label"
-            checked={atTop}
-            onChange={(e) => onAtTop(e.target.checked)}
-          />
-        </label>
-      </div>
-      <div className="toggle-row shortcut-title-toggle">
-        <span>
-          <strong id="shortcut-title-label">在工作台显示标题</strong>
-        </span>
-        <label className="shortcut-title-switch">
-          <input
-            type="checkbox"
-            role="switch"
-            aria-labelledby="shortcut-title-label"
-            checked={showTitles}
-            onChange={(e) => onShowTitles(e.target.checked)}
-          />
-        </label>
-      </div>
+      <p className="field-hint">
+        在 Core 的「设备 →
+        快捷操作」中配对接收设备，并设置各设备的标题显示、顺序和位置。
+      </p>
       <div className="shortcut-heading">
         <h2>最近使用 · 点击添加</h2>
         <button

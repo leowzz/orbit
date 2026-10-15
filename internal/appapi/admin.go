@@ -46,6 +46,7 @@ func (s *Server) recordSync(node, cursor string) {
 // It is deliberately not reachable from the public bearer-token API listener.
 func (s *Server) AdminHandler() http.Handler {
 	mux := http.NewServeMux()
+	s.navigationAdminRoutes(mux)
 	mux.HandleFunc("GET /api/app/devices", s.listDevices)
 	mux.HandleFunc("POST /api/app/devices", s.createDevice)
 	mux.HandleFunc("DELETE /api/app/devices/{id}", s.deleteDevice)
@@ -188,6 +189,8 @@ func (s *Server) changeDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteDevice(w http.ResponseWriter, r *http.Request) {
+	s.navMu.Lock()
+	defer s.navMu.Unlock()
 	id := r.PathValue("id")
 	s.mu.Lock()
 	if _, ok := s.devices[id]; !ok {
@@ -203,9 +206,10 @@ func (s *Server) deleteDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, err := json.Marshal(next)
 	if err == nil {
-		err = s.store.SaveDevices(r.Context(), raw)
+		err = s.store.DeleteNodeNavigation(r.Context(), id, raw)
 	}
 	if err == nil {
+		delete(s.nodeCommands, id)
 		s.devices = next
 		delete(s.activity, id)
 	}

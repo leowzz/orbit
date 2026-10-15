@@ -143,3 +143,31 @@ export const sessionsEnabled = (route: Route) =>
   (route.sessions_enabled ??
     ((!route.display_mode || route.display_mode === "sessions") &&
       route.inputs.some((input) => input.observation_type === "codex")));
+
+export interface ShortcutEntry {
+  id: string;
+  title: string;
+  kind: string;
+  icon_name?: string;
+}
+export interface ExecutionEndpoint {
+  executor_kind: "agent" | "node";
+  executor_id: string;
+  host_label: string;
+  revision: number;
+  items: ShortcutEntry[];
+}
+export interface ShortcutPairing {
+  executor_kind: "agent" | "node";
+  executor_id: string;
+  enabled: boolean;
+  items: string[] | null;
+}
+export interface NavigationSettings {
+  revision: number;
+  show_titles: boolean;
+  at_top: boolean;
+  nfcd_metrics_left_padding: number;
+  pairs: ShortcutPairing[];
+  publish_pending?: boolean;
+}

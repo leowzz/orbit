@@ -90,7 +90,7 @@ func (s *Store) migrate() error {
 	if err := s.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		return err
 	}
-	if version > 2 {
+	if version > 3 {
 		return errors.New("inbox database is newer than this Core")
 	}
 	tx, err := s.db.Begin()
@@ -109,7 +109,9 @@ func (s *Store) migrate() error {
  CREATE TABLE IF NOT EXISTS navigation_configs (node_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS agent_shortcuts (agent_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS navigation_icons (id TEXT PRIMARY KEY, png BLOB NOT NULL);
- PRAGMA user_version=2;`)
+ CREATE TABLE IF NOT EXISTS navigation_settings (node_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS node_shortcuts (node_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);
+ PRAGMA user_version=3;`)
 	if err != nil {
 		return err
 	}

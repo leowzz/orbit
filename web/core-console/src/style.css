@@ -2153,3 +2153,153 @@ dt,
 .session-info-option input {
   width: auto;
 }
+
+.device-section {
+  padding: 24px;
+  margin: 18px 0;
+}
+.device-section h2 {
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+.device-section > p {
+  color: var(--muted);
+  margin: 8px 0 18px;
+}
+.device-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.device-section-head h2 {
+  margin: 0;
+}
+.device-facts {
+  margin: 20px 0 0;
+}
+.device-facts > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 2fr;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.device-facts > div:last-child {
+  border: 0;
+}
+.device-facts dt {
+  color: var(--muted);
+}
+.device-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.pair-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+  margin: 18px 0;
+}
+.pair-heading,
+.pair-actions,
+.pair-add,
+.device-save {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pair-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.pair-heading strong,
+.pair-heading small {
+  display: block;
+}
+.pair-heading small {
+  color: var(--muted);
+  margin-top: 3px;
+}
+.pair-actions {
+  flex-wrap: wrap;
+}
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 12px 0;
+  cursor: pointer;
+}
+.inline-check input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  accent-color: var(--accent);
+}
+.pair-actions .inline-check {
+  margin: 0;
+}
+.pair-add select {
+  max-width: 380px;
+}
+.pair-entries {
+  padding: 8px 0 0;
+}
+.pair-entries > .button {
+  margin: 8px 8px 0 0;
+}
+.pair-entry {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding: 8px 0;
+}
+.pair-entry > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.device-padding {
+  display: block;
+  margin-top: 18px;
+  max-width: 440px;
+}
+.device-padding input {
+  display: block;
+}
+.device-save {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+.device-save > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 14px;
+}
+.node-route small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+}
+@media (max-width: 760px) {
+  .device-section {
+    padding: 18px;
+  }
+  .device-facts > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .pair-add {
+    flex-wrap: wrap;
+  }
+  .pair-add select {
+    max-width: none;
+  }
+  .pair-card {
+    padding: 14px;
+  }
+}

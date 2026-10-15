@@ -36,10 +36,10 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
 
   double get _metricsLeftPadding {
     if (!_isAlipayBox) return 16;
-    // A device rule overrides the Agent default; zero is an explicit value.
+    // Core owns device display preferences; older Core views remain a fallback.
     for (final value in [
-      widget.controller?.view?['nfcdMetricsLeftPadding'],
       widget.controller?.navigation['nfcd_metrics_left_padding'],
+      widget.controller?.view?['nfcdMetricsLeftPadding'],
     ]) {
       if (value is num &&
           value.isFinite &&

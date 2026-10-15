@@ -96,6 +96,14 @@ _Avoid_: SourceHealth Observation, Presence
 Agent 明确注册、可由有效 Command 调用的一种受限动作能力。
 _Avoid_: Shell Command, Intent
 
+**Execution Endpoint**:
+提供显式快捷入口并负责执行其动作的 Agent 或具备执行能力的 Node；入口定义与最终执行许可由该端持有。
+_Avoid_: Data Source, Projection Input
+
+**Shortcut Pairing**:
+Core 持有的一个接收 Node 与一个 Execution Endpoint 之间的独立关联，决定向接收 Node 提供哪些快捷入口及其顺序；不随 Projection Route 的数据来源变化。
+_Avoid_: Projection Route, Data Source
+
 **Canonical State**:
 Core 根据最新有效 Observation 维护的规范领域状态，是 DeviceView 的投影来源而不是公共线协议。
 _Avoid_: DeviceView, History

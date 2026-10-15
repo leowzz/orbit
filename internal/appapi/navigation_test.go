@@ -53,7 +53,7 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	transport := &navTransport{}
-	if err = api.StartNavigation(ctx, transport, "core", func() map[string][]string { return map[string][]string{"a": {"mac"}, "b": {"other"}} }); err != nil {
+	if err = api.StartNavigation(ctx, transport, "core", nil); err != nil {
 		t.Fatal(err)
 	}
 	catalog := &v.AgentShortcuts{AgentId: "mac", HostLabel: "My Mac", Revision: 10, AtTop: true, Items: []*v.AgentShortcut{{Id: "app1", Title: "Calendar", Kind: "app"}}}
@@ -64,6 +64,16 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 		}
 	}
 	publish()
+	cfg, _ := store.NavigationSettings(ctx, "a")
+	cfg.AtTop = true
+	cfg.Pairs = []inbox.Pairing{{ExecutorKind: "agent", ExecutorID: "mac", Enabled: true}}
+	rawSettings, _ := json.Marshal(cfg)
+	settingsRequest := httptest.NewRequest("PUT", "/api/app/navigation/a", bytes.NewReader(rawSettings))
+	settingsResponse := httptest.NewRecorder()
+	api.AdminHandler().ServeHTTP(settingsResponse, settingsRequest)
+	if settingsResponse.Code != 200 {
+		t.Fatal(settingsResponse.Code, settingsResponse.Body.String())
+	}
 	req := func(method, path, node string, body any) *httptest.ResponseRecorder {
 		raw, _ := json.Marshal(body)
 		r := httptest.NewRequest(method, path, bytes.NewReader(raw))
@@ -156,5 +166,103 @@ func TestNavigationRejectsExecutableURLsAndSpoofedCatalog(t *testing.T) {
 	}
 	if _, err := store.SaveNavigationIcon(ctx, []byte("<svg/>")); err == nil {
 		t.Fatal("accepted unsafe image")
+	}
+}
+
+func TestNodeExecutionUsesIndependentPairingAndClaimsOnce(t *testing.T) {
+	dir := t.TempDir()
+	store, err := inbox.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	devices := map[string]config.AppDevice{}
+	for _, id := range []string{"a", "b", "c"} {
+		h := sha256.Sum256([]byte(strings.Repeat(id, 32)))
+		devices[id] = config.AppDevice{Label: id, TokenSHA256: hex.EncodeToString(h[:])}
+	}
+	api, err := New(store, config.AppConfig{DataDir: dir, Devices: devices}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := func(method, path, node string, body any, admin bool) *httptest.ResponseRecorder {
+		raw, _ := json.Marshal(body)
+		r := httptest.NewRequest(method, path, bytes.NewReader(raw))
+		r.Header.Set("Authorization", "Bearer "+strings.Repeat(node, 32))
+		w := httptest.NewRecorder()
+		if admin {
+			api.AdminHandler().ServeHTTP(w, r)
+		} else {
+			api.Handler().ServeHTTP(w, r)
+		}
+		return w
+	}
+	catalog := map[string]any{"revision": 1, "items": []map[string]string{{"id": "browser", "title": "Browser", "kind": "url"}}}
+	for _, id := range []string{"b", "c"} {
+		if w := request("POST", "/api/v1/execution/catalog", id, catalog, false); w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	// Device credentials cannot edit a receiving device's pairings.
+	if w := request("PUT", "/api/v1/navigation/a", "a", nil, false); w.Code != 404 {
+		t.Fatal("public config endpoint", w.Code)
+	}
+	cfg, _ := store.NavigationSettings(context.Background(), "a")
+	cfg.Pairs = []inbox.Pairing{{ExecutorKind: "node", ExecutorID: "b", Enabled: true}, {ExecutorKind: "node", ExecutorID: "c", Enabled: true}}
+	if w := request("PUT", "/api/app/navigation/a", "", cfg, true); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	// No projection routes or MQTT transport are configured.
+	w := request("GET", "/api/v1/navigation", "a", nil, false)
+	var nav inbox.Navigation
+	_ = json.Unmarshal(w.Body.Bytes(), &nav)
+	if len(nav.Items) != 2 || nav.Items[0].ExecutorID != "b" || nav.Items[1].ExecutorID != "c" {
+		t.Fatal(nav)
+	}
+	open := func() {
+		t.Helper()
+		if w := request("POST", "/api/v1/navigation/"+nav.Items[0].ID+"/open", "a", nil, false); w.Code != 202 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	open()
+	if w := request("GET", "/api/v1/execution/commands", "c", nil, false); !strings.Contains(w.Body.String(), `"commands":[]`) {
+		t.Fatal("command leaked", w.Body.String())
+	}
+	w = request("GET", "/api/v1/execution/commands", "b", nil, false)
+	var commands struct {
+		Commands []nodeCommand `json:"commands"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &commands)
+	if len(commands.Commands) != 1 || commands.Commands[0].ShortcutID != "browser" || commands.Commands[0].CatalogRevision != 1 {
+		t.Fatal(w.Body.String())
+	}
+	if w = request("GET", "/api/v1/execution/commands", "b", nil, false); !strings.Contains(w.Body.String(), `"commands":[]`) {
+		t.Fatal("command replayed", w.Body.String())
+	}
+	// Removing a pair also cancels an already queued request.
+	open()
+	cfg, _ = store.NavigationSettings(context.Background(), "a")
+	cfg.Pairs = nil
+	if w = request("PUT", "/api/app/navigation/a", "", cfg, true); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w = request("GET", "/api/v1/execution/commands", "b", nil, false); !strings.Contains(w.Body.String(), `"commands":[]`) {
+		t.Fatal("unpaired request executed", w.Body.String())
+	}
+	if w = request("POST", "/api/v1/navigation/"+nav.Items[0].ID+"/open", "a", nil, false); w.Code != 409 {
+		t.Fatal("removed pair executable", w.Code)
+	}
+	// The client cannot upload URLs, paths, or another endpoint identity.
+	bad := map[string]any{"revision": 2, "items": []map[string]string{{"id": "browser", "title": "Browser", "kind": "url", "target": "https://example.com"}}}
+	if w = request("POST", "/api/v1/execution/catalog", "b", bad, false); w.Code != 400 {
+		t.Fatal("accepted targets", w.Code)
+	}
+	// An empty catalog removes all capabilities immediately.
+	if w = request("POST", "/api/v1/execution/catalog", "b", map[string]any{"revision": 2, "items": []any{}}, false); w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	if w = request("POST", "/api/v1/execution/catalog", "b", catalog, false); w.Code != 409 {
+		t.Fatal("stale catalog restored entries", w.Code)
 	}
 }

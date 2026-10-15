@@ -261,11 +261,14 @@ The console has separate pages:
 | --- | --- |
 | Overview (`/`) | Summary and configured data flow. |
 | Agents (`/agents`) | Discovered hosts, versions, source health, and observation freshness. |
-| Nodes (`/nodes`) | Discovered devices, product types, and associated routes. |
-| Routes (`/routes`) | Create, edit, and delete projection routes. |
+| Devices (`/nodes`) | Unified MQTT/App device list and App authorization. |
+| Device (`/nodes/:id`) | Data content/display, independent shortcut pairings, connection and access. |
+| Inbox (`/messages`) | Shared texts, tasks and photos. |
 | System (`/system`) | Core identity, storage, session, and observation policies. |
 
-State refreshes every 5 seconds. Discovery is based on MQTT participant state;
+Shortcut pairings connect each receiver to multiple Agents or execution-capable App Nodes independently of data routes. Local targets stay on their execution endpoint. Device appearance is owned by Core. Legacy `/routes?node=...` links redirect to device details.
+
+State refreshes every 5 seconds. MQTT discovery is based on participant state;
 Presence is not implemented, so a discovered participant is not proof that it
 is currently online.
 

@@ -5,9 +5,9 @@ import {
   Route,
   Routes,
   useLocation,
+  useSearchParams,
 } from "react-router-dom";
 import {
-  ArrowLeftRight,
   Smartphone,
   Boxes,
   LayoutDashboard,
@@ -25,15 +25,13 @@ import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Agents from "./pages/Agents";
 import Nodes from "./pages/Nodes";
-import Routing from "./pages/Routing";
 import System from "./pages/System";
 import Apps from "./pages/Apps";
 const navigation = [
   { path: "/", label: "总览", icon: LayoutDashboard },
-  { path: "/agents", label: "数据来源", icon: Server },
-  { path: "/nodes", label: "接收设备", icon: Boxes },
-  { path: "/routes", label: "转发规则", icon: ArrowLeftRight },
-  { path: "/apps", label: "App 与收件箱", icon: Smartphone },
+  { path: "/agents", label: "电脑与来源", icon: Server },
+  { path: "/nodes", label: "设备", icon: Boxes },
+  { path: "/messages", label: "收件箱", icon: Smartphone },
   { path: "/system", label: "系统信息", icon: Settings2 },
 ];
 export default function App() {
@@ -148,7 +146,11 @@ export default function App() {
     );
   if (auth === "out") return <Login onLogin={() => setAuth("in")} />;
   const current =
-    navigation.find((item) => item.path === location.pathname) ?? navigation[0];
+    navigation.find(
+      (item) =>
+        item.path === location.pathname ||
+        (item.path !== "/" && location.pathname.startsWith(item.path + "/")),
+    ) ?? navigation[0];
   return (
     <div className="app-shell">
       <button
@@ -185,7 +187,6 @@ export default function App() {
             <NavLink key={item.path} to={item.path} end={item.path === "/"}>
               <item.icon size={17} strokeWidth={1.6} />
               <span>{item.label}</span>
-              {item.path === "/nodes" && state && <em>{state.nodes.length}</em>}
             </NavLink>
           ))}
         </nav>
@@ -263,20 +264,21 @@ export default function App() {
                 }
               />
               <Route
-                path="/routes"
+                path="/nodes/:nodeId"
                 element={
-                  <Routing
-                    state={state}
-                    document={routes}
-                    onChange={setRoutes}
-                  />
+                  <Nodes state={state} document={routes} onChange={setRoutes} />
                 }
               />
+              <Route path="/routes" element={<LegacyRoutes />} />
               <Route
                 path="/system"
                 element={<System state={state} document={routes} />}
               />
-              <Route path="/apps" element={<Apps />} />
+              <Route path="/messages" element={<Apps />} />
+              <Route
+                path="/apps"
+                element={<Navigate to="/messages" replace />}
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           ) : (
@@ -288,5 +290,13 @@ export default function App() {
         </footer>
       </div>
     </div>
+  );
+}
+
+function LegacyRoutes() {
+  const [params] = useSearchParams();
+  const id = params.get("node");
+  return (
+    <Navigate to={id ? `/nodes/${encodeURIComponent(id)}` : "/nodes"} replace />
   );
 }

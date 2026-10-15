@@ -30,17 +30,17 @@ type Server struct {
 		Publish(context.Context, mqtt.Message) error
 		Subscribe(context.Context, string, mqtt.Handler) error
 	}
-	navSources  func() map[string][]string
-	navCoreID   string
-	navRevision uint64
-	store       *inbox.Store
-	devices     map[string]config.AppDevice
-	activity    map[string]*deviceActivity
-	status      func(string) json.RawMessage
-	openSession func(context.Context, string, string, string, uint64) (string, error)
-	files       string
-	mu          sync.Mutex
-	wake        chan struct{}
+	nodeCommands map[string][]nodeCommand
+	navCoreID    string
+	navRevision  uint64
+	store        *inbox.Store
+	devices      map[string]config.AppDevice
+	activity     map[string]*deviceActivity
+	status       func(string) json.RawMessage
+	openSession  func(context.Context, string, string, string, uint64) (string, error)
+	files        string
+	mu           sync.Mutex
+	wake         chan struct{}
 }
 
 func New(store *inbox.Store, cfg config.AppConfig, status func(string) json.RawMessage) (*Server, error) {
@@ -59,12 +59,13 @@ func New(store *inbox.Store, cfg config.AppConfig, status func(string) json.RawM
 	if devices == nil {
 		devices = map[string]config.AppDevice{}
 	}
-	return &Server{store: store, devices: devices, activity: map[string]*deviceActivity{}, status: status, files: cfg.DataDir + "/attachments", wake: make(chan struct{})}, nil
+	return &Server{nodeCommands: map[string][]nodeCommand{}, store: store, devices: devices, activity: map[string]*deviceActivity{}, status: status, files: cfg.DataDir + "/attachments", wake: make(chan struct{})}, nil
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.browserRoutes(mux)
 	s.navigationRoutes(mux)
+	s.executionRoutes(mux)
 	mux.HandleFunc("GET /api/v1/status", s.auth(func(w http.ResponseWriter, r *http.Request, node string) {
 		var value json.RawMessage = json.RawMessage(`null`)
 		if s.status != nil {

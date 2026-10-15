@@ -2,102 +2,187 @@ package inbox
 
 import (
 	"context"
+	"encoding/json"
 	"google.golang.org/protobuf/proto"
 	v "orbit/gen/go/orbit/v1"
 	"testing"
 )
 
-func TestNavigationTracksAgentOrderTitlesAndRouteRemoval(t *testing.T) {
-	s, err := Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
+func navigationStore(t *testing.T) *Store {
+	t.Helper()
+	s, e := Open(t.TempDir())
+	if e != nil {
+		t.Fatal(e)
 	}
-	defer s.Close()
+	t.Cleanup(func() { s.Close() })
+	return s
+}
+func savePairs(t *testing.T, s *Store, node string, pairs ...Pairing) NavigationSettings {
+	t.Helper()
+	c, e := s.NavigationSettings(context.Background(), node)
+	if e != nil {
+		t.Fatal(e)
+	}
+	c.Pairs = pairs
+	c, e = s.SaveNavigationSettings(context.Background(), node, c)
+	if e != nil {
+		t.Fatal(e)
+	}
+	return c
+}
+func TestIndependentPairingsMultipleExecutorsAndRevocation(t *testing.T) {
+	s := navigationStore(t)
 	ctx := context.Background()
-	c := &v.AgentShortcuts{AgentId: "mac", Revision: 1, Items: []*v.AgentShortcut{
-		{Id: "one", Title: "One", Kind: "app"}, {Id: "two", Title: "Two", Kind: "url"},
-	}}
-	if err := s.AcceptShortcutCatalog(ctx, c); err != nil {
-		t.Fatal(err)
+	for _, id := range []string{"mac", "other"} {
+		if e := s.AcceptShortcutCatalog(ctx, &v.AgentShortcuts{AgentId: id, Revision: 1, Items: []*v.AgentShortcut{{Id: "one", Title: id, Kind: "app"}, {Id: "two", Title: "Second", Kind: "url"}}}); e != nil {
+			t.Fatal(e)
+		}
 	}
-	first, err := s.ProjectNavigation(ctx, "node", []string{"mac", "mac"})
-	if err != nil || len(first.Items) != 2 || first.ShowTitles {
-		t.Fatal(first, err)
+	if e := s.AcceptNodeCatalog(ctx, "tablet", "Tablet", 3, []NavigationItem{{ID: "one", Title: "Browser", Kind: "url"}}); e != nil {
+		t.Fatal(e)
 	}
-	c.Revision++
-	c.ShowTitles = true
-	c.Items[0], c.Items[1] = c.Items[1], c.Items[0]
-	if err := s.AcceptShortcutCatalog(ctx, c); err != nil {
-		t.Fatal(err)
+	// Agent and Node identities are namespaced, even for identical endpoint/item IDs.
+	savePairs(t, s, "screen", Pairing{"agent", "mac", true, []string{"two", "one"}}, Pairing{"agent", "other", false, nil}, Pairing{"node", "tablet", true, nil})
+	d, e := s.ProjectNavigation(ctx, "screen")
+	if e != nil || len(d.Items) != 3 || d.Items[0].ShortcutID != "two" || d.Items[2].ExecutorKind != "node" {
+		t.Fatal(d, e)
 	}
-	next, err := s.ProjectNavigation(ctx, "node", []string{"mac"})
-	if err != nil || next.Revision != first.Revision+1 || !next.ShowTitles || next.Items[0].ID != first.Items[1].ID {
-		t.Fatal(next, err)
+	a, e := s.ResolveShortcut(ctx, "screen", d.Items[2].ID)
+	if e != nil || a.Kind != "node" || a.ID != "tablet" || a.Revision != 3 {
+		t.Fatal(a, e)
 	}
-	again, err := s.ProjectNavigation(ctx, "node", []string{"mac"})
-	if err != nil || again.Revision != next.Revision {
-		t.Fatal(again, err)
+	other, _ := s.ProjectNavigation(ctx, "unpaired")
+	if len(other.Items) != 0 {
+		t.Fatal("unpaired receiver inherited entries")
 	}
-	cleared, err := s.ProjectNavigation(ctx, "node", nil)
-	if err != nil || len(cleared.Items) != 0 || cleared.Revision != next.Revision+1 {
-		t.Fatal(cleared, err)
+	cfg, _ := s.NavigationSettings(ctx, "screen")
+	cfg.Pairs[0].Enabled = false
+	if _, e = s.SaveNavigationSettings(ctx, "screen", cfg); e != nil {
+		t.Fatal(e)
 	}
-	if _, _, _, err := s.ResolveShortcut(ctx, "node", first.Items[0].ID); err == nil {
-		t.Fatal("deleted route retained open access")
+	if _, e = s.ResolveShortcut(ctx, "screen", d.Items[0].ID); e == nil {
+		t.Fatal("disabled pair remained executable")
+	}
+	// Removing a catalog entry revokes it without changing the pairing.
+	if e = s.AcceptNodeCatalog(ctx, "tablet", "Tablet", 4, nil); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.ResolveShortcut(ctx, "screen", d.Items[2].ID); e == nil {
+		t.Fatal("removed entry remained executable")
 	}
 }
-
-func TestNavigationPositionChangesWithoutChangingItems(t *testing.T) {
+func TestNavigationMigrationFreezesEffectiveDisplayAndPairings(t *testing.T) {
+	s := navigationStore(t)
+	ctx := context.Background()
+	if e := s.AcceptShortcutCatalog(ctx, &v.AgentShortcuts{AgentId: "mac", Revision: 1, ShowTitles: true, AtTop: true, Items: []*v.AgentShortcut{{Id: "one", Title: "One", Kind: "app"}}}); e != nil {
+		t.Fatal(e)
+	}
+	old := Navigation{Revision: 8, ShowTitles: true, AtTop: true, NFCDMetricsLeftPadding: proto.Uint32(23), Items: []NavigationItem{{ID: "old", AgentID: "mac", ShortcutID: "one"}}}
+	raw, _ := json.Marshal(old)
+	if _, e := s.db.Exec(`INSERT INTO navigation_configs VALUES(?,?,?)`, "screen", 8, string(raw)); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.MigrateNavigationSettings(ctx, map[string]*uint32{"screen": proto.Uint32(0)}); e != nil {
+		t.Fatal(e)
+	}
+	cfg, e := s.NavigationSettings(ctx, "screen")
+	if e != nil || !cfg.ShowTitles || !cfg.AtTop || cfg.NFCDMetricsLeftPadding != 0 || len(cfg.Pairs) != 1 {
+		t.Fatal(cfg, e)
+	}
+	if e = s.AcceptShortcutCatalog(ctx, &v.AgentShortcuts{AgentId: "mac", Revision: 2, Items: []*v.AgentShortcut{{Id: "one", Title: "Changed", Kind: "app"}}}); e != nil {
+		t.Fatal(e)
+	}
+	d, e := s.ProjectNavigation(ctx, "screen")
+	if e != nil || !d.ShowTitles || !d.AtTop || *d.NFCDMetricsLeftPadding != 0 || len(d.Items) != 1 {
+		t.Fatal(d, e)
+	}
+	if e = s.MigrateNavigationSettings(ctx, map[string]*uint32{"screen": proto.Uint32(64)}); e != nil {
+		t.Fatal(e)
+	}
+	cfg, _ = s.NavigationSettings(ctx, "screen")
+	if cfg.NFCDMetricsLeftPadding != 0 {
+		t.Fatal("migration ran twice")
+	}
+}
+func TestNavigationSettingsCASSelectionAndPersistence(t *testing.T) {
 	dir := t.TempDir()
-	s, err := Open(dir)
-	if err != nil {
-		t.Fatal(err)
+	s, e := Open(dir)
+	if e != nil {
+		t.Fatal(e)
 	}
 	defer s.Close()
 	ctx := context.Background()
-	c := &v.AgentShortcuts{AgentId: "mac", Items: []*v.AgentShortcut{{Id: "one", Title: "One", Kind: "app"}}}
-	for i, atTop := range []bool{false, true, false} {
-		c.Revision = uint64(i + 1)
-		c.AtTop = atTop
-		if err := s.AcceptShortcutCatalog(ctx, c); err != nil {
-			t.Fatal(err)
-		}
-		d, err := s.ProjectNavigation(ctx, "node", []string{"mac"})
-		if err != nil || d.AtTop != atTop || d.Revision != int64(i+1) || d.Proto("node").AtTop != atTop {
-			t.Fatal("position update did not reach navigation", d, err)
-		}
-		if saved, err := s.Navigation(ctx, "node"); err != nil || saved.AtTop != atTop {
-			t.Fatal("position not persisted", saved, err)
-		}
+	_ = s.AcceptShortcutCatalog(ctx, &v.AgentShortcuts{AgentId: "mac", Revision: 1, Items: []*v.AgentShortcut{{Id: "one", Title: "One", Kind: "app"}}})
+	cfg := savePairs(t, s, "screen", Pairing{"agent", "mac", true, []string{}})
+	d, _ := s.ProjectNavigation(ctx, "screen")
+	if len(d.Items) != 0 {
+		t.Fatal("empty selection meant all")
+	}
+	cfg.Pairs[0].Items = []string{"unknown"}
+	if _, e = s.SaveNavigationSettings(ctx, "screen", cfg); e == nil {
+		t.Fatal("unknown shortcut accepted")
+	}
+	cfg.Pairs[0].Items = nil
+	cfg.ShowTitles = true
+	cfg.NFCDMetricsLeftPadding = 64
+	saved, e := s.SaveNavigationSettings(ctx, "screen", cfg)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.SaveNavigationSettings(ctx, "screen", cfg); e == nil {
+		t.Fatal("stale revision overwrote settings")
+	}
+	cfg = saved
+	cfg.NFCDMetricsLeftPadding = 65
+	if _, e = s.SaveNavigationSettings(ctx, "screen", cfg); e == nil {
+		t.Fatal("invalid padding accepted")
+	}
+	second, e := Open(dir)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer second.Close()
+	again, e := second.NavigationSettings(ctx, "screen")
+	if e != nil || again.Revision != saved.Revision || !again.ShowTitles || again.NFCDMetricsLeftPadding != 64 {
+		t.Fatal(again, e)
 	}
 }
-
-func TestNFCDPaddingCatalogProjection(t *testing.T) {
-	s, err := Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
+func TestNodeCatalogKeepsTargetsLocalAndRejectsStaleRevision(t *testing.T) {
+	s := navigationStore(t)
 	ctx := context.Background()
-	for i, padding := range []*uint32{nil, proto.Uint32(0), proto.Uint32(64), nil} {
-		c := &v.AgentShortcuts{AgentId: "mac", Revision: uint64(i + 1), NfcdMetricsLeftPadding: padding}
-		if err := s.AcceptShortcutCatalog(ctx, c); err != nil {
-			t.Fatal(err)
-		}
-		d, err := s.ProjectNavigation(ctx, "node", []string{"mac"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		wire := d.Proto("node")
-		if (wire.NfcdMetricsLeftPadding == nil) != (padding == nil) || (padding != nil && wire.GetNfcdMetricsLeftPadding() != *padding) {
-			t.Fatal("lost padding presence/value", d)
-		}
-		saved, err := s.Navigation(ctx, "node")
-		if err != nil || (saved.NFCDMetricsLeftPadding == nil) != (padding == nil) {
-			t.Fatal("lost persisted padding", saved, err)
-		}
+	if e := s.AcceptNodeCatalog(ctx, "node", "Node", 2, []NavigationItem{{ID: "one", Title: "One", Kind: "url"}}); e != nil {
+		t.Fatal(e)
 	}
-	if err := s.AcceptShortcutCatalog(ctx, &v.AgentShortcuts{AgentId: "mac", Revision: 5, NfcdMetricsLeftPadding: proto.Uint32(65)}); err == nil {
-		t.Fatal("accepted out of range padding")
+	if e := s.AcceptNodeCatalog(ctx, "node", "Node", 2, []NavigationItem{{ID: "one", Title: "One", Kind: "url"}}); e != nil {
+		t.Fatal("idempotent catalog failed", e)
+	}
+	if e := s.AcceptNodeCatalog(ctx, "node", "Node", 2, nil); e == nil {
+		t.Fatal("same revision changed catalog")
+	}
+	if e := s.AcceptNodeCatalog(ctx, "node", "Node", 1, nil); e == nil {
+		t.Fatal("stale catalog accepted")
+	}
+	if e := s.AcceptNodeCatalog(ctx, "node", "Node", 3, []NavigationItem{{ID: "one", Title: "One", Kind: "url", Target: "https://example.com"}}); e == nil {
+		t.Fatal("execution target uploaded")
+	}
+	if _, e := s.SaveNavigationIcon(ctx, []byte("<svg/>")); e == nil {
+		t.Fatal("unsafe image accepted")
+	}
+}
+func TestDeleteExecutingNodeRemovesAllRelationships(t *testing.T) {
+	s := navigationStore(t)
+	ctx := context.Background()
+	_ = s.AcceptNodeCatalog(ctx, "tablet", "Tablet", 1, nil)
+	savePairs(t, s, "receiver", Pairing{"node", "tablet", true, nil})
+	if e := s.DeleteNodeNavigation(ctx, "tablet", []byte(`{}`)); e != nil {
+		t.Fatal(e)
+	}
+	c, _ := s.NavigationSettings(ctx, "receiver")
+	if len(c.Pairs) != 0 || c.Revision != 3 {
+		t.Fatal(c)
+	}
+	cats, _ := s.ShortcutCatalogs(ctx)
+	if len(cats) != 0 {
+		t.Fatal(cats)
 	}
 }

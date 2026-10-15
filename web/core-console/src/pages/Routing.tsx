@@ -1,15 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
-import {
-  ArrowRight,
-  Check,
-  Pencil,
-  Plus,
-  RefreshCw,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ArrowRight, Trash2, X } from "lucide-react";
 import {
   api,
   errorText,
@@ -19,235 +10,14 @@ import {
   sessionsEnabled,
   supportsSessions,
 } from "../api";
-import type { AppDevice, NetworkState, Route, RouteDocument } from "../api";
-import { Badge, Empty, PageHead } from "../components";
-import DisplayModeSwitch from "../DisplayModeSwitch";
-import SessionInfoSwitch from "../SessionInfoSwitch";
-interface Props {
-  state: NetworkState;
-  document: RouteDocument;
-  onChange: (d: RouteDocument) => void;
-}
-type Target = { id: string; label: string; profile: string; revoked?: boolean };
-export default function Routing({ state, document, onChange }: Props) {
-  const [params, setParams] = useSearchParams(),
-    [editing, setEditing] = useState<{ id: string; route?: Route } | null>(
-      null,
-    ),
-    [message, setMessage] = useState(""),
-    [error, setError] = useState(""),
-    [appDevices, setAppDevices] = useState<AppDevice[] | null>(null),
-    [deviceError, setDeviceError] = useState("");
-  const loadDevices = useCallback(async () => {
-    try {
-      const result = await api<{ devices?: AppDevice[] }>("/app/devices");
-      setAppDevices(result.devices ?? []);
-      setDeviceError("");
-    } catch {
-      setDeviceError("未能加载 App 设备，请重试。");
-    }
-  }, []);
-  useEffect(() => {
-    void loadDevices();
-  }, [loadDevices]);
-  const targets: Target[] = [
-    ...state.nodes
-      .filter((n) => !appDevices?.some((d) => d.id === n.nodeId))
-      .map((n) => ({
-        id: n.nodeId,
-        label: n.nodeId,
-        profile:
-          {
-            web: "overview-web",
-            android: "overview-android",
-            "oled-128x32": "usage-oled-128x32",
-          }[n.modelId] ?? "overview-web",
-      })),
-    ...(appDevices ?? []).map((d) => ({
-      id: d.id,
-      label: d.label || d.id,
-      profile: "overview-app",
-      revoked: d.revoked,
-    })),
-  ];
-  const requested = params.get("node");
-  useEffect(() => {
-    if (requested && appDevices !== null) {
-      setEditing({ id: requested, route: document.routes[requested] });
-      setParams({}, { replace: true });
-    }
-  }, [requested, document.routes, setParams, appDevices]);
-  async function reload() {
-    try {
-      onChange(await api<RouteDocument>("/routes"));
-      await loadDevices();
-      setError("");
-      setMessage("已载入最新规则。");
-    } catch (e) {
-      setError(errorText(e));
-    }
-  }
-  const entries = Object.entries(document.routes);
-  return (
-    <>
-      <PageHead
-        title="转发规则"
-        description="选择接收设备、数据来源和展示方式。Android 状态页、桌面组件与点阵屏共用一条规则。"
-        action={
-          <button
-            className="button primary"
-            disabled={appDevices === null}
-            onClick={() => setEditing({ id: "" })}
-          >
-            <Plus size={16} />
-            新建规则
-          </button>
-        }
-      />
-      {deviceError && (
-        <div className="banner error" role="alert">
-          {deviceError}
-          <button onClick={loadDevices}>重试</button>
-        </div>
-      )}
-      {message && (
-        <div className="banner success" role="status">
-          <Check size={16} />
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="banner error" role="alert">
-          {error}
-        </div>
-      )}
-      <div className="toolbar">
-        <div className="tabs">
-          <span className="selected">
-            全部规则 <b>{entries.length}</b>
-          </span>
-        </div>
-        <div className="rule-version">
-          <span>修订 {document.revision.toString().padStart(3, "0")}</span>
-          <button
-            className="icon-button"
-            aria-label="重新载入规则"
-            onClick={reload}
-          >
-            <RefreshCw size={15} />
-          </button>
-        </div>
-      </div>
-      <div className="panel routes-table">
-        <div className="route-table-head">
-          <span>接收设备</span>
-          <span>数据展示</span>
-          <span>Session 信息</span>
-          <span>数据来源</span>
-          <span />
-        </div>
-        {entries.map(([id, r]) => (
-          <div className="route-table-row" key={id}>
-            <div>
-              <strong>{targets.find((t) => t.id === id)?.label ?? id}</strong>
-              <small>
-                {appDevices?.some((d) => d.id === id)
-                  ? appDevices.find((d) => d.id === id)?.revoked
-                    ? "App 设备 · 已撤销"
-                    : "App 设备"
-                  : state.nodes.some((n) => n.nodeId === id)
-                    ? "已发现设备"
-                    : "预配置 · 等待设备接入"}
-              </small>
-            </div>
-            <div>
-              {!r.profile.endsWith("-oled-128x32") && (
-                <span className="profile-label">{profileName(r.profile)}</span>
-              )}
-              <DisplayModeSwitch
-                nodeId={id}
-                document={document}
-                onChange={onChange}
-              />
-            </div>
-            <SessionInfoSwitch
-              nodeId={id}
-              document={document}
-              onChange={onChange}
-            />
-            <div className="route-inputs">
-              {r.inputs.map((input) => (
-                <div key={input.observation_type}>
-                  <span className="kind-label">
-                    {input.observation_type === "usage" ? "API 用量" : "Codex"}
-                  </span>
-                  <ArrowRight size={12} />
-                  <span className="mono">{input.agent_id}</span>
-                </div>
-              ))}
-            </div>
-            <button
-              className="icon-button edit-rule"
-              aria-label={"编辑 " + id}
-              onClick={() => setEditing({ id, route: r })}
-            >
-              <Pencil size={16} />
-            </button>
-          </div>
-        ))}
-        {!entries.length && (
-          <Empty
-            title="从一条规则开始"
-            action={
-              <button
-                className="button"
-                disabled={appDevices === null}
-                onClick={() => setEditing({ id: "" })}
-              >
-                <Plus size={15} />
-                新建规则
-              </button>
-            }
-          >
-            一台设备对应一条规则。你可以将不同主机的数据组合到同一设备。
-          </Empty>
-        )}
-      </div>
-      <div className="routing-note">
-        <span className="note-number">i</span>
-        <p>
-          保存后立即应用。移除来源或删除规则时，设备会清空旧的状态数据。
-          <br />
-          <span>
-            每种数据保留一个来源，切换展示方式不会丢失来源配置。收件箱消息不受规则影响。
-          </span>
-        </p>
-        <Badge>本地持久化</Badge>
-      </div>
-      {editing && appDevices !== null && (
-        <Editor
-          key={editing.id}
-          editing={editing}
-          state={state}
-          targets={targets}
-          document={document}
-          onClose={() => setEditing(null)}
-          onSaved={(d) => {
-            onChange(d);
-            setEditing(null);
-            setError("");
-            setMessage(
-              d.publish_pending
-                ? "规则已保存，设备投递将在连接恢复后重试。"
-                : "规则已保存并应用。",
-            );
-          }}
-        />
-      )}
-    </>
-  );
-}
-function Editor({
+import type { NetworkState, Route, RouteDocument } from "../api";
+export type Target = {
+  id: string;
+  label: string;
+  profile: string;
+  revoked?: boolean;
+};
+export function Editor({
   editing,
   state,
   targets,
@@ -277,7 +47,7 @@ function Editor({
     [sessions, setSessions] = useState(
       editing.route ? sessionsEnabled(editing.route) : false,
     ),
-    [nfcdPadding, setNfcdPadding] = useState<number | undefined>(
+    [nfcdPadding] = useState<number | undefined>(
       editing.route?.nfcd_metrics_left_padding,
     ),
     [usage, setUsage] = useState(
@@ -393,7 +163,7 @@ function Editor({
       <form onSubmit={save}>
         <header>
           <div>
-            <h2>{editing.route ? "编辑规则" : "新建规则"}</h2>
+            <h2>{editing.route ? "设置数据内容" : "配置数据内容"}</h2>
           </div>
           <button
             type="button"
@@ -499,45 +269,8 @@ function Editor({
                       setDirty(true);
                     }}
                   />
-                  转发 Session 信息（会话列表详情）
+                  向此设备同步会话详情（含打开会话操作）
                 </label>
-              )}
-              {profile === "overview-app" && (
-                <>
-                  <label className="session-info-option">
-                    <input
-                      type="checkbox"
-                      checked={nfcdPadding !== undefined}
-                      onChange={(e) => {
-                        setNfcdPadding(e.target.checked ? 16 : undefined);
-                        setDirty(true);
-                      }}
-                    />
-                    单独设置 NFCD 指标左侧留白
-                  </label>
-                  {nfcdPadding !== undefined && (
-                    <>
-                      <label htmlFor="nfcd-padding">
-                        左侧留白 · {nfcdPadding}
-                      </label>
-                      <input
-                        id="nfcd-padding"
-                        type="range"
-                        min={0}
-                        max={64}
-                        step={1}
-                        value={nfcdPadding}
-                        onChange={(e) => {
-                          setNfcdPadding(Number(e.target.value));
-                          setDirty(true);
-                        }}
-                      />
-                    </>
-                  )}
-                  <p className="field-hint">
-                    仅影响 NFCD 设备工作台。关闭后跟随 Agent，未配置时为 16。
-                  </p>
-                </>
               )}
               {mode === "rotating" && (
                 <>
@@ -631,7 +364,7 @@ function Editor({
             )}
             {remove && (
               <div className="confirm-box">
-                <strong>删除 {editing.id} 的转发规则？</strong>
+                <strong>移除 {editing.id} 的数据内容？</strong>
                 <p>设备将停止接收状态数据。已有收件箱消息会保留。</p>
                 <div>
                   <button
@@ -657,7 +390,7 @@ function Editor({
               <button
                 type="button"
                 className="icon-button danger"
-                aria-label="删除规则"
+                aria-label="移除数据内容"
                 onClick={() => setRemove(true)}
               >
                 <Trash2 size={17} />

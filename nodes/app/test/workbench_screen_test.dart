@@ -470,7 +470,7 @@ void main() {
   );
   for (final model in ['NFCD_AlipayBoxN5DEL', 'other-device']) {
     testWidgets(
-      'NFCD padding follows live Core override then Agent on $model',
+      'NFCD padding follows device navigation with legacy view fallback on $model',
       (tester) async {
         deviceModel = model;
         tester.view.physicalSize = const Size(800, 360);
@@ -493,12 +493,12 @@ void main() {
         controller.view!['nfcdMetricsLeftPadding'] = 64;
         controller.notifyListeners();
         await tester.pumpAndSettle();
-        expect(left(), initial + (nfcd ? 48 : 0));
+        expect(left(), initial - (nfcd ? 16 : 0));
         controller.view!['nfcdMetricsLeftPadding'] = 0;
         controller.navigation['nfcd_metrics_left_padding'] = 32;
         controller.notifyListeners();
         await tester.pumpAndSettle();
-        expect(left(), initial - (nfcd ? 16 : 0));
+        expect(left(), initial + (nfcd ? 16 : 0));
         controller.view!.remove('nfcdMetricsLeftPadding');
         controller.notifyListeners();
         await tester.pumpAndSettle();

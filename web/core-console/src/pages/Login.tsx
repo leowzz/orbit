@@ -40,7 +40,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
             Orbit
           </div>
           <h1>登录控制台</h1>
-          <p>管理设备、转发规则与收件箱。</p>
+          <p>管理设备、快捷操作与收件箱。</p>
           <form onSubmit={submit}>
             <label htmlFor="password">控制台密码</label>
             <div className="password-field">

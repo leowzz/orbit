@@ -108,10 +108,14 @@ class _WorkbenchNavigationState extends State<WorkbenchNavigation> {
                 itemBuilder: (context, index) {
                   final item = items[index];
                   final title = item['title'] as String;
+                  final executor = item['executor_label'] as String? ?? '';
+                  final destination = executor.isEmpty
+                      ? title
+                      : '$title · 在 $executor 打开';
                   return Tooltip(
-                    message: title,
+                    message: destination,
                     child: Semantics(
-                      label: title,
+                      label: destination,
                       button: true,
                       child: InkWell(
                         key: ValueKey('shortcut-${item['id']}'),

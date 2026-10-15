@@ -79,6 +79,22 @@ class MainActivity : FlutterActivity() {
                         else if (next != null && previous != next) startForegroundService(Intent(this, OrbitService::class.java))
                         result.success(null)
                     }
+                    "listLaunchableApps" -> {
+                        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                        val apps = packageManager.queryIntentActivities(intent, 0)
+                            .map { mapOf("target" to it.activityInfo.packageName, "title" to it.loadLabel(packageManager).toString()) }
+                            .distinctBy { it["target"] }.sortedBy { it["title"] }
+                        result.success(apps)
+                    }
+                    "openLocalApp" -> {
+                        val target = call.arguments as String
+                        require(Regex("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$").matches(target))
+                        val intent = packageManager.getLaunchIntentForPackage(target)
+                        if (intent == null) result.success(false) else {
+                            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            result.success(true)
+                        }
+                    }
                     "matrixFullscreen" -> { setMatrixFullscreen(call.arguments == true); result.success(null) }
                     "showInputMethodPicker" -> {
                         startActivity(InputMethodTools.pickerIntent(this))

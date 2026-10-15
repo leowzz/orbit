@@ -115,7 +115,7 @@ export default function RouteFlow({
         <Empty
           title="还没有数据流向"
           action={
-            <Link className="button" to="/routes">
+            <Link className="button" to="/nodes">
               创建第一条规则 <ArrowRight size={15} />
             </Link>
           }
@@ -242,7 +242,7 @@ export default function RouteFlow({
                 <Link
                   className={`topology-card topology-target ${focused === id ? "is-selected" : ""}`}
                   key={id}
-                  to="/routes"
+                  to="/nodes"
                   onMouseEnter={() => setFocused(id)}
                   onMouseLeave={() => setFocused(null)}
                   onFocus={() => setFocused(id)}

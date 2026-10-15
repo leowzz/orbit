@@ -192,6 +192,9 @@ type NavigationItem struct {
 	ShortcutId    string                 `protobuf:"bytes,6,opt,name=shortcut_id,json=shortcutId,proto3" json:"shortcut_id,omitempty"`
 	IconUrl       string                 `protobuf:"bytes,7,opt,name=icon_url,json=iconUrl,proto3" json:"icon_url,omitempty"`
 	IconName      string                 `protobuf:"bytes,8,opt,name=icon_name,json=iconName,proto3" json:"icon_name,omitempty"`
+	ExecutorKind  string                 `protobuf:"bytes,9,opt,name=executor_kind,json=executorKind,proto3" json:"executor_kind,omitempty"`
+	ExecutorId    string                 `protobuf:"bytes,10,opt,name=executor_id,json=executorId,proto3" json:"executor_id,omitempty"`
+	ExecutorLabel string                 `protobuf:"bytes,11,opt,name=executor_label,json=executorLabel,proto3" json:"executor_label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -278,6 +281,27 @@ func (x *NavigationItem) GetIconUrl() string {
 func (x *NavigationItem) GetIconName() string {
 	if x != nil {
 		return x.IconName
+	}
+	return ""
+}
+
+func (x *NavigationItem) GetExecutorKind() string {
+	if x != nil {
+		return x.ExecutorKind
+	}
+	return ""
+}
+
+func (x *NavigationItem) GetExecutorId() string {
+	if x != nil {
+		return x.ExecutorId
+	}
+	return ""
+}
+
+func (x *NavigationItem) GetExecutorLabel() string {
+	if x != nil {
+		return x.ExecutorLabel
 	}
 	return ""
 }
@@ -386,7 +410,7 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"showTitles\x12\x15\n" +
 	"\x06at_top\x18\x06 \x01(\bR\x05atTop\x12>\n" +
 	"\x19nfcd_metrics_left_padding\x18\a \x01(\rH\x00R\x16nfcdMetricsLeftPadding\x88\x01\x01B\x1c\n" +
-	"\x1a_nfcd_metrics_left_padding\"\xd6\x01\n" +
+	"\x1a_nfcd_metrics_left_padding\"\xc3\x02\n" +
 	"\x0eNavigationItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
@@ -396,7 +420,12 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"\vshortcut_id\x18\x06 \x01(\tR\n" +
 	"shortcutId\x12\x19\n" +
 	"\bicon_url\x18\a \x01(\tR\aiconUrl\x12\x1b\n" +
-	"\ticon_name\x18\b \x01(\tR\biconName\"\x87\x02\n" +
+	"\ticon_name\x18\b \x01(\tR\biconName\x12#\n" +
+	"\rexecutor_kind\x18\t \x01(\tR\fexecutorKind\x12\x1f\n" +
+	"\vexecutor_id\x18\n" +
+	" \x01(\tR\n" +
+	"executorId\x12%\n" +
+	"\x0eexecutor_label\x18\v \x01(\tR\rexecutorLabel\"\x87\x02\n" +
 	"\n" +
 	"Navigation\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1a\n" +

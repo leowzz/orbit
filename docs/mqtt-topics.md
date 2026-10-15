@@ -21,21 +21,31 @@ protobuf payload. Nodes subscribe only to their own view and never receive the
 upstream observation data or Sub2API credentials. Navigation snapshots identify
 the configured Agent, but never include its local application paths or URL targets.
 
-Shortcut configuration is owned by the desktop Agent. `AgentShortcuts` is a complete
-ordered snapshot (up to 24 entries, 256 KiB total), including titles, optional PNG
-icons and the title visibility preference. Each icon is at most 32 KiB / 256 pixels.
-The Agent publishes it after its initial state acknowledgement and on reconnect.
-Core persists only increasing catalog revisions, projects the Agents selected by
-each workbench's existing route, and publishes a complete retained `Navigation`.
-Changed snapshots advance a durable per-node revision; removed entries/routes clear
-the projection. App Nodes use authenticated HTTP plus the existing SSE/refresh flow.
+Shortcut definitions and local execution permission belong to their execution endpoint.
+An Agent publishes a complete `AgentShortcuts` catalog (up to 24 entries, 256 KiB total)
+with titles and optional PNG icons (32 KiB / 256 pixels each). Local targets remain local.
+An execution-capable App Node publishes equivalent metadata through its authenticated HTTP API.
+The legacy MQTT Android display client does not advertise execution capabilities.
 
-An App click supplies only its displayed entry ID. Core resolves the current route
-and catalog, then sends a non-retained `OpenShortcut` with a 15-second expiry and
-the catalog revision. The Agent requires an exact current revision and locally
-configured shortcut ID. Removed/stale entries and retained commands are rejected;
-duplicate command IDs do not repeat execution. Paths, URLs and shell commands are
-never accepted from the clicking Node. URLs open in the Agent computer's browser.
+Core owns independent per-receiver shortcut pairings, ordered across multiple Agents or
+execution-capable Nodes. A pairing follows the full catalog or an explicitly ordered selection.
+Data projection inputs do not create, modify or remove pairings. Core also owns per-device
+title visibility, navigation position and NFCD padding. On first migration, the previous
+navigation snapshot and explicit device padding are frozen into these settings; later Agent
+catalog changes cannot override device appearance.
+
+Core publishes a complete retained `Navigation` with a durable revision. Items identify
+`executor_kind`, `executor_id`, `executor_label` and `shortcut_id`; the existing Agent fields
+remain for compatibility. Removing a pair or catalog entry removes its projected entries.
+App Nodes obtain the same snapshot through authenticated HTTP and the existing SSE refresh flow.
+
+A click supplies only the displayed entry ID. Core rechecks the current pairing and catalog.
+For an Agent it publishes a non-retained `OpenShortcut` with a 15-second expiry and exact
+catalog revision. For an App Node it queues a short-lived HTTP command, claims it once and
+rechecks pairing, receiver authorization and catalog revision at delivery. The foreground
+Node checks its local permission, revision and expiry, persists a bounded deduplication receipt,
+and resolves the target locally. Commands are not replayed after Core restart. The 202 response
+means sent, not completed. Paths, URLs and shell commands are never accepted from the clicking Node.
 
 The Codex observation is a non-retained `orbit.v1.Observation` with the Codex
 oneof member. Its metadata carries the Agent epoch, an observation-type-local

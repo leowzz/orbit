@@ -131,6 +131,11 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 		return err
 	}
 	defer inboxStore.Close()
+	// Freeze legacy navigation and device overrides before any HTTP request can
+	// initialize an empty per-device configuration.
+	if err := inboxStore.MigrateNavigationSettings(ctx, engine.NavigationDisplayDefaults()); err != nil {
+		return fmt.Errorf("migrate device navigation: %w", err)
+	}
 	api, err := appapi.New(inboxStore, cfg.App, func(node string) json.RawMessage {
 		view := engine.AppView(synchronizedClock.Now(), node)
 		if view == nil {
@@ -199,7 +204,7 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 		return err
 	}
 	if api != nil {
-		if err := api.StartNavigation(ctx, client, cfg.Core.ID, engine.NavigationSources); err != nil {
+		if err := api.StartNavigation(ctx, client, cfg.Core.ID, engine.NavigationDisplayDefaults()); err != nil {
 			return err
 		}
 		defer api.StopNavigation()

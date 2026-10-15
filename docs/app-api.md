@@ -172,15 +172,37 @@ Android 状态页、点阵屏和桌面组件共享 `/api/v1/status` 的设备授
 不代表 Mac 已完成打开。视图失效或会话不可用返回 409 `session_unavailable`；
 指令通道不可用返回 503 `unavailable`。请求不进入离线收件箱队列。
 
-## 工作台快捷导航
+## 工作台快捷导航与执行端
 
-配置由桌面 Agent 管理；App 只读展示、点击打开。Core 根据设备现有工作台路由选取来源 Agent，
-保留 Agent 中的入口顺序，并生成设备级快照；没有对应路由时返回空列表。多个来源按路由顺序
-合并，同一 Agent 去重；任一来源启用标题时显示标题。
+快捷入口由对应 Agent 或具备执行能力的 App Node 定义，并在该端执行。Core 按接收设备单独保存
+执行端配对和显示设置，与状态摘要的数据来源完全独立。多个执行端按配对顺序合并，各配对可跟随
+全部目录或使用指定入口顺序。旧导航快照首次迁移后固化，后续不再继承 Agent 的外观设置。
 
-- `GET /api/v1/navigation`：`{revision,show_titles,at_top,items}`。`at_top` 默认为 `false`（底部导航），为 `true` 时工作台导航栏置顶、状态栏移到底部；同一设备绑定多个 Agent 时，任一 Agent 开启即置顶。条目包含 `id,title,kind,agent_id,shortcut_id,icon_url,icon_name`；`kind` 为 `agent`。`id` 是设备展示入口 ID，不能当作本机路径或 URL。
-- `GET /api/v1/navigation/icons/{sha256}`：使用原设备授权下载 PNG。外部图标地址不得携带设备令牌。
-- `POST /api/v1/navigation/{id}/open`：无需动作参数，Core 重新检查当前路由及目录，返回 HTTP 202 `{command_id,status:"sent"}`。入口已移除/来源已变更返回 409 `shortcut_unavailable`；202 仅表示指令已发送。
+- `GET /api/v1/navigation`：`{revision,show_titles,at_top,nfcd_metrics_left_padding,items}`。
+  条目包含 `id,title,kind,executor_kind,executor_id,executor_label,shortcut_id,icon_url,icon_name`，
+  `kind` 为 `agent` 或 `node`；Agent 条目保留兼容的 `agent_id`。目标路径和网址不在快照中。
+- `GET /api/v1/navigation/icons/{sha256}`：使用原设备授权下载 PNG；外部图标不携带设备令牌。
+- `POST /api/v1/navigation/{id}/open`：无需动作参数，Core 重新校验当前配对和目录，返回 202
+  `{command_id,status:"sent"}`。已移除的入口返回 409 `shortcut_unavailable`；202 仅表示已发送。
 
-上述接口均复用设备授权；不提供 App 写配置、上传图标或浏览其他 Agent 目录的接口。
-导航快照独立于收件箱数据，点击不进入离线队列。Agent 应用路径和网址目标仅保存在 Agent 本机。
+具备本机执行能力的 App Node 使用自己的设备令牌：
+
+- `GET /api/v1/execution/catalog`：只返回该 Node 之前发布的 `{revision}`，用于令牌轮换后恢复目录版本。
+- `POST /api/v1/execution/catalog`：`{revision,items:[{id,title,kind,icon_name}]}`。最多 24 项，
+  `kind` 为 `app` 或 `url`，禁止上传目标或伪装其他执行端。低于已保存版本返回 409。
+  本机关闭执行许可时发布空目录。
+- `GET /api/v1/execution/commands`：`{now,commands:[{id,shortcut_id,catalog_revision,expires_at}]}`。
+  只领取本机的当前有效请求，每个请求只领取一次，最长有效期 15 秒。配对移除、发起设备撤权或
+  目录版本改变会取消尚未领取的请求。Node 仍须在本机检查许可、版本、有效期并防重复执行。
+
+Core 管理接口继续由控制台会话及 Origin 检查保护，设备令牌不能调用：
+
+- `GET /api/app/executors`：返回 `{executors}`，每个目录标明 `executor_kind,executor_id,host_label,revision,items`。
+- `GET /api/app/navigation/{node}`：读取设备配置。
+- `PUT /api/app/navigation/{node}`：提交 `{revision,show_titles,at_top,nfcd_metrics_left_padding,pairs}`。
+  `pairs` 每项为 `{executor_kind,executor_id,enabled,items}`；`items:null` 跟随全部入口，`[]` 不显示入口，
+  非空数组按指定顺序选择。使用配置 revision 防止并发覆盖；冲突返回 409。返回新配置及
+  `publish_pending`，表示已持久化但 MQTT 投递仍需重试。
+
+快捷导航和执行请求独立于收件箱历史；点击不进入离线队列。桌面 Agent 和 App Node 的执行目标
+保存在各自本机。Node 只在应用前台连接时接收操作；切到后台不扩大为后台执行权限。

@@ -20,7 +20,7 @@ export default function Agents({
   return (
     <>
       <PageHead
-        title="数据来源"
+        title="电脑与来源"
         description="查看已连接的主机，以及各项数据的状态与更新时间。"
       />
       <div className="toolbar">
@@ -131,8 +131,8 @@ export default function Agents({
                     ? targets.map(([id]) => id).join(" · ")
                     : "尚未关联接收设备"}
                 </span>
-                <Link className="text-link" to="/routes">
-                  查看转发规则
+                <Link className="text-link" to="/nodes">
+                  查看设备配置
                   <ArrowUpRight size={14} />
                 </Link>
               </div>

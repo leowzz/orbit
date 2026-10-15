@@ -22,7 +22,7 @@ const pages = [
   { id: "status", name: "运行状态", icon: Activity },
   { id: "connection", name: "连接", icon: Cable },
   { id: "sources", name: "数据来源", icon: Database },
-  { id: "shortcuts", name: "快捷导航", icon: Orbit },
+  { id: "shortcuts", name: "快捷入口", icon: Orbit },
   { id: "preferences", name: "偏好设置", icon: SlidersHorizontal },
 ] as const;
 type Page = (typeof pages)[number]["id"];
@@ -301,7 +301,7 @@ function App() {
                   : page === "sources"
                     ? "选择要同步到工作台的数据"
                     : page === "shortcuts"
-                      ? "让工作台一键打开这台电脑上的应用和网址"
+                      ? "管理可由其他设备打开的本机应用和网址"
                       : "管理启动方式与远程操作"}
             </p>
           </div>
@@ -732,14 +732,6 @@ function App() {
               {page === "shortcuts" && (
                 <Shortcuts
                   items={settings.config.shortcuts}
-                  showTitles={settings.config.shortcutsShowTitles}
-                  onShowTitles={(value) => config("shortcutsShowTitles", value)}
-                  atTop={settings.config.shortcutsAtTop}
-                  onAtTop={(value) => config("shortcutsAtTop", value)}
-                  nfcdLeftPadding={settings.config.nfcdMetricsLeftPadding}
-                  onNfcdLeftPadding={(value) =>
-                    config("nfcdMetricsLeftPadding", value)
-                  }
                   onChange={(items) => config("shortcuts", items)}
                 />
               )}

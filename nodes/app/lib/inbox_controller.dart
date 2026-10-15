@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 import 'local_store.dart';
+import 'node_execution.dart';
 
 class ApiError implements Exception {
   final String code;
@@ -18,6 +19,7 @@ class InboxController extends ChangeNotifier {
   final String token;
   final String cacheDir;
   final http.Client client;
+  late final execution = NodeExecution(local, request);
   List<Json> items = [], pending = [];
   Json? view;
   Json navigation = {'revision': 0, 'show_titles': false, 'items': <Json>[]};
@@ -220,6 +222,8 @@ class InboxController extends ChangeNotifier {
       _hasLiveStatus = true;
       view = status['view'] as Json?;
       online = true;
+      await execution.sync(active: () => active && epoch == _epoch);
+      if (!active || epoch != _epoch) return;
       notifyListeners();
     } catch (_) {
       if (active && epoch == _epoch) {
@@ -310,6 +314,8 @@ class InboxController extends ChangeNotifier {
       final status = await request('status');
       await local.setMeta('status', jsonEncode(status['view']));
       await refreshNavigation();
+      final epoch = _epoch;
+      await execution.sync(active: () => active && epoch == _epoch);
       _hasLiveStatus = true;
       view = status['view'] as Json?;
       online = true;
@@ -426,6 +432,7 @@ class InboxController extends ChangeNotifier {
   Future<void> close() async {
     stop();
     await _sync;
+    await execution.close();
     client.close();
     await local.close();
     super.dispose();

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Plus,
@@ -10,7 +9,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { api, APIError, date } from "../api";
-import type { AppDevice } from "../api";
+import type { AppDevice, RouteDocument } from "../api";
 import { Badge, Empty, PageHead } from "../components";
 
 type Item = {
@@ -35,9 +34,17 @@ function message(e: unknown): string {
   }
   return "操作未完成，请检查连接后重试。";
 }
-export default function Apps() {
-  const [tab, setTab] = useState("devices"),
-    [devices, setDevices] = useState<AppDevice[] | null>(null),
+export default function Apps({
+  deviceId,
+  onChanged,
+  onRoutesChange,
+}: {
+  deviceId?: string;
+  onChanged?: () => void;
+  onRoutesChange?: (d: RouteDocument) => void;
+} = {}) {
+  const tab = deviceId ? "devices" : "inbox";
+  const [devices, setDevices] = useState<AppDevice[] | null>(null),
     [enabled, setEnabled] = useState(true),
     [error, setError] = useState("");
   const [items, setItems] = useState<Item[] | null>(null),
@@ -86,6 +93,7 @@ export default function Apps() {
     async function poll() {
       try {
         await refreshDevices();
+        onChanged?.();
         if (active) setDeviceError("");
       } catch (e) {
         if (active) setDeviceError(message(e));
@@ -110,6 +118,7 @@ export default function Apps() {
     setError("");
     try {
       await refreshDevices();
+      onChanged?.();
       if (tab === "inbox") await refreshItems();
     } catch (e) {
       setError(message(e));
@@ -124,7 +133,7 @@ export default function Apps() {
     if (
       !window.confirm(
         action === "delete"
-          ? `删除设备「${d.label || d.id}」？此设备将立即失去访问权限，已有消息会保留。再次使用需重新添加设备。`
+          ? `删除设备「${d.label || d.id}」？此设备将立即失去访问权限，数据配置与快捷配对同时移除，已有消息会保留。再次使用需重新添加设备。`
           : action === "revoke"
             ? `撤销「${d.label}」的访问？此设备将立即断开，已有收件箱内容会保留。`
             : `为「${d.label}」生成新令牌？旧令牌将立即失效。`,
@@ -133,15 +142,37 @@ export default function Apps() {
       return;
     setBusy(true);
     setError("");
+    let contentRemoved = false;
     try {
+      if (action === "delete") {
+        const latest = await api<RouteDocument>("/routes");
+        if (latest.routes[d.id]) {
+          const remaining = { ...latest.routes };
+          delete remaining[d.id];
+          const saved = await api<RouteDocument>("/routes", {
+            method: "PUT",
+            body: JSON.stringify({
+              revision: latest.revision,
+              routes: remaining,
+            }),
+          });
+          contentRemoved = true;
+          onRoutesChange?.(saved);
+        }
+      }
       const result = await api<{ id: string; token: string }>(
         `/app/devices/${encodeURIComponent(d.id)}${action === "delete" ? "" : `/${action}`}`,
         { method: action === "delete" ? "DELETE" : "POST" },
       );
       if (result.token) setSecret(result);
       await refreshDevices();
+      onChanged?.();
     } catch (e) {
-      setError(message(e));
+      setError(
+        contentRemoved
+          ? "数据配置已移除，未能确认设备删除结果，请刷新后检查。"
+          : message(e),
+      );
     } finally {
       setBusy(false);
     }
@@ -174,45 +205,25 @@ export default function Apps() {
   }
   return (
     <>
-      <PageHead
-        title="App 与收件箱"
-        description="连接你的设备，在管理台与 App 之间共享内容。"
-        action={
-          <button
-            className="button primary"
-            disabled={!enabled || busy}
-            onClick={() =>
-              tab === "devices" ? setCreate(true) : setEditor({})
-            }
-          >
-            <Plus size={16} />
-            {tab === "devices" ? "添加设备" : "新增内容"}
-          </button>
-        }
-      />
+      {!deviceId && (
+        <PageHead
+          title="收件箱"
+          description="在你的设备之间共享文本、待办和图片。"
+          action={
+            <button
+              className="button primary"
+              disabled={!enabled || busy}
+              onClick={() =>
+                tab === "devices" ? setCreate(true) : setEditor({})
+              }
+            >
+              <Plus size={16} />
+              {tab === "devices" ? "添加设备" : "新增内容"}
+            </button>
+          }
+        />
+      )}
       <div className="app-toolbar">
-        <div className="app-tabs" role="tablist" aria-label="App 管理">
-          <button
-            role="tab"
-            aria-selected={tab === "devices"}
-            onClick={() => {
-              setTab("devices");
-              setError("");
-            }}
-          >
-            设备
-          </button>
-          <button
-            role="tab"
-            aria-selected={tab === "inbox"}
-            onClick={() => {
-              setTab("inbox");
-              setError("");
-            }}
-          >
-            收件箱
-          </button>
-        </div>
         <button className="button secondary" disabled={busy} onClick={refresh}>
           <RefreshCw size={15} />
           刷新
@@ -241,75 +252,69 @@ export default function Apps() {
             </Empty>
           ) : (
             <div className="app-device-grid">
-              {devices.map((d) => (
-                <article className="app-device" key={d.id}>
-                  <div className="app-card-head">
-                    <Smartphone size={21} />
-                    <div>
-                      <h2>{d.label || d.id}</h2>
-                      <span>{d.platform}</span>
-                    </div>
-                    <Badge
-                      tone={
-                        d.revoked
-                          ? "warn"
+              {devices
+                .filter((d) => !deviceId || d.id === deviceId)
+                .map((d) => (
+                  <article className="app-device" key={d.id}>
+                    <div className="app-card-head">
+                      <Smartphone size={21} />
+                      <div>
+                        <h2>{d.label || d.id}</h2>
+                        <span>{d.platform}</span>
+                      </div>
+                      <Badge
+                        tone={
+                          d.revoked
+                            ? "warn"
+                            : d.activity.connections > 0
+                              ? "good"
+                              : "neutral"
+                        }
+                      >
+                        {d.revoked
+                          ? "已撤销"
                           : d.activity.connections > 0
-                            ? "good"
-                            : "neutral"
-                      }
-                    >
-                      {d.revoked
-                        ? "已撤销"
-                        : d.activity.connections > 0
-                          ? "已连接"
-                          : "未连接"}
-                    </Badge>
-                  </div>
-                  <dl>
-                    <div>
-                      <dt>最近访问</dt>
-                      <dd>{date(d.activity.last_seen)}</dd>
+                            ? "已连接"
+                            : "未连接"}
+                      </Badge>
                     </div>
-                    <div>
-                      <dt>同步请求</dt>
-                      <dd>{date(d.activity.last_sync)}</dd>
-                    </div>
-                  </dl>
-                  <details>
-                    <summary>状态摘要设置</summary>
-                    <p>配置这台设备显示的用量与会话来源。</p>
-                    <code>{d.id}</code>
-                    <Link to={`/routes?node=${encodeURIComponent(d.id)}`}>
-                      配置转发规则
-                    </Link>
-                  </details>
-                  <div className="app-actions">
-                    <button
-                      className="button secondary"
-                      disabled={busy}
-                      onClick={() => deviceAction(d, "rotate")}
-                    >
-                      {d.revoked ? "重新授权" : "更换令牌"}
-                    </button>
-                    {!d.revoked && (
+                    <dl>
+                      <div>
+                        <dt>最近访问</dt>
+                        <dd>{date(d.activity.last_seen)}</dd>
+                      </div>
+                      <div>
+                        <dt>同步请求</dt>
+                        <dd>{date(d.activity.last_sync)}</dd>
+                      </div>
+                    </dl>
+                    <div className="app-actions">
+                      <button
+                        className="button secondary"
+                        disabled={busy}
+                        onClick={() => deviceAction(d, "rotate")}
+                      >
+                        {d.revoked ? "重新授权" : "更换令牌"}
+                      </button>
+                      {!d.revoked && (
+                        <button
+                          className="button secondary danger"
+                          disabled={busy}
+                          onClick={() => deviceAction(d, "revoke")}
+                        >
+                          撤销访问
+                        </button>
+                      )}
                       <button
                         className="button secondary danger"
                         disabled={busy}
-                        onClick={() => deviceAction(d, "revoke")}
+                        onClick={() => deviceAction(d, "delete")}
                       >
-                        撤销访问
+                        删除设备
                       </button>
-                    )}
-                    <button
-                      className="button secondary danger"
-                      disabled={busy}
-                      onClick={() => deviceAction(d, "delete")}
-                    >
-                      删除设备
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    </div>
+                  </article>
+                ))}
             </div>
           )}
         </>
@@ -520,7 +525,7 @@ function Modal({
     </dialog>
   );
 }
-function DeviceForm({
+export function DeviceForm({
   onClose,
   onCreated,
 }: {
@@ -593,7 +598,7 @@ function DeviceForm({
     </Modal>
   );
 }
-function TokenDialog({
+export function TokenDialog({
   secret,
   onClose,
 }: {

@@ -1,3 +1,4 @@
+import 'execution_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'inbox_screen.dart' show InboxReadingNotification;
@@ -238,6 +239,20 @@ class _AppSettings extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
+            if (controller != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.touch_app_outlined),
+                title: const Text('本机快捷操作'),
+                subtitle: const Text('设置允许其他设备打开的本机应用与网址'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        ExecutionSettingsScreen(controller: controller!),
+                  ),
+                ),
+              ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.link),

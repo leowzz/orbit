@@ -27,6 +27,9 @@ message NavigationItem {
   string shortcut_id = 6;
   string icon_url = 7;
   string icon_name = 8;
+  string executor_kind = 9;
+  string executor_id = 10;
+  string executor_label = 11;
 }
 message Navigation {
   string node_id = 1;
