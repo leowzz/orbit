@@ -36,9 +36,10 @@ web:
 # logging:
 #   level: info
 
-# Optional shared inbox, configured once on the Web Node server.
+# Recommended unified status and inbox connection, configured once on the server.
 # Add these fields under the existing web section:
 #   inbox:
 #     url: https://orbit.example.com
 #     token_file: secrets/web-inbox-token
-# For an inbox without MQTT, see web.inbox.example.yaml.
+# When configured, status and inbox both use this token's device identity;
+# legacy mqtt/node settings above are ignored. See web.inbox.example.yaml.

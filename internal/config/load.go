@@ -303,7 +303,7 @@ func (cfg *WebNodeConfig) validate(baseDir string) error {
 	if err := cfg.NTP.validate(); err != nil {
 		return fmt.Errorf("ntp: %w", err)
 	}
-	if cfg.MQTT.URL != "" || cfg.Web.Inbox.URL == "" {
+	if cfg.Web.Inbox.URL == "" {
 		if err := validateID("node.id", cfg.Node.ID); err != nil {
 			return err
 		}

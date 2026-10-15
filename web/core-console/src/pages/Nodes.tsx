@@ -161,7 +161,11 @@ export default function Nodes({
       (filter === "archived" ? archived.has(d.id) : !archived.has(d.id)) &&
       (filter === "all" ||
         filter === "archived" ||
-        (filter === "app" ? !!d.app : !d.app && d.model === filter)) &&
+        (filter === "app"
+          ? !!d.app
+          : filter === "web"
+            ? d.model === "web"
+            : !d.app && d.model === filter)) &&
       `${d.label} ${d.id}`.toLowerCase().includes(query.toLowerCase()),
   );
   return (
@@ -234,7 +238,9 @@ export default function Nodes({
               }}
               description={
                 current.app
-                  ? `Orbit App · ${current.app.platform}`
+                  ? current.app.platform === "web"
+                    ? "Web 浏览器"
+                    : `Orbit App · ${current.app.platform}`
                   : current.model === "unknown"
                     ? "暂未发现设备"
                     : modelName(current.model)
@@ -442,7 +448,9 @@ export default function Nodes({
                 <h2>{device.label}</h2>
                 <p>
                   {device.app
-                    ? `Orbit App · ${device.app.platform}`
+                    ? device.app.platform === "web"
+                      ? "Web 浏览器"
+                      : `Orbit App · ${device.app.platform}`
                     : device.model === "unknown"
                       ? "暂未发现设备"
                       : modelName(device.model)}

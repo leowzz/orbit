@@ -1,5 +1,6 @@
-# Optional standalone Web Node. Prefer Core's built-in /inbox/ when possible.
-# No MQTT or node.id is needed in this mode. Protect remote access with HTTPS.
+# Web status and inbox share one registered Web device and its token.
+# No MQTT or node.id is needed. Protect remote access with HTTPS.
+# Configure this device's status sources in Core (overview-app profile).
 web:
   listen: 127.0.0.1:8080
   auth:

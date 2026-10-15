@@ -51,8 +51,8 @@ func run(cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error 
 	defer stopSignals()
 	ctx, cancel := context.WithCancel(signalContext)
 	defer cancel()
-	if cfg.MQTT.URL == "" && cfg.Web.Inbox.URL != "" {
-		return runInbox(ctx, cfg, logger, staticDir)
+	if cfg.Web.Inbox.URL != "" {
+		return runHTTP(ctx, cfg, logger, staticDir)
 	}
 	synchronizedClock, err := appclock.New(appclock.Config{
 		Server:       cfg.NTP.Server,
@@ -149,33 +149,29 @@ func disconnect(client *mqtt.Client, logger *zap.Logger) {
 	}
 }
 
-// A message-only Web Node needs one Core connection, no MQTT identity or route.
-func runInbox(ctx context.Context, cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error {
+// Status and inbox share the identity authenticated by the server-side token.
+// Legacy MQTT configuration is ignored once a Core HTTP connection is configured.
+func runHTTP(ctx context.Context, cfg *config.WebNodeConfig, logger *zap.Logger, staticDir string) error {
 	auth := webnode.AuthConfig{Password: cfg.Web.Auth.Password, SessionTTL: cfg.Web.Auth.SessionTTL.Duration, InboxURL: cfg.Web.Inbox.URL, InboxToken: cfg.Web.Inbox.Token}
-	var handler http.Handler = webnode.HandlerWithAuth(webnode.NewStore(), nil, auth)
+	store := webnode.NewStore()
+	runner := webnode.NewHTTPRunner(cfg.Web.Inbox.URL, cfg.Web.Inbox.Token, store, logger)
+	var handler http.Handler = webnode.HandlerWithAuth(store, runner, auth)
 	if staticDir != "" {
 		var err error
-		handler, err = webnode.DevelopmentHandler(webnode.NewStore(), nil, auth, staticDir)
+		handler, err = webnode.DevelopmentHandler(store, runner, auth, staticDir)
 		if err != nil {
 			return err
 		}
 	}
-	original := handler
-	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-			http.Redirect(w, r, "/inbox/", http.StatusSeeOther)
-			return
-		}
-		original.ServeHTTP(w, r)
-	})
 	listener, err := net.Listen("tcp", cfg.Web.Listen)
 	if err != nil {
 		return err
 	}
 	server := newHTTPServer(ctx, handler)
+	go runner.Run(ctx)
 	stopped := make(chan error, 1)
 	go func() { stopped <- server.Serve(listener) }()
-	logger.Info("orbit web inbox started", zap.String("url", "http://"+cfg.Web.Listen+"/inbox/"))
+	logger.Info("orbit web started with one HTTP device identity", zap.String("url", "http://"+cfg.Web.Listen))
 	select {
 	case err = <-stopped:
 		if !errors.Is(err, http.ErrServerClosed) {

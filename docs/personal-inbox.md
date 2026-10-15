@@ -71,7 +71,9 @@ web:
 
 令牌文件保存为 Web Node 单独创建的设备令牌，限制为运行服务的用户可读。浏览器继续使用 Web Node 自己的访问密码；上游令牌保留在服务端，不写入网页、URL 或日志。
 
-保留原有 `mqtt` 和 `node.id` 时，状态页和消息页同时可用；移除它们后进入纯网页收件箱模式，首页直接显示消息，不连接 MQTT。完整示例见 `configs/web.inbox.example.yaml`。最简单的部署仍是直接使用 Core 内置网页，不启动单独 Web Node。
+配置 `web.inbox` 后，状态页和收件箱共用令牌对应的同一台 Web 设备，不再连接 MQTT 或登记第二个设备；旧 `mqtt` 和 `node.id` 配置会被忽略，可移除。首页保留状态页，`/inbox/` 保留收件箱；状态和会话操作均通过同一设备的 HTTP 接口获取。在 Core 为该设备设置数据内容，使用 `overview-app` 配置。完整示例见 `configs/web.inbox.example.yaml`。未配置 `web.inbox` 的旧 MQTT 状态节点继续按原方式工作。
+
+升级原先同时使用 MQTT 和收件箱的部署时，将原 MQTT 设备的路由迁移到令牌对应的设备 ID，并把 profile 改为 `overview-app`；保留输入来源、显示模式、会话开关和轮播间隔。停止旧 Web 服务后清理旧设备的 MQTT retained state/view，并重启 Core，使旧发现记录退出。设备令牌、收件箱内容和同步历史无需重建；原设备名称、归档偏好及快捷设置应随迁移保留。不要仅归档旧设备来代替迁移。
 
 ## 授权与备份
 

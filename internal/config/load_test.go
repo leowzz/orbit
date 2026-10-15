@@ -624,6 +624,12 @@ func TestInboxOnlyWebConfiguration(t *testing.T) {
 	if cfg.MQTT.URL != "" || cfg.Web.Inbox.Token != strings.Repeat("a", 64) {
 		t.Fatal("unexpected inbox connection")
 	}
+	// A configured HTTP device must not load old MQTT credentials or require a
+	// second identity, even when stale deployment settings remain in the file.
+	legacy := "node:\n  id: old-web\nmqtt:\n  url: mqtts://old.example.com:8883\n  credentials:\n    username_file: missing-old-username\n    password_file: missing-old-password\n"
+	if _, err := LoadWebNode(writeConfig(t, dir, "legacy-web.yaml", legacy+text)); err != nil {
+		t.Fatal("unified HTTP device still depended on legacy MQTT settings", err)
+	}
 	for _, url := range []string{"http://remote.example.com", "https://user:password@example.com", "https://example.com?token=secret", "https://example.com/path", "https://example.com#fragment"} {
 		_, err := LoadWebNode(writeConfig(t, dir, "invalid.yaml", strings.Replace(text, "https://orbit.example.com", url, 1)))
 		if err == nil {

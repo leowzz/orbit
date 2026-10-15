@@ -55,7 +55,8 @@ export default function Overview({
       id: app.id,
       label: app.label || app.id,
       model: app.platform === "web" ? "web" : "android",
-      description: `Orbit App · ${app.platform}`,
+      description:
+        app.platform === "web" ? "Web 浏览器" : `Orbit App · ${app.platform}`,
     });
   for (const [id, route] of Object.entries(document.routes))
     if (!devices.has(id))
