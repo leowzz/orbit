@@ -18,6 +18,7 @@ import { api, appConnectionLabel, date, modelName } from "../api";
 import { Badge, DeviceIcon, Empty, PageHead } from "../components";
 import DeviceContent from "./DeviceContent";
 import DeviceName from "../DeviceName";
+import DeviceSummary from "../DeviceSummary";
 import Apps, { DeviceForm, TokenDialog } from "./Apps";
 import DeviceShortcuts from "./DeviceShortcuts";
 
@@ -453,13 +454,11 @@ export default function Nodes({
                       ? "暂未发现设备"
                       : modelName(device.model)}
                 </p>
-                <div className="node-route">
-                  <span>
-                    {document.routes[device.id]
-                      ? "已设置数据内容"
-                      : "尚未设置数据内容"}
-                  </span>
-                </div>
+                <DeviceSummary
+                  route={document.routes[device.id]}
+                  agents={state.agents}
+                  app={!!device.app}
+                />
                 <Link
                   className="node-link"
                   to={`/nodes/${encodeURIComponent(device.id)}`}

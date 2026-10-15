@@ -723,6 +723,9 @@ main {
 }
 .node-card {
   padding: 23px 23px 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 .node-card-top {
   display: flex;
@@ -756,32 +759,44 @@ dd {
   text-align: right;
   overflow-wrap: anywhere;
 }
-.node-route {
+.node-summary {
   border-top: 1px solid var(--line);
-  margin-top: 20px;
   padding: 18px 0;
   min-height: 125px;
+  flex: 1;
 }
-.node-route > .eyebrow {
-  font-size: 12px;
+.node-summary strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
 }
-.node-route strong {
-  display: block;
-  font-size: 13px;
-  margin: 10px 0;
-  color: var(--muted);
-}
-.node-route > div {
+.node-summary-mode {
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.node-summary-mode > span {
   font-size: 13px;
   color: var(--muted);
-  margin-top: 6px;
 }
-.node-route p {
+.node-summary dl {
+  margin: 12px 0 0;
+}
+.node-summary dl > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.node-summary dd {
+  color: var(--text);
+}
+.node-summary-empty p {
   font-size: 14px;
-  margin-top: 12px;
+  line-height: 1.7;
+  margin-top: 10px;
   color: var(--muted);
 }
 .oled-mode-switch {
@@ -2109,11 +2124,6 @@ dt,
   margin-right: auto;
   color: var(--muted);
   font-size: 14px;
-}
-.node-route small {
-  display: block;
-  margin-top: 7px;
-  color: var(--muted);
 }
 @media (max-width: 760px) {
   .device-section {
