@@ -122,6 +122,13 @@ export default function App() {
       clearTimeout(timer);
     };
   }, [auth, refresh]);
+  const updateNodeLabel = useCallback((id: string, label: string) => {
+    setState((current) =>
+      current
+        ? { ...current, node_labels: { ...current.node_labels, [id]: label } }
+        : current,
+    );
+  }, []);
   async function logout() {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -260,13 +267,23 @@ export default function App() {
               <Route
                 path="/nodes"
                 element={
-                  <Nodes state={state} document={routes} onChange={setRoutes} />
+                  <Nodes
+                    state={state}
+                    document={routes}
+                    onChange={setRoutes}
+                    onLabelChange={updateNodeLabel}
+                  />
                 }
               />
               <Route
                 path="/nodes/:nodeId"
                 element={
-                  <Nodes state={state} document={routes} onChange={setRoutes} />
+                  <Nodes
+                    state={state}
+                    document={routes}
+                    onChange={setRoutes}
+                    onLabelChange={updateNodeLabel}
+                  />
                 }
               />
               <Route path="/routes" element={<LegacyRoutes />} />

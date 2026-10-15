@@ -5,6 +5,7 @@ import type { AppDevice, NetworkState, RouteDocument } from "../api";
 import { api, date, modelName } from "../api";
 import { Badge, DeviceIcon, Empty, PageHead } from "../components";
 import DeviceContent from "./DeviceContent";
+import DeviceName from "../DeviceName";
 import Apps, { DeviceForm, TokenDialog } from "./Apps";
 import DeviceShortcuts from "./DeviceShortcuts";
 
@@ -21,10 +22,12 @@ export default function Nodes({
   state,
   document,
   onChange,
+  onLabelChange,
 }: {
   state: NetworkState;
   document: RouteDocument;
   onChange: (d: RouteDocument) => void;
+  onLabelChange: (id: string, label: string) => void;
 }) {
   const { nodeId } = useParams<{ nodeId: string }>();
   const navigate = useNavigate();
@@ -70,7 +73,7 @@ export default function Nodes({
   for (const node of state.nodes)
     devices.set(node.nodeId, {
       id: node.nodeId,
-      label: node.nodeId,
+      label: state.node_labels?.[node.nodeId] || node.nodeId,
       profile:
         (
           {
@@ -96,7 +99,7 @@ export default function Nodes({
     if (!devices.has(id))
       devices.set(id, {
         id,
-        label: id,
+        label: state.node_labels?.[id] || id,
         profile: route.profile,
         model: route.profile.endsWith("-oled-128x32")
           ? "oled-128x32"
@@ -129,8 +132,24 @@ export default function Nodes({
               <ArrowLeft size={15} />
               全部设备
             </Link>
-            <PageHead
-              title={current.label}
+            <DeviceName
+              key={current.id}
+              id={current.id}
+              name={current.label}
+              app={!!current.app}
+              disabled={appDevices === null}
+              onSaved={(label) => {
+                if (current.app)
+                  setAppDevices(
+                    (devices) =>
+                      devices?.map((device) =>
+                        device.id === current.id
+                          ? { ...device, label }
+                          : device,
+                      ) ?? null,
+                  );
+                else onLabelChange(current.id, label);
+              }}
               description={
                 current.app
                   ? `Orbit App · ${current.app.platform}`

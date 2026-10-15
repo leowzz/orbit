@@ -2314,3 +2314,36 @@ dt,
     gap: 16px;
   }
 }
+
+.device-rename {
+  padding: 18px;
+  margin: -8px 0 24px;
+}
+.device-rename fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.device-rename label {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.device-rename-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.device-rename-controls input {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 760px) {
+  .device-rename-controls {
+    flex-wrap: wrap;
+  }
+  .device-rename-controls input {
+    flex-basis: 100%;
+  }
+}

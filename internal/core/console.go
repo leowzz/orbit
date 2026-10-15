@@ -44,7 +44,7 @@ func OpenRouteStore(path string, seed map[string]config.ProjectionRoute) (*Route
 	db.SetMaxOpenConns(1)
 	store := &RouteStore{db: db}
 	fail := func(err error) (*RouteStore, error) { db.Close(); return nil, err }
-	if _, err = db.Exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS routing_config (id INTEGER PRIMARY KEY CHECK (id=1), revision INTEGER NOT NULL, document TEXT NOT NULL);`); err != nil {
+	if _, err = db.Exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS routing_config (id INTEGER PRIMARY KEY CHECK (id=1), revision INTEGER NOT NULL, document TEXT NOT NULL); CREATE TABLE IF NOT EXISTS node_labels (node_id TEXT PRIMARY KEY, label TEXT NOT NULL);`); err != nil {
 		return fail(err)
 	}
 	if _, err = db.Exec(consoleSessionSchema); err != nil {
@@ -260,7 +260,17 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 		writeConsoleJSON(w, map[string]any{"started_at": startedAt, "policies": policies, "session_hours": cfg.Console.SessionHours})
 	})
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {
-		writeConsoleJSON(w, runner.engine.consoleState(runner.now()))
+		labels, err := store.nodeLabels(r.Context())
+		if err != nil {
+			http.Error(w, "cannot load device names", http.StatusServiceUnavailable)
+			return
+		}
+		state := runner.engine.consoleState(runner.now())
+		state["node_labels"] = labels
+		writeConsoleJSON(w, state)
+	})
+	mux.HandleFunc("PUT /api/nodes/{id}/label", func(w http.ResponseWriter, r *http.Request) {
+		store.renameNode(w, r, runner.engine)
 	})
 	mux.HandleFunc("GET /api/routes", func(w http.ResponseWriter, r *http.Request) {
 		d, err := store.Load()

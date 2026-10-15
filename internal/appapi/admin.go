@@ -49,6 +49,7 @@ func (s *Server) AdminHandler() http.Handler {
 	s.navigationAdminRoutes(mux)
 	mux.HandleFunc("GET /api/app/devices", s.listDevices)
 	mux.HandleFunc("POST /api/app/devices", s.createDevice)
+	mux.HandleFunc("PUT /api/app/devices/{id}", s.renameDevice)
 	mux.HandleFunc("DELETE /api/app/devices/{id}", s.deleteDevice)
 	mux.HandleFunc("POST /api/app/devices/{id}/{action}", s.changeDevice)
 	mux.HandleFunc("GET /api/app/items", func(w http.ResponseWriter, r *http.Request) {
@@ -155,6 +156,36 @@ func (s *Server) createDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	write(w, 201, map[string]string{"id": id, "token": token})
 }
+func (s *Server) renameDevice(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Label string `json:"label"`
+	}
+	if !decodeAdmin(w, r, &input) {
+		return
+	}
+	input.Label = strings.TrimSpace(input.Label)
+	if input.Label == "" || len(input.Label) > 120 {
+		failure(w, &inbox.Fault{Code: "invalid_fields"})
+		return
+	}
+	id := r.PathValue("id")
+	s.mu.Lock()
+	device, ok := s.devices[id]
+	if !ok {
+		s.mu.Unlock()
+		failure(w, &inbox.Fault{Code: "not_found"})
+		return
+	}
+	device.Label = input.Label
+	err := s.saveDevice(r, id, device)
+	s.mu.Unlock()
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	write(w, http.StatusOK, map[string]string{"id": id, "label": input.Label})
+}
+
 func (s *Server) changeDevice(w http.ResponseWriter, r *http.Request) {
 	id, action := r.PathValue("id"), r.PathValue("action")
 	if action != "revoke" && action != "rotate" {

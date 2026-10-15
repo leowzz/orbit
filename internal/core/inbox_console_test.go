@@ -61,6 +61,21 @@ func TestInboxConsoleWithoutMQTTKeepsAuthorizationBoundaries(t *testing.T) {
 	if err := json.Unmarshal(create.Body.Bytes(), &device); err != nil {
 		t.Fatal(err)
 	}
+	if w := call("PUT", "/api/app/devices/"+device["id"], `{"label":"书桌工作台"}`, nil, device["token"]); w.Code != 401 {
+		t.Fatal("device token authorized renaming", w.Code)
+	}
+	if w := call("PUT", "/api/app/devices/"+device["id"], `{"label":"书桌工作台"}`, cookie, ""); w.Code != 200 {
+		t.Fatal("console could not rename device", w.Code, w.Body.String())
+	}
+	crossOrigin := httptest.NewRequest("PUT", "https://orbit.example/api/app/devices/"+device["id"], strings.NewReader(`{"label":"wrong"}`))
+	crossOrigin.Header.Set("Content-Type", "application/json")
+	crossOrigin.Header.Set("Origin", "https://evil.example")
+	crossOrigin.AddCookie(cookie)
+	crossResponse := httptest.NewRecorder()
+	handler.ServeHTTP(crossResponse, crossOrigin)
+	if crossResponse.Code != 403 {
+		t.Fatal("cross-origin rename accepted", crossResponse.Code)
+	}
 	if w := call("GET", "/api/v1/status", "", cookie, ""); w.Code != 401 {
 		t.Fatal("admin cookie authorized personal API", w.Code)
 	}

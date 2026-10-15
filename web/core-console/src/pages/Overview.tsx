@@ -44,7 +44,7 @@ export default function Overview({
       n.nodeId,
       {
         id: n.nodeId,
-        label: n.nodeId,
+        label: state.node_labels?.[n.nodeId] || n.nodeId,
         model: n.modelId,
         description: modelName(n.modelId),
       },
@@ -61,7 +61,7 @@ export default function Overview({
     if (!devices.has(id))
       devices.set(id, {
         id,
-        label: id,
+        label: state.node_labels?.[id] || id,
         model: route.profile.endsWith("-oled-128x32") ? "oled-128x32" : "web",
         description: "预配置设备",
       });
@@ -106,7 +106,13 @@ export default function Overview({
       <div className="overview-columns">
         <section>
           <SectionTitle title="数据流向" link="/nodes" />
-          <RouteFlow state={state} document={document} />
+          <RouteFlow
+            state={state}
+            document={document}
+            labels={Object.fromEntries(
+              [...devices].map(([id, device]) => [id, device.label]),
+            )}
+          />
         </section>
         <section className="overview-devices">
           <SectionTitle

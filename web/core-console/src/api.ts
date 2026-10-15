@@ -53,6 +53,7 @@ export interface NetworkState {
   core_epoch: string;
   agents: Agent[];
   nodes: Node[];
+  node_labels?: Record<string, string>;
   now: string;
 }
 export interface AppDevice {

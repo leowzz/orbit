@@ -263,3 +263,82 @@ func TestAdminDevicesPersistRotateRevokeAndSync(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 }
+
+func TestRenameDevicePersistsAndPreservesCredentials(t *testing.T) {
+	dir := t.TempDir()
+	store, err := inbox.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := strings.Repeat("r", 32)
+	digest := sha256.Sum256([]byte(token))
+	original := config.AppDevice{Label: "原名称", Platform: "android", TokenSHA256: hex.EncodeToString(digest[:])}
+	cfg := config.AppConfig{DataDir: dir, Devices: map[string]config.AppDevice{"phone": original}}
+	server, err := New(store, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rename := func(handler http.Handler, id, body string) *httptest.ResponseRecorder {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest("PUT", "/api/app/devices/"+id, strings.NewReader(body)))
+		return response
+	}
+	for _, body := range []string{`{"label":" "}`, `{"label":"` + strings.Repeat("名", 41) + `"}`, `{"label":"手机","platform":"web"}`} {
+		if response := rename(server.AdminHandler(), "phone", body); response.Code != 400 {
+			t.Fatal(response.Code, response.Body.String())
+		}
+	}
+	if response := rename(server.AdminHandler(), "missing", `{"label":"手机"}`); response.Code != 404 {
+		t.Fatal(response.Code)
+	}
+	if response := rename(server.Handler(), "phone", `{"label":"手机"}`); response.Code != 404 {
+		t.Fatal("public API exposes renaming", response.Code)
+	}
+	if response := rename(server.AdminHandler(), "phone", `{"label":"  我的手机  "}`); response.Code != 200 {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	expected := original
+	expected.Label = "我的手机"
+	if server.devices["phone"] != expected {
+		t.Fatal("rename changed device identity or authorization")
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := inbox.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	restarted, err := New(reopened, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restarted.devices["phone"] != expected {
+		t.Fatal("restart lost name or credentials")
+	}
+	request := httptest.NewRequest("GET", "/api/v1/status", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	restarted.Handler().ServeHTTP(response, request)
+	if response.Code != 200 {
+		t.Fatal("rename invalidated token", response.Code)
+	}
+}
+
+func TestRenameDeviceStorageFailureKeepsOriginalName(t *testing.T) {
+	store, err := inbox.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := New(store, config.AppConfig{Devices: map[string]config.AppDevice{"phone": {Label: "原名称", Revoked: true}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = store.Close()
+	response := httptest.NewRecorder()
+	server.AdminHandler().ServeHTTP(response, httptest.NewRequest("PUT", "/api/app/devices/phone", strings.NewReader(`{"label":"新名称"}`)))
+	if response.Code != 503 || server.devices["phone"].Label != "原名称" || !server.devices["phone"].Revoked {
+		t.Fatal("failed rename changed registry", response.Code)
+	}
+}

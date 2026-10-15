@@ -18,9 +18,11 @@ const sourceKey = (input: { agent_id: string; observation_type: string }) =>
 export default function RouteFlow({
   state,
   document,
+  labels,
 }: {
   state: NetworkState;
   document: RouteDocument;
+  labels: Record<string, string>;
 }) {
   const [paused, setPaused] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -242,7 +244,7 @@ export default function RouteFlow({
                 <Link
                   className={`topology-card topology-target ${focused === id ? "is-selected" : ""}`}
                   key={id}
-                  to="/nodes"
+                  to={`/nodes/${encodeURIComponent(id)}`}
                   onMouseEnter={() => setFocused(id)}
                   onMouseLeave={() => setFocused(null)}
                   onFocus={() => setFocused(id)}
@@ -272,7 +274,7 @@ export default function RouteFlow({
                     }
                   />
                   <div>
-                    <strong>{id}</strong>
+                    <strong>{labels[id] || id}</strong>
                     <small>{profileName(route.profile)}</small>
                     <small className="topology-input-label">
                       {route.inputs
