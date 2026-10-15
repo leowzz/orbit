@@ -373,6 +373,19 @@ function render(snapshot) {
   elements.nodeID.textContent = `Node ${snapshot.node_id}`;
   elements.revision.textContent = `Revision ${snapshot.revision}`;
 
+  const mode = snapshot.display_kind || "";
+  const quota = mode === "codex";
+  document.querySelector("#overview-title").textContent = quota ? "账号周限" : mode ? "API 用量" : "今日概览";
+  document.querySelector(".sessions").hidden = !!mode;
+  document.querySelector(".metric-accent").hidden = !!mode && !quota;
+  const labels = document.querySelectorAll("#usage-metrics .metric-label");
+  const metricLabels = quota
+    ? ["剩余额度", "重置日期", "重置时间", "剩余时间"]
+    : ["实际成本", "Token", "TPM", "运行任务"];
+  metricLabels.forEach((label, i) => { labels[i].textContent = label; });
+  const notes = document.querySelectorAll("#usage-metrics .metric small");
+  notes[1].textContent = quota ? "月 / 日" : "今日累计";
+  notes[2].textContent = quota ? "时 / 分" : "当前吞吐";
   const usage = snapshot.usage;
   elements.cost.textContent = usage ? formatCost(usage.actual_cost_micros, usage.currency_code) : "--";
   elements.currency.textContent = usage && usage.currency_code ? usage.currency_code : "USD";
@@ -382,6 +395,17 @@ function render(snapshot) {
   const codex = snapshot.codex;
   elements.runningCount.textContent = codex ? integerFormat.format(codex.running_count) : "--";
   elements.totalCount.textContent = codex ? `共 ${integerFormat.format(codex.total_count)} 个` : "共 -- 个";
+  if (quota) {
+    // Core projects each countdown component beside its corresponding reset value.
+    const days = /^(\d+)\s+(\d{2}\/\d{2})$/.exec(snapshot.secondary || "");
+    const hours = /^(\d+)\s+(\d{2}:\d{2})$/.exec(snapshot.footer || "");
+    elements.cost.textContent = snapshot.primary || "--%";
+    elements.tokens.textContent = days ? days[2] : "--/--";
+    elements.tpm.textContent = hours ? hours[2] : "--:--";
+    elements.runningCount.textContent = days && hours ? `${days[1]}天${hours[1]}时` : "--";
+    elements.currency.textContent = "剩余";
+    elements.totalCount.textContent = "距重置";
+  }
   renderSessions(codex);
   requestAnimationFrame(fitMetrics);
 }

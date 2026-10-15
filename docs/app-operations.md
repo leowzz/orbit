@@ -59,3 +59,9 @@ YAML 路由仅在首次创建管理台数据库时导入；已有部署修改 YA
 `configs/core.inbox.example.yaml` 可省略 MQTT。此模式启动管理台和 App API，状态转发规则必须为空；已有规则时会拒绝启动并说明需要保留 MQTT 配置。App 和网页的消息不需要设备投影路由。
 
 管理台同域提供个人 API 和网页，但仍分别校验管理员会话与设备凭据。最少配置、Web Node 可选连接和浏览器缓存边界见 [个人收件箱](personal-inbox.md)。
+
+## 2026-10-15：Web 账号周限四行展示
+
+- tx Web 更新为本机构建镜像 `orbit-web:weekly-four-rows-20261015`，左侧依次显示剩余额度、重置日期、重置时间、剩余时间（如 `6天23时`）。Core 未重启。
+- 产物、源码差异和验证记录：`/srv/orbit-deploy/releases/web-weekly-four-rows-20261015`；Compose 备份：`/srv/orbit-deploy/backups/web-weekly-four-rows-20261015T031828Z`，旧 Web 镜像保留。
+- 运行二进制及公网 JavaScript 哈希与构建产物一致；认证后的状态接口返回 200，当前 `display_kind` 为 `codex`。镜像未推送仓库，重建继续使用 `--pull never`。
