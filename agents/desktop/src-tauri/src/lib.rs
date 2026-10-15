@@ -231,7 +231,8 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "退出 Orbit Agent", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings, &pause, &quit])?;
             TrayIconBuilder::new()
-                .icon(app.default_window_icon().cloned().ok_or("缺少应用图标")?)
+                .icon(tauri::include_image!("icons/tray.png"))
+                .icon_as_template(true)
                 .tooltip("Orbit Agent")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
