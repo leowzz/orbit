@@ -106,6 +106,9 @@ func (s *Store) migrate() error {
  CREATE TABLE IF NOT EXISTS receipts (node_id TEXT NOT NULL, operation_id TEXT NOT NULL, digest TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(node_id,operation_id));
  CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, owner TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, created_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS app_registry (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS navigation_configs (node_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS agent_shortcuts (agent_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS navigation_icons (id TEXT PRIMARY KEY, png BLOB NOT NULL);
  PRAGMA user_version=2;`)
 	if err != nil {
 		return err

@@ -8,6 +8,9 @@ use std::{
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Config {
+    pub shortcuts: Vec<crate::shortcuts::Shortcut>,
+    pub shortcuts_revision: u64,
+    pub shortcuts_show_titles: bool,
     pub agent_id: String,
     pub host_label: String,
     pub mqtt: Mqtt,
@@ -95,6 +98,9 @@ impl Default for Usage {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            shortcuts: vec![],
+            shortcuts_revision: 1,
+            shortcuts_show_titles: false,
             agent_id: default_id(),
             host_label: std::env::var("COMPUTERNAME")
                 .or_else(|_| std::env::var("HOSTNAME"))
@@ -148,6 +154,7 @@ impl Settings {
 }
 impl Config {
     pub fn validate(&self, secrets: &Secrets) -> Result<(), String> {
+        crate::shortcuts::validate(&self.shortcuts)?;
         if self.agent_id.is_empty()
             || self.agent_id.len() > 128
             || !self

@@ -114,3 +114,11 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 修复 YAML 导入将 `~/.codex` 错当成配置文件相对路径的问题；配置回归测试 4 项及格式检查通过，macOS 应用重新构建安装。
 - 137 工作台显示实时连接、20 条会话和账号周限；Agent 上报 1967 个会话、1 个运行中，Codex 与 Sub2API 均健康。标题点击进入全屏、左上角标题退出全屏均已验证。
 - 普通模式与重启后的全屏模式各点击一次「同步 app node 布局与交互」，指令 `af76bc3767e64b82092cbf9398d3a8ac`、`6e7850b32524146f5803786a2af95e4d` 均由新 Agent 返回 `COMMAND_STATUS_SUCCEEDED`。用户已确认 Mac 上打开了对应 Codex 会话，工作台点击到本机打开的完整链路验证通过。
+
+### 2026-10-15：Agent 管理工作台快捷导航
+
+- 最终分工为 Agent 管理应用、网址、图标、顺序和标题显示；App 工作台仅展示与点击。Core 按现有工作台路由自动投影来源 Agent 的导航，不再接受 App 写导航配置。
+- tx Core 更新为 `orbit-core:agent-navigation-20261015`，Web 未更新。发布记录 `/srv/orbit-deploy/releases/agent-navigation-20261015`；停机备份 `/srv/orbit-deploy/backups/agent-navigation-20261015T063919Z`。两份数据库完整性为 `ok`，3 条路由（修订 151）和 4 个设备授权保留，二进制摘要、HTTPS、原授权及状态接口通过。
+- 137 覆盖安装 ARM64 profile APK versionCode 4014，首次安装时间仍为 `2026-10-15 12:10:41`。普通与全屏底栏均显示居中的大图标、默认隐藏标题，没有配置入口；Agent 新增和排序后自动同步，工作台数据恢复实时更新。
+- 在普通模式点击网址与 Microsoft Edge，Agent 分别回报指令 `80b94e72-8cf2-4a78-a837-30dde109e22c`、`8a8a0ca1-1ec1-4b85-aa49-130ecdfea7ce` 为 `COMMAND_STATUS_SUCCEEDED`；全屏点击亦成功。验证未修改用户现有入口。
+- 已安装最新 Mac Agent，保留原凭据和入口；修复后台运行时重新打开应用不能显示设置窗口的问题。Go 全量及 API/Core race、Rust 22 项测试和 Clippy、Flutter analyze 与工作台/导航 10 项测试、Protobuf lint 通过。Windows 的应用选择、图标提取和打开仍待真机验收。

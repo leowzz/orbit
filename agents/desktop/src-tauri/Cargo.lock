@@ -2679,6 +2679,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 name = "orbit-desktop-agent"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "chrono-tz",
@@ -2686,6 +2687,9 @@ dependencies = [
  "hex",
  "humantime",
  "keyring",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "open",
  "prost",
  "prost-build",

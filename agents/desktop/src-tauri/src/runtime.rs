@@ -470,6 +470,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
         let (client, mut eventloop) = AsyncClient::new(options, 128);
         let mut publisher = Publisher::new();
         let mut online = false;
+        let mut catalog_sent = false;
         let mut tick = tokio::time::interval(Duration::from_secs(5));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -515,6 +516,11 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
                             if publisher.announcement_pkid == Some(ack.pkid) {
                                 publisher.announced = true;
                                 publisher.announcement_pkid = None;
+                                if !catalog_sent {
+                                    let catalog = crate::shortcuts::catalog(&c).encode_to_vec();
+                                    if publish(&client, format!("orbit/v1/agents/{}/shortcuts",c.agent_id), true, catalog, None).is_err(){break;}
+                                    catalog_sent = true;
+                                }
                                 dirty = true;
                             }
                         } else {
@@ -528,7 +534,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
                             if let Ok(command) = wire::Command::decode(p.payload) {
                                 let result = tokio::select! {
                                     _ = cancel.cancelled() => break 'reconnect,
-                                    result = executor.execute(command, &c.agent_id, c.allow_open, clock.now_millis()) => result
+                                    result = executor.execute_config(command, &c, clock.now_millis()) => result
                                 };
                                 if publish(&client, format!("orbit/v1/agents/{}/results", c.agent_id), false, result.encode_to_vec(), Some(30)).is_err() {
                                     break;

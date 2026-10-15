@@ -36,6 +36,16 @@ fn validate_at(
     enabled: bool,
     now_nanos: i128,
 ) -> Result<String, (i32, &'static str)> {
+    validate_envelope(c, id, now_nanos)?;
+    let Some(wire::command::Action::OpenCodexSession(action)) = &c.action else {
+        return Err((3, "unsupported_action"));
+    };
+    if !enabled {
+        return Err((3, "unsupported_action"));
+    }
+    thread_url(&action.session_id).map_err(|_| (3, "invalid_session_id"))
+}
+fn validate_envelope(c: &Command, id: &str, now_nanos: i128) -> Result<(), (i32, &'static str)> {
     let bad = || (3, "invalid_command");
     let m = c.metadata.as_ref().ok_or_else(bad)?;
     let r = c.intent_ref.as_ref().ok_or_else(bad)?;
@@ -70,13 +80,7 @@ fn validate_at(
     if nanos(expiry) <= now_nanos {
         return Err((4, "command_expired"));
     }
-    let Some(wire::command::Action::OpenCodexSession(action)) = &c.action else {
-        return Err((3, "unsupported_action"));
-    };
-    if !enabled {
-        return Err((3, "unsupported_action"));
-    }
-    thread_url(&action.session_id).map_err(|_| (3, "invalid_session_id"))
+    Ok(())
 }
 #[derive(Default)]
 pub struct Executor {
@@ -120,6 +124,51 @@ impl Executor {
         F: FnOnce(String) -> Fut,
         Fut: std::future::Future<Output = Result<(), ()>>,
     {
+        let validated = validate_at(&c, id, enabled, now as i128 * 1_000_000);
+        self.execute_checked(c, id, now, validated, open).await
+    }
+    pub async fn execute_config(
+        &mut self,
+        c: Command,
+        config: &crate::config::Config,
+        now: i64,
+    ) -> CommandResult {
+        if let Some(wire::command::Action::OpenShortcut(action)) = &c.action {
+            let item = config
+                .shortcuts
+                .iter()
+                .find(|i| i.id == action.shortcut_id)
+                .cloned();
+            let validated = validate_envelope(&c, &config.agent_id, now as i128 * 1_000_000)
+                .and_then(|_| {
+                    if action.catalog_revision != config.shortcuts_revision.max(1) || item.is_none()
+                    {
+                        Err((3, "shortcut_unavailable"))
+                    } else {
+                        Ok(action.shortcut_id.clone())
+                    }
+                });
+            self.execute_checked(c, &config.agent_id, now, validated, move |_| async move {
+                crate::shortcuts::open_shortcut(item.ok_or(())?).await
+            })
+            .await
+        } else {
+            self.execute(c, &config.agent_id, config.allow_open, now)
+                .await
+        }
+    }
+    async fn execute_checked<F, Fut>(
+        &mut self,
+        c: Command,
+        id: &str,
+        now: i64,
+        validated: Result<String, (i32, &'static str)>,
+        open: F,
+    ) -> CommandResult
+    where
+        F: FnOnce(String) -> Fut,
+        Fut: std::future::Future<Output = Result<(), ()>>,
+    {
         let fingerprint = Sha256::digest(c.encode_to_vec()).to_vec();
         if let Some((_, hash, result)) = self.cache.iter().find(|(cid, _, _)| cid == &c.command_id)
         {
@@ -128,7 +177,7 @@ impl Executor {
             }
             return self.result(&c, id, now / 1000, 3, "command_id_conflict");
         }
-        let (status, error) = match validate_at(&c, id, enabled, now as i128 * 1_000_000) {
+        let (status, error) = match validated {
             Ok(url) => {
                 match tokio::time::timeout(std::time::Duration::from_secs(5), open(url)).await {
                     Ok(Ok(())) => (1, ""),
@@ -163,9 +212,9 @@ impl Executor {
             status,
             error_code: error.into(),
             safe_message: if status == 1 {
-                "Codex session opened"
+                "Shortcut opened"
             } else {
-                "Codex session was not opened"
+                "Shortcut was not opened"
             }
             .into(),
         }
@@ -191,6 +240,37 @@ mod tests {
                 },
             )),
         }
+    }
+    #[tokio::test]
+    async fn shortcut_requires_current_catalog_and_registered_id() {
+        let mut config = crate::config::Config {
+            agent_id: "agent".into(),
+            shortcuts_revision: 7,
+            ..Default::default()
+        };
+        config.shortcuts.push(crate::shortcuts::Shortcut {
+            id: "known".into(),
+            title: "Known".into(),
+            kind: "url".into(),
+            target: "https://example.com".into(),
+            icon: String::new(),
+        });
+        let mut c = command();
+        c.target_agent_id = "agent".into();
+        c.action = Some(wire::command::Action::OpenShortcut(wire::OpenShortcut {
+            shortcut_id: "known".into(),
+            catalog_revision: 6,
+        }));
+        let result = Executor::default()
+            .execute_config(c.clone(), &config, 101000)
+            .await;
+        assert_eq!(result.error_code, "shortcut_unavailable");
+        c.action = Some(wire::command::Action::OpenShortcut(wire::OpenShortcut {
+            shortcut_id: "deleted".into(),
+            catalog_revision: 7,
+        }));
+        let result = Executor::default().execute_config(c, &config, 101000).await;
+        assert_eq!(result.error_code, "shortcut_unavailable");
     }
     #[test]
     fn rejects_identity_ttl_and_disabled() {

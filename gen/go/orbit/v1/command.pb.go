@@ -369,6 +369,58 @@ func (x *OpenCodexSession) GetSessionId() string {
 	return ""
 }
 
+type OpenShortcut struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ShortcutId      string                 `protobuf:"bytes,1,opt,name=shortcut_id,json=shortcutId,proto3" json:"shortcut_id,omitempty"`
+	CatalogRevision uint64                 `protobuf:"varint,2,opt,name=catalog_revision,json=catalogRevision,proto3" json:"catalog_revision,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *OpenShortcut) Reset() {
+	*x = OpenShortcut{}
+	mi := &file_orbit_v1_command_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenShortcut) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenShortcut) ProtoMessage() {}
+
+func (x *OpenShortcut) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_command_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenShortcut.ProtoReflect.Descriptor instead.
+func (*OpenShortcut) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_command_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *OpenShortcut) GetShortcutId() string {
+	if x != nil {
+		return x.ShortcutId
+	}
+	return ""
+}
+
+func (x *OpenShortcut) GetCatalogRevision() uint64 {
+	if x != nil {
+		return x.CatalogRevision
+	}
+	return 0
+}
+
 type Command struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Metadata         *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -379,6 +431,7 @@ type Command struct {
 	// Types that are valid to be assigned to Action:
 	//
 	//	*Command_OpenCodexSession
+	//	*Command_OpenShortcut
 	Action        isCommand_Action `protobuf_oneof:"action"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -386,7 +439,7 @@ type Command struct {
 
 func (x *Command) Reset() {
 	*x = Command{}
-	mi := &file_orbit_v1_command_proto_msgTypes[4]
+	mi := &file_orbit_v1_command_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -398,7 +451,7 @@ func (x *Command) String() string {
 func (*Command) ProtoMessage() {}
 
 func (x *Command) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_command_proto_msgTypes[4]
+	mi := &file_orbit_v1_command_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -411,7 +464,7 @@ func (x *Command) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Command.ProtoReflect.Descriptor instead.
 func (*Command) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_command_proto_rawDescGZIP(), []int{4}
+	return file_orbit_v1_command_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Command) GetMetadata() *Metadata {
@@ -465,6 +518,15 @@ func (x *Command) GetOpenCodexSession() *OpenCodexSession {
 	return nil
 }
 
+func (x *Command) GetOpenShortcut() *OpenShortcut {
+	if x != nil {
+		if x, ok := x.Action.(*Command_OpenShortcut); ok {
+			return x.OpenShortcut
+		}
+	}
+	return nil
+}
+
 type isCommand_Action interface {
 	isCommand_Action()
 }
@@ -473,7 +535,13 @@ type Command_OpenCodexSession struct {
 	OpenCodexSession *OpenCodexSession `protobuf:"bytes,10,opt,name=open_codex_session,json=openCodexSession,proto3,oneof"`
 }
 
+type Command_OpenShortcut struct {
+	OpenShortcut *OpenShortcut `protobuf:"bytes,11,opt,name=open_shortcut,json=openShortcut,proto3,oneof"`
+}
+
 func (*Command_OpenCodexSession) isCommand_Action() {}
+
+func (*Command_OpenShortcut) isCommand_Action() {}
 
 type CommandResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -489,7 +557,7 @@ type CommandResult struct {
 
 func (x *CommandResult) Reset() {
 	*x = CommandResult{}
-	mi := &file_orbit_v1_command_proto_msgTypes[5]
+	mi := &file_orbit_v1_command_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +569,7 @@ func (x *CommandResult) String() string {
 func (*CommandResult) ProtoMessage() {}
 
 func (x *CommandResult) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_command_proto_msgTypes[5]
+	mi := &file_orbit_v1_command_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +582,7 @@ func (x *CommandResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandResult.ProtoReflect.Descriptor instead.
 func (*CommandResult) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_command_proto_rawDescGZIP(), []int{5}
+	return file_orbit_v1_command_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CommandResult) GetMetadata() *Metadata {
@@ -582,7 +650,11 @@ const file_orbit_v1_command_proto_rawDesc = "" +
 	"\x06action\"1\n" +
 	"\x10OpenCodexSession\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\xd4\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"Z\n" +
+	"\fOpenShortcut\x12\x1f\n" +
+	"\vshortcut_id\x18\x01 \x01(\tR\n" +
+	"shortcutId\x12)\n" +
+	"\x10catalog_revision\x18\x02 \x01(\x04R\x0fcatalogRevision\"\x93\x03\n" +
 	"\aCommand\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x1d\n" +
 	"\n" +
@@ -592,7 +664,8 @@ const file_orbit_v1_command_proto_rawDesc = "" +
 	"intent_ref\x18\x04 \x01(\v2\x13.orbit.v1.IntentRefR\tintentRef\x12H\n" +
 	"\x12intent_produced_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x10intentProducedAt\x12J\n" +
 	"\x12open_codex_session\x18\n" +
-	" \x01(\v2\x1a.orbit.v1.OpenCodexSessionH\x00R\x10openCodexSessionB\b\n" +
+	" \x01(\v2\x1a.orbit.v1.OpenCodexSessionH\x00R\x10openCodexSession\x12=\n" +
+	"\ropen_shortcut\x18\v \x01(\v2\x16.orbit.v1.OpenShortcutH\x00R\fopenShortcutB\b\n" +
 	"\x06action\"\x85\x02\n" +
 	"\rCommandResult\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x1d\n" +
@@ -627,7 +700,7 @@ func file_orbit_v1_command_proto_rawDescGZIP() []byte {
 }
 
 var file_orbit_v1_command_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_orbit_v1_command_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_orbit_v1_command_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_orbit_v1_command_proto_goTypes = []any{
 	(RequesterKind)(0),             // 0: orbit.v1.RequesterKind
 	(CommandStatus)(0),             // 1: orbit.v1.CommandStatus
@@ -635,27 +708,29 @@ var file_orbit_v1_command_proto_goTypes = []any{
 	(*OpenCodexSessionIntent)(nil), // 3: orbit.v1.OpenCodexSessionIntent
 	(*Intent)(nil),                 // 4: orbit.v1.Intent
 	(*OpenCodexSession)(nil),       // 5: orbit.v1.OpenCodexSession
-	(*Command)(nil),                // 6: orbit.v1.Command
-	(*CommandResult)(nil),          // 7: orbit.v1.CommandResult
-	(*Metadata)(nil),               // 8: orbit.v1.Metadata
-	(*timestamppb.Timestamp)(nil),  // 9: google.protobuf.Timestamp
+	(*OpenShortcut)(nil),           // 6: orbit.v1.OpenShortcut
+	(*Command)(nil),                // 7: orbit.v1.Command
+	(*CommandResult)(nil),          // 8: orbit.v1.CommandResult
+	(*Metadata)(nil),               // 9: orbit.v1.Metadata
+	(*timestamppb.Timestamp)(nil),  // 10: google.protobuf.Timestamp
 }
 var file_orbit_v1_command_proto_depIdxs = []int32{
 	0,  // 0: orbit.v1.IntentRef.requester_kind:type_name -> orbit.v1.RequesterKind
-	8,  // 1: orbit.v1.Intent.metadata:type_name -> orbit.v1.Metadata
+	9,  // 1: orbit.v1.Intent.metadata:type_name -> orbit.v1.Metadata
 	3,  // 2: orbit.v1.Intent.open_codex_session:type_name -> orbit.v1.OpenCodexSessionIntent
-	8,  // 3: orbit.v1.Command.metadata:type_name -> orbit.v1.Metadata
+	9,  // 3: orbit.v1.Command.metadata:type_name -> orbit.v1.Metadata
 	2,  // 4: orbit.v1.Command.intent_ref:type_name -> orbit.v1.IntentRef
-	9,  // 5: orbit.v1.Command.intent_produced_at:type_name -> google.protobuf.Timestamp
+	10, // 5: orbit.v1.Command.intent_produced_at:type_name -> google.protobuf.Timestamp
 	5,  // 6: orbit.v1.Command.open_codex_session:type_name -> orbit.v1.OpenCodexSession
-	8,  // 7: orbit.v1.CommandResult.metadata:type_name -> orbit.v1.Metadata
-	2,  // 8: orbit.v1.CommandResult.intent_ref:type_name -> orbit.v1.IntentRef
-	1,  // 9: orbit.v1.CommandResult.status:type_name -> orbit.v1.CommandStatus
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	6,  // 7: orbit.v1.Command.open_shortcut:type_name -> orbit.v1.OpenShortcut
+	9,  // 8: orbit.v1.CommandResult.metadata:type_name -> orbit.v1.Metadata
+	2,  // 9: orbit.v1.CommandResult.intent_ref:type_name -> orbit.v1.IntentRef
+	1,  // 10: orbit.v1.CommandResult.status:type_name -> orbit.v1.CommandStatus
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_command_proto_init() }
@@ -667,8 +742,9 @@ func file_orbit_v1_command_proto_init() {
 	file_orbit_v1_command_proto_msgTypes[2].OneofWrappers = []any{
 		(*Intent_OpenCodexSession)(nil),
 	}
-	file_orbit_v1_command_proto_msgTypes[4].OneofWrappers = []any{
+	file_orbit_v1_command_proto_msgTypes[5].OneofWrappers = []any{
 		(*Command_OpenCodexSession)(nil),
+		(*Command_OpenShortcut)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -676,7 +752,7 @@ func file_orbit_v1_command_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orbit_v1_command_proto_rawDesc), len(file_orbit_v1_command_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -2,7 +2,9 @@ pub mod clock;
 pub mod codex;
 pub mod commands;
 pub mod config;
+pub mod recent_apps;
 pub mod runtime;
+pub mod shortcuts;
 pub mod usage;
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/orbit.v1.rs"));
@@ -67,11 +69,16 @@ async fn settings_get(agent: tauri::State<'_, Agent>) -> Result<Settings, String
 }
 #[tauri::command]
 async fn settings_save(
-    settings: Settings,
+    mut settings: Settings,
     agent: tauri::State<'_, Agent>,
 ) -> Result<Settings, String> {
     let mut inner = agent.inner.lock().await;
     let secrets = settings.secrets(&inner.secrets);
+    settings.config.shortcuts_revision = inner
+        .config
+        .shortcuts_revision
+        .saturating_add(1)
+        .max(chrono::Utc::now().timestamp_millis() as u64);
     agent.store.save(&settings.config, &secrets)?;
     Agent::stop(&mut inner).await;
     inner.load_failed = false;
@@ -112,6 +119,39 @@ async fn settings_import(path: String) -> Result<Settings, String> {
         .map_err(|_| "导入失败".to_string())?
 }
 #[tauri::command]
+async fn shortcut_import(path: String) -> Result<shortcuts::Shortcut, String> {
+    tokio::task::spawn_blocking(move || shortcuts::import_app(&path))
+        .await
+        .map_err(|_| "读取应用失败".to_string())?
+}
+#[tauri::command]
+async fn shortcut_icon(path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || shortcuts::import_icon(&path))
+        .await
+        .map_err(|_| "读取图标失败".to_string())?
+}
+#[tauri::command]
+async fn shortcut_recommendations(
+    excluded: Vec<String>,
+    recent: tauri::State<'_, Arc<recent_apps::RecentApps>>,
+) -> Result<recent_apps::Recommendations, String> {
+    let recent = recent.inner().clone();
+    tokio::task::spawn_blocking(move || recent.recommendations(&excluded))
+        .await
+        .map_err(|_| "读取最近应用失败".to_string())?
+}
+#[tauri::command]
+async fn shortcut_preview(item: shortcuts::Shortcut) -> Result<(), String> {
+    shortcuts::validate(std::slice::from_ref(&item))?;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        shortcuts::open_shortcut(item),
+    )
+    .await
+    .map_err(|_| "打开超时，请重试".to_string())?
+    .map_err(|_| "未能打开，请检查应用或网址".to_string())
+}
+#[tauri::command]
 fn autostart_get(app: tauri::AppHandle) -> Result<bool, String> {
     app.autolaunch()
         .is_enabled()
@@ -146,6 +186,10 @@ pub fn run() {
             settings_get,
             settings_save,
             settings_import,
+            shortcut_import,
+            shortcut_icon,
+            shortcut_recommendations,
+            shortcut_preview,
             agent_status,
             agent_set_running,
             connection_test,
@@ -153,6 +197,10 @@ pub fn run() {
             autostart_set
         ])
         .setup(|app| {
+            let recent =
+                recent_apps::RecentApps::new(app.path().app_config_dir()?.join("recent-apps.json"));
+            app.manage(recent.clone());
+            recent_apps::start(app.handle().clone(), recent);
             let store = Store {
                 path: app.path().app_config_dir()?.join("settings.json"),
             };
@@ -247,6 +295,14 @@ pub fn run() {
                 let _ = window.hide();
             }
         })
-        .run(tauri::generate_context!())
-        .expect("无法启动 Orbit Agent");
+        .build(tauri::generate_context!())
+        .expect("无法启动 Orbit Agent")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                show(app);
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }

@@ -20,6 +20,9 @@ class InboxController extends ChangeNotifier {
   final http.Client client;
   List<Json> items = [], pending = [];
   Json? view;
+  Json navigation = {'revision': 0, 'show_titles': false, 'items': <Json>[]};
+  String? navigationError;
+  bool _hasLiveNavigation = false;
   bool _hasLiveStatus = false;
   String? error;
   String? uploadingID;
@@ -69,6 +72,26 @@ class InboxController extends ChangeNotifier {
       throw ApiError(data['code'] ?? 'unavailable', data['current'] as Json?);
     }
     return data;
+  }
+
+  Future<void> refreshNavigation() async {
+    final previous = navigation;
+    try {
+      final next = await request('navigation');
+      if (!identical(previous, navigation)) return;
+      navigation = next;
+      _hasLiveNavigation = true;
+      navigationError = null;
+      await local.setMeta('navigation', jsonEncode(next));
+    } catch (_) {
+      navigationError = '快捷导航未能同步，请检查连接或更新 Core';
+    }
+    notifyListeners();
+  }
+
+  Future<void> openShortcut(String id) async {
+    if (!online) throw ApiError('agent_unavailable');
+    await request('navigation/${Uri.encodeComponent(id)}/open', body: {});
   }
 
   Future<void> openCodexSession(String sessionId) async {
@@ -138,11 +161,15 @@ class InboxController extends ChangeNotifier {
           };
     }).toList();
     final saved = await local.meta('status');
+    final savedNavigation = await local.meta('navigation');
     if (revision != _loadRevision) return;
     items = matches.take(limit).toList();
     hasMore = matches.length > limit;
     pending = queue;
     if (!_hasLiveStatus && saved != null) view = jsonDecode(saved) as Json?;
+    if (!_hasLiveNavigation && savedNavigation != null) {
+      navigation = jsonDecode(savedNavigation) as Json;
+    }
     notifyListeners();
   }
 
@@ -282,6 +309,7 @@ class InboxController extends ChangeNotifier {
       await _catchUp();
       final status = await request('status');
       await local.setMeta('status', jsonEncode(status['view']));
+      await refreshNavigation();
       _hasLiveStatus = true;
       view = status['view'] as Json?;
       online = true;

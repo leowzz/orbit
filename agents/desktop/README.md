@@ -11,6 +11,24 @@
 3. 在「偏好设置」中按需允许工作台打开 Codex 会话，并设置登录电脑后自动启动。
 4. 点击「保存并应用」。关闭窗口后继续在托盘运行；暂停和退出使用托盘菜单。
 
+在「快捷导航」中拖入应用，自动读取名称和图标，也可以选择应用或添加 HTTP/HTTPS 网址。
+底栏预览支持拖拽排序、双击在本机打开、右键编辑或删除；键盘 Enter 打开、Alt + 左右键排序、
+Shift + F10 打开菜单。编辑表单可修改名称、网址、应用和图标；取消不会修改入口。
+图片可拖到预览图标或编辑表单图标上，也可在表单内选择图片。
+标题默认隐藏，可在这里打开「在工作台显示标题」。保存后，使用这台 Agent 作为数据来源的
+App 工作台自动同步：底栏图标优先居中、超宽横向滚动，App 仅展示和触发打开，不提供配置入口。
+应用和网址均在 Agent 所在电脑打开。移除入口并保存后立即撤销其打开权限。
+macOS 接受 `.app`，Windows 接受 `.exe` / `.lnk`；Windows 的应用图标提取与打开仍待真机验收。
+
+macOS 的「最近使用」推荐区自动记录 Agent 运行期间的应用启动和前台切换，并用当前运行应用的
+启动时间初始化推荐。点击推荐立即加入预览，已添加的应用不会重复推荐；点击「保存并应用」后
+同步到工作台。仅记录应用路径和最近时间，最多 64 个应用、保留 90 天，保存在本机
+`recent-apps.json`，不上传窗口标题、内容或使用记录。后台每两秒检查一次应用变化；
+Windows 暂不采集最近应用，手动配置与底栏交互仍可使用。
+
+应用记录使用 macOS 的 [NSWorkspace.frontmostApplication](https://developer.apple.com/documentation/appkit/nsworkspace/frontmostapplication)
+及运行应用的启动时间，不需要辅助功能或屏幕录制权限。
+
 首次启动不会自动连接。保存的配置会在后续启动时自动运行。密码使用 macOS Keychain / Windows Credential Manager 保存，普通配置位于 Tauri 的本机应用配置目录 `dev.orbit.agent/settings.json`。系统凭据不可读时会显示错误，不会将密码降级保存到 JSON。
 
 迁移现有 Go Agent 时保持设备标识与 Core 投影路由一致。macOS 默认标识沿用 Go 的平台 UUID 派生算法；Windows 首次生成并在保存时持久化，也可指定已有标识。开始使用新 Agent 前先停止旧进程（旧 macOS launchd 服务可运行仓库根目录的 `make stop-agent`）。两个实例共享标识时，收到 MQTT Session Taken Over 的实例会停止重连。
@@ -28,6 +46,7 @@ pnpm tauri dev
 
 pnpm check
 pnpm test
+pnpm test:ui
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 pnpm tauri build --debug --bundles app   # macOS
 pnpm tauri build --debug --bundles nsis  # Windows
@@ -45,6 +64,7 @@ pnpm tauri build --debug --bundles nsis  # Windows
 | `src-tauri/src/usage.rs`    | Sub2API 登录、刷新、401 恢复、429 退避、时区日窗口、精确费用换算              |
 | `src-tauri/src/runtime.rs`  | MQTT 5、TLS / mTLS、QoS 1、重连、状态与采集健康、有效期、业务字段去重         |
 | `src-tauri/src/commands.rs` | 目标和时间验证、UUID 链接、重复指令缓存、打开结果回传                         |
+| `src-tauri/src/shortcuts.rs` | 应用和图标导入、受限应用/网址打开、导航目录发布 |
 | `src-tauri/src/config.rs`   | YAML 导入、本机配置、系统凭据存储、原子保存                                   |
 | `src-tauri/src/clock.rs`    | NTP 应用级时间校准，失败回退系统时间                                          |
 | `src-tauri/src/lib.rs`      | Tauri 命令、单实例、托盘、设置窗口、登录启动                                  |

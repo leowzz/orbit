@@ -9,6 +9,7 @@ fn main() {
             &[
                 format!("{root}/orbit/v1/state.proto"),
                 format!("{root}/orbit/v1/command.proto"),
+                format!("{root}/orbit/v1/navigation.proto"),
             ],
             &[
                 root.to_string(),

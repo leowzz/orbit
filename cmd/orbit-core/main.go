@@ -199,6 +199,10 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 		return err
 	}
 	if api != nil {
+		if err := api.StartNavigation(ctx, client, cfg.Core.ID, engine.NavigationSources); err != nil {
+			return err
+		}
+		defer api.StopNavigation()
 		api.SetSessionOpener(runner.OpenAppCodexSession)
 		defer api.SetSessionOpener(nil)
 	}

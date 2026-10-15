@@ -21,9 +21,18 @@ import (
 
 	"orbit/internal/config"
 	"orbit/internal/inbox"
+	"orbit/internal/mqtt"
 )
 
 type Server struct {
+	navMu        sync.Mutex
+	navTransport interface {
+		Publish(context.Context, mqtt.Message) error
+		Subscribe(context.Context, string, mqtt.Handler) error
+	}
+	navSources  func() map[string][]string
+	navCoreID   string
+	navRevision uint64
 	store       *inbox.Store
 	devices     map[string]config.AppDevice
 	activity    map[string]*deviceActivity
@@ -55,6 +64,7 @@ func New(store *inbox.Store, cfg config.AppConfig, status func(string) json.RawM
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.browserRoutes(mux)
+	s.navigationRoutes(mux)
 	mux.HandleFunc("GET /api/v1/status", s.auth(func(w http.ResponseWriter, r *http.Request, node string) {
 		var value json.RawMessage = json.RawMessage(`null`)
 		if s.status != nil {
@@ -275,7 +285,7 @@ func failure(w http.ResponseWriter, err error) {
 		status = 403
 	case "not_found", "attachment_unavailable":
 		status = 404
-	case "conflict", "operation_id_reused", "reset_required", "session_unavailable":
+	case "conflict", "operation_id_reused", "reset_required", "session_unavailable", "navigation_conflict", "shortcut_unavailable":
 		status = 409
 	}
 	write(w, status, fault)

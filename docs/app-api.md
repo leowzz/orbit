@@ -171,3 +171,16 @@ Android 状态页、点阵屏和桌面组件共享 `/api/v1/status` 的设备授
 成功返回 HTTP 202：`{"intent_id":"…","status":"accepted"}`，仅表示指令已发出，
 不代表 Mac 已完成打开。视图失效或会话不可用返回 409 `session_unavailable`；
 指令通道不可用返回 503 `unavailable`。请求不进入离线收件箱队列。
+
+## 工作台快捷导航
+
+配置由桌面 Agent 管理；App 只读展示、点击打开。Core 根据设备现有工作台路由选取来源 Agent，
+保留 Agent 中的入口顺序，并生成设备级快照；没有对应路由时返回空列表。多个来源按路由顺序
+合并，同一 Agent 去重；任一来源启用标题时显示标题。
+
+- `GET /api/v1/navigation`：`{revision,show_titles,items}`。条目包含 `id,title,kind,agent_id,shortcut_id,icon_url,icon_name`；`kind` 为 `agent`。`id` 是设备展示入口 ID，不能当作本机路径或 URL。
+- `GET /api/v1/navigation/icons/{sha256}`：使用原设备授权下载 PNG。外部图标地址不得携带设备令牌。
+- `POST /api/v1/navigation/{id}/open`：无需动作参数，Core 重新检查当前路由及目录，返回 HTTP 202 `{command_id,status:"sent"}`。入口已移除/来源已变更返回 409 `shortcut_unavailable`；202 仅表示指令已发送。
+
+上述接口均复用设备授权；不提供 App 写配置、上传图标或浏览其他 Agent 目录的接口。
+导航快照独立于收件箱数据，点击不进入离线队列。Agent 应用路径和网址目标仅保存在 Agent 本机。

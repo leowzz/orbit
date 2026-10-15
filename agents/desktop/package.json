@@ -10,7 +10,8 @@
     "check": "tsc --noEmit",
     "tauri": "tauri",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "format": "prettier --write src index.html vite.config.ts && cargo fmt --manifest-path src-tauri/Cargo.toml"
+    "format": "prettier --write src index.html vite.config.ts && cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "test:ui": "node --experimental-strip-types --test test/*.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

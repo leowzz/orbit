@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'inbox_controller.dart';
+import 'navigation_bar.dart';
 import 'local_store.dart' show Json;
 
 const _green = Color(0xff087f5b);
@@ -180,6 +181,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                             )
                           : _regular(view, metrics, enabled),
                     ),
+                    if (widget.controller != null)
+                      WorkbenchNavigation(controller: widget.controller!),
                   ],
                 );
               },
@@ -332,35 +335,38 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       ),
     ),
     padding: EdgeInsets.fromLTRB(compact ? 30 : 0, 4, 14, 4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          metric.label,
-          style: const TextStyle(fontSize: 12, color: _muted, height: 1.15),
-        ),
-        const SizedBox(height: 3),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
-            metric.value,
-            style: TextStyle(
-              fontSize: compact ? 23 : 29,
-              height: 1.15,
-              fontWeight: FontWeight.w700,
-              color: metric.accent
-                  ? const Color(0xff1769aa)
-                  : const Color(0xff1f2328),
+    child: LayoutBuilder(
+      builder: (context, bounds) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            metric.label,
+            style: const TextStyle(fontSize: 12, color: _muted, height: 1.15),
+          ),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              metric.value,
+              style: TextStyle(
+                fontSize: compact ? 23 : 29,
+                height: 1.15,
+                fontWeight: FontWeight.w700,
+                color: metric.accent
+                    ? const Color(0xff1769aa)
+                    : const Color(0xff1f2328),
+              ),
             ),
           ),
-        ),
-        Text(
-          metric.note,
-          style: const TextStyle(fontSize: 11, color: _muted, height: 1.15),
-        ),
-      ],
+          if (!compact || bounds.maxHeight >= 64)
+            Text(
+              metric.note,
+              style: const TextStyle(fontSize: 11, color: _muted, height: 1.15),
+            ),
+        ],
+      ),
     ),
   );
 

@@ -17,10 +17,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { call, preview } from "./bridge";
 import type { Settings, Status, Source } from "./types";
 import "./style.css";
+import { Shortcuts } from "./Shortcuts";
 const pages = [
   { id: "status", name: "运行状态", icon: Activity },
   { id: "connection", name: "连接", icon: Cable },
   { id: "sources", name: "数据来源", icon: Database },
+  { id: "shortcuts", name: "快捷导航", icon: Orbit },
   { id: "preferences", name: "偏好设置", icon: SlidersHorizontal },
 ] as const;
 type Page = (typeof pages)[number]["id"];
@@ -204,7 +206,14 @@ function App() {
       filters: [{ name: "YAML 配置", extensions: ["yaml", "yml"] }],
     });
     if (typeof p === "string") {
-      setSettings(await call<Settings>("settings_import", { path: p }));
+      const imported = await call<Settings>("settings_import", { path: p });
+      if (settings) {
+        imported.config.shortcuts = settings.config.shortcuts;
+        imported.config.shortcutsRevision = settings.config.shortcutsRevision;
+        imported.config.shortcutsShowTitles =
+          settings.config.shortcutsShowTitles;
+      }
+      setSettings(imported);
       setNotice("配置已导入，检查后保存即可生效");
       setPage("connection");
     }
@@ -213,7 +222,7 @@ function App() {
     const result = await call<Settings>("settings_save", { settings });
     setSettings(result);
     setSaved(JSON.stringify(result));
-    setNotice("设置已保存，正在连接");
+    setNotice("设置已保存");
     setStatus(await call<Status>("agent_status"));
   }
   function sourceState(name: string, enabled: boolean, s: Source) {
@@ -288,7 +297,9 @@ function App() {
                   ? "连接到你的 Orbit 服务"
                   : page === "sources"
                     ? "选择要同步到工作台的数据"
-                    : "管理启动方式与远程操作"}
+                    : page === "shortcuts"
+                      ? "让工作台一键打开这台电脑上的应用和网址"
+                      : "管理启动方式与远程操作"}
             </p>
           </div>
           {preview && <span className="tag">界面预览</span>}
@@ -714,6 +725,14 @@ function App() {
                     )}
                   </Section>
                 </>
+              )}
+              {page === "shortcuts" && (
+                <Shortcuts
+                  items={settings.config.shortcuts}
+                  showTitles={settings.config.shortcutsShowTitles}
+                  onShowTitles={(value) => config("shortcutsShowTitles", value)}
+                  onChange={(items) => config("shortcuts", items)}
+                />
               )}
               {page === "preferences" && (
                 <>

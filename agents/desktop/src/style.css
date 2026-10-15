@@ -472,3 +472,240 @@ footer > div {
   justify-content: center;
   gap: 10px;
 }
+
+.shortcut-help {
+  color: #69736a;
+  line-height: 1.6;
+  margin: 10px 0 16px;
+}
+
+.shortcut-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.shortcut-heading h2 {
+  margin: 0;
+}
+.shortcut-toolbar {
+  display: flex;
+  gap: 8px;
+}
+.shortcut-toolbar button {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.shortcut-dock {
+  overflow-x: auto;
+  border: 1px solid #e1e8e3;
+  background: #f6f9f7;
+  border-radius: 12px;
+  padding: 10px 0;
+  min-height: 82px;
+}
+.shortcut-dock.dragging {
+  outline: 2px dashed #427749;
+  outline-offset: 2px;
+  background: #e4f2df;
+}
+.shortcut-dock-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: max-content;
+  min-width: 100%;
+  padding: 0 12px;
+}
+button.dock-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  width: 60px;
+  height: 60px;
+  flex: 0 0 60px;
+  padding: 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  position: relative;
+}
+.dock-item img,
+.dock-item > svg {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+  pointer-events: none;
+  color: #38624e;
+}
+button.dock-item:hover {
+  background: #e7eee8;
+}
+button.dock-item:focus-visible {
+  outline: 2px solid #427749;
+  outline-offset: -2px;
+}
+button.dock-item.with-title {
+  width: 104px;
+  flex-basis: 104px;
+}
+.dock-item.with-title img,
+.dock-item.with-title > svg {
+  width: 36px;
+  height: 36px;
+}
+.dock-item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+}
+.dock-item.is-dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+.dock-item.drop-target {
+  outline: 2px solid #427749;
+  outline-offset: -2px;
+  background: #ddebdc;
+}
+.shortcut-title-toggle {
+  margin: 12px 0 22px;
+}
+.shortcut-recommendations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+button.recommendation {
+  display: flex;
+  padding: 10px;
+  gap: 9px;
+  text-align: left;
+  min-width: 0;
+  background: #fbfcfa;
+}
+.recommendation img,
+.recommendation > svg:first-child {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
+  color: #38624e;
+}
+.recommendation span {
+  flex: 1;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+  font-size: 13px;
+}
+.recommendation > svg:last-child {
+  flex-shrink: 0;
+  color: #718174;
+}
+.shortcut-empty {
+  color: #788178;
+  padding: 18px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.shortcut-menu {
+  position: fixed;
+  z-index: 50;
+  width: 170px;
+  padding: 5px;
+  border: 1px solid #dbe3da;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 8px 30px #203b2426;
+}
+.shortcut-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px;
+  box-shadow: none;
+  background: transparent;
+}
+.shortcut-menu button:hover,
+.shortcut-menu button:focus {
+  background: #edf4eb;
+}
+.shortcut-dialog {
+  padding: 24px;
+  width: min(480px, calc(100vw - 40px));
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  border: 1px solid #dce4d9;
+  border-radius: 16px;
+  color: var(--ink);
+  background: #fcfdfb;
+  box-shadow: 0 20px 80px #19302133;
+}
+.shortcut-dialog::backdrop {
+  background: #14221955;
+}
+.shortcut-dialog .shortcut-heading {
+  margin-bottom: 20px;
+}
+.shortcut-editor-fields {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.shortcut-editor-fields .field {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+}
+.shortcut-icon {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  justify-content: center;
+  padding: 6px;
+}
+.shortcut-icon img,
+.shortcut-icon > svg:first-child {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+.icon-edit {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+}
+.shortcut-path {
+  font-size: 12px;
+  color: #788178;
+  overflow-wrap: anywhere;
+  flex: 1;
+  min-width: 0;
+}
+.shortcut-path-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+.shortcut-path-row button {
+  flex-shrink: 0;
+}
+.shortcut-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}

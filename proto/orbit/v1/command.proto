@@ -45,6 +45,11 @@ message OpenCodexSession {
   string session_id = 1;
 }
 
+message OpenShortcut {
+  string shortcut_id = 1;
+  uint64 catalog_revision = 2;
+}
+
 message Command {
   Metadata metadata = 1;
   string command_id = 2;
@@ -54,6 +59,7 @@ message Command {
 
   oneof action {
     OpenCodexSession open_codex_session = 10;
+    OpenShortcut open_shortcut = 11;
   }
 }
 

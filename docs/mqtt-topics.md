@@ -13,10 +13,29 @@ chain uses these topics:
 | `orbit/v1/nodes/{node_id}/intents` | Web Node | Core | no |
 | `orbit/v1/agents/{agent_id}/commands` | Core | Agent | no |
 | `orbit/v1/agents/{agent_id}/results` | Agent | Core | no |
+| `orbit/v1/agents/{agent_id}/shortcuts` | Agent | Core | yes |
+| `orbit/v1/nodes/{node_id}/navigation` | Core | Node | yes |
 
 Core rejects messages when the participant ID in the topic does not match the
 protobuf payload. Nodes subscribe only to their own view and never receive the
-upstream `agent_id` or Sub2API credentials.
+upstream observation data or Sub2API credentials. Navigation snapshots identify
+the configured Agent, but never include its local application paths or URL targets.
+
+Shortcut configuration is owned by the desktop Agent. `AgentShortcuts` is a complete
+ordered snapshot (up to 24 entries, 256 KiB total), including titles, optional PNG
+icons and the title visibility preference. Each icon is at most 32 KiB / 256 pixels.
+The Agent publishes it after its initial state acknowledgement and on reconnect.
+Core persists only increasing catalog revisions, projects the Agents selected by
+each workbench's existing route, and publishes a complete retained `Navigation`.
+Changed snapshots advance a durable per-node revision; removed entries/routes clear
+the projection. App Nodes use authenticated HTTP plus the existing SSE/refresh flow.
+
+An App click supplies only its displayed entry ID. Core resolves the current route
+and catalog, then sends a non-retained `OpenShortcut` with a 15-second expiry and
+the catalog revision. The Agent requires an exact current revision and locally
+configured shortcut ID. Removed/stale entries and retained commands are rejected;
+duplicate command IDs do not repeat execution. Paths, URLs and shell commands are
+never accepted from the clicking Node. URLs open in the Agent computer's browser.
 
 The Codex observation is a non-retained `orbit.v1.Observation` with the Codex
 oneof member. Its metadata carries the Agent epoch, an observation-type-local

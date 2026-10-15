@@ -1,4 +1,14 @@
+export interface Shortcut {
+  id: string;
+  title: string;
+  kind: "app" | "url";
+  target: string;
+  icon: string;
+}
 export interface Config {
+  shortcuts: Shortcut[];
+  shortcutsRevision: number;
+  shortcutsShowTitles: boolean;
   agentId: string;
   hostLabel: string;
   allowOpen: boolean;

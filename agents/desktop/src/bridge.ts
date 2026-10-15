@@ -11,6 +11,9 @@ const empty = {
 const settings: Settings = {
   config: {
     agentId: "agt_preview",
+    shortcuts: [],
+    shortcutsRevision: 1,
+    shortcutsShowTitles: false,
     hostLabel: "我的电脑",
     allowOpen: false,
     ntpServer: "ntp.aliyun.com",
@@ -68,6 +71,32 @@ export async function call<T>(
     if (command === "settings_get") return structuredClone(settings) as T;
     if (command === "agent_status") return structuredClone(status) as T;
     if (command === "autostart_get") return false as T;
+    if (command === "shortcut_recommendations")
+      return {
+        supported: true,
+        items: [
+          {
+            app: {
+              id: "preview-calendar",
+              title: "日历",
+              kind: "app",
+              target: "/System/Applications/Calendar.app",
+              icon: "",
+            },
+            lastUsed: Date.now() / 1000,
+          },
+          {
+            app: {
+              id: "preview-notes",
+              title: "备忘录",
+              kind: "app",
+              target: "/System/Applications/Notes.app",
+              icon: "",
+            },
+            lastUsed: Date.now() / 1000,
+          },
+        ],
+      } as T;
     throw new Error("界面预览中不可执行此操作");
   }
   throw new Error("请在 Orbit Agent 桌面程序中打开设置");
