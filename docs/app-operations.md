@@ -131,3 +131,12 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - App 只在原生型号为 `NFCD_AlipayBoxN5DEL` 且使用横屏紧凑工作台时应用：Core 设备规则优先，随后使用 Agent 默认值，最后回退到 16。多个 Agent 来源按规则输入顺序取第一个已配置值。其他型号不受该设置影响。
 - tx Core 镜像 `orbit-core:nfcd-layout-20261015`；发布目录 `/srv/orbit-deploy/releases/nfcd-layout-20261015`；停机备份 `/srv/orbit-deploy/backups/nfcd-layout-20261015T085159Z`。部署保留 4 条规则、4 个设备授权，两份数据库完整性、二进制摘要、HTTPS 与原令牌验证通过。
 - Mac Agent 已更新，137 覆盖安装 build 4022。实测 Core 设为 0 后立即生效，取消覆盖后恢复 Agent 当前值 24；测试后 Core 保持跟随 Agent（规则修订 156）。Go 全量、Flutter 92 项、Agent Rust 31 项及 Clippy、前端构建和 Protobuf lint 通过。
+
+## 2026-10-15：Core 设备管理页简化
+
+- 优化提交 `2f3d5e1`，合并至 `opt/struct` 的提交为 `e228314`。设备详情直接选择显示内容和来源，移除旧规则抽屉与手动预配置表单；快捷来源点选添加，自定义入口及排序按需展开，支持撤销修改和冲突后保留草稿。
+- tx Core 更新为本机构建镜像 `orbit-core:core-console-e228314-20261015`，二进制构建自合并提交 `e228314`；Web 容器未更换或重启。源码快照、构建清单、部署脚本和验证记录位于 `/srv/orbit-deploy/releases/core-console-e228314-20261015`。
+- 停机备份位于 `/srv/orbit-deploy/backups/core-console-20261015T111129Z`，包含 Compose、配置和完整 Core 数据。路由修订 157、4 条路由、4 个设备授权、快捷设置、收件箱内容及附件均保留，两份 SQLite 完整性检查通过。
+- 运行二进制、HTTPS 页面引用及 JS/CSS 哈希与构建产物一致；原设备令牌的 JSON/Protobuf 状态和快捷导航接口通过。Core 正常运行，MQTT 连接和订阅正常。
+- 更新前的 `orbit-core:device-pairings-20261015-174547` 镜像保留。当前镜像未推送仓库，重建使用 `docker compose up -d --no-deps --pull never orbit-core`。
+- 合并后前端构建、格式检查和相关 Core/App API/嵌入资源 Go 测试通过；桌面及 390px 窄屏交互使用本地模拟数据验证，未增加本次真机操作验收。
