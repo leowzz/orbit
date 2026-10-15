@@ -146,3 +146,9 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 修复 `a7b76d9`：Core 的 Agent State 使用 Protobuf JSON 枚举（`OBSERVATION_TYPE_USAGE` / `OBSERVATION_TYPE_CODEX`），前端曾错误地与 `usage` / `codex` 比较，导致正常来源显示未启用，且无法自动推荐。现在统一按协议字段识别，区分明确关闭与尚未报告采集状态。
 - tx 更新为 `orbit-core:source-status-a7b76d9-20261015`，发布及验证记录位于 `/srv/orbit-deploy/releases/source-status-a7b76d9-20261015`，停机备份位于 `/srv/orbit-deploy/backups/source-status-20261015T111406Z`。路由修订 158、4 条路由、4 个设备授权和既有数据保留，数据库、线上资源哈希及设备状态/导航接口检查通过，Web 容器未变。
 - 新增基于实际 Protobuf JSON 格式的 3 项回归测试，前端构建和格式检查通过。
+
+## 2026-10-15：设备改名
+
+- 功能提交 `3c068e6`：设备详情标题旁增加「改名」。App 复用登记中的 `label`，MQTT 名称存入 Core 的 `node_labels` 表，与自描述及路由独立；名称用于设备列表、详情、搜索、总览及数据流向，设备 ID、令牌和撤销状态不变。已有数据库启动时补建名称表。
+- tx Core 镜像更新为 `orbit-core:device-names-3c068e6-20261015`，发布记录及源码快照位于 `/srv/orbit-deploy/releases/device-names-3c068e6-20261015`，停机备份位于 `/srv/orbit-deploy/backups/device-names-20261015T112115Z`。路由修订 164、4 条路由、4 个设备授权、快捷设置及既有数据保留，Web 容器未变。
+- 数据库完整性、线上 JS/CSS 和二进制摘要、原设备鉴权及状态/导航接口通过；相关 Go 测试及 race、前端构建/测试/格式检查通过。本地隔离环境验证 App/MQTT 改名、取消、刷新、进程重启持久化、列表搜索、总览与数据流向名称及 390px 窄屏，未改动用户在线设备的名称。
