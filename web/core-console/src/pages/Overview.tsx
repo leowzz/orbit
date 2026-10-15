@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, GitBranch, Server, Radio } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
-import { api, modelName } from "../api";
+import { api, modelName, visibleDeviceRoutes } from "../api";
 import RouteFlow from "../RouteFlow";
 import { Badge, DeviceIcon, Empty, SectionTitle } from "../components";
 export default function Overview({
@@ -65,6 +65,8 @@ export default function Overview({
         model: route.profile.endsWith("-oled-128x32") ? "oled-128x32" : "web",
         description: "预配置设备",
       });
+  for (const id of state.archived_nodes ?? []) devices.delete(id);
+  const visibleDocument = visibleDeviceRoutes(document, state);
   const unassigned = [...devices.keys()].filter(
     (id) => !document.routes[id],
   ).length;
@@ -91,7 +93,7 @@ export default function Overview({
           <Link to="/nodes">
             <GitBranch size={17} />
             <span>数据配置</span>
-            <strong>{Object.keys(document.routes).length}</strong>
+            <strong>{Object.keys(visibleDocument.routes).length}</strong>
           </Link>
         </div>
         <div className="overview-header-actions">
@@ -108,7 +110,7 @@ export default function Overview({
           <SectionTitle title="数据流向" link="/nodes" />
           <RouteFlow
             state={state}
-            document={document}
+            document={visibleDocument}
             labels={Object.fromEntries(
               [...devices].map(([id, device]) => [id, device.label]),
             )}
@@ -141,7 +143,21 @@ export default function Overview({
               </Link>
             ))}
             {!devices.size && (
-              <Empty title="等待设备接入">设备发布自描述后会出现在这里。</Empty>
+              <Empty
+                title={
+                  state.archived_nodes?.length
+                    ? "没有未归档的设备"
+                    : "等待设备接入"
+                }
+              >
+                {state.archived_nodes?.length ? (
+                  <Link className="text-link" to="/nodes?filter=archived">
+                    查看已归档设备
+                  </Link>
+                ) : (
+                  "设备发布自描述后会出现在这里。"
+                )}
+              </Empty>
             )}
           </div>
           <p className="overview-status-note">

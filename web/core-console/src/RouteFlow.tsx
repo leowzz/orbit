@@ -115,14 +115,21 @@ export default function RouteFlow({
     return (
       <div className="panel">
         <Empty
-          title="还没有数据流向"
+          title={
+            state.archived_nodes?.length
+              ? "当前没有展示的数据流向"
+              : "还没有数据流向"
+          }
           action={
             <Link className="button" to="/nodes">
-              创建第一条规则 <ArrowRight size={15} />
+              {state.archived_nodes?.length ? "管理设备" : "创建第一条规则"}{" "}
+              <ArrowRight size={15} />
             </Link>
           }
         >
-          选择来源 Agent，把数据送到你的设备。
+          {state.archived_nodes?.length
+            ? "已归档设备的数据配置会保留，恢复后重新显示。"
+            : "选择来源 Agent，把数据送到你的设备。"}
         </Empty>
       </div>
     );

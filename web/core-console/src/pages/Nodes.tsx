@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, Plus, Search } from "lucide-react";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  ArrowUpRight,
+  Plus,
+  Search,
+} from "lucide-react";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
 import { api, date, modelName } from "../api";
 import { Badge, DeviceIcon, Empty, PageHead } from "../components";
@@ -23,19 +35,41 @@ export default function Nodes({
   document,
   onChange,
   onLabelChange,
+  onArchiveChange,
 }: {
   state: NetworkState;
   document: RouteDocument;
   onChange: (d: RouteDocument) => void;
   onLabelChange: (id: string, label: string) => void;
+  onArchiveChange: (id: string, archived: boolean) => void;
 }) {
   const { nodeId } = useParams<{ nodeId: string }>();
   const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const filter = params.get("filter") || "all";
+  const [archiveBusy, setArchiveBusy] = useState(false),
+    [archiveError, setArchiveError] = useState("");
+  const archived = new Set(state.archived_nodes ?? []);
+  async function changeArchive(id: string, value: boolean) {
+    setArchiveBusy(true);
+    setArchiveError("");
+    try {
+      const result = await api<{ id: string; archived: boolean }>(
+        `/nodes/${encodeURIComponent(id)}/archive`,
+        { method: "PUT", body: JSON.stringify({ archived: value }) },
+      );
+      onArchiveChange(result.id, result.archived);
+      if (!value && !known.has(id)) navigate("/nodes");
+    } catch {
+      setArchiveError("未能更新归档状态，请重试。");
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
   const [appDevices, setAppDevices] = useState<AppDevice[] | null>(null),
     [enabled, setEnabled] = useState(false);
   const [error, setError] = useState(""),
-    [query, setQuery] = useState(""),
-    [filter, setFilter] = useState("all");
+    [query, setQuery] = useState("");
   const [tab, setTab] = useState("content"),
     [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<{ id: string; token: string } | null>(
@@ -68,6 +102,7 @@ export default function Nodes({
   }, [load]);
   useEffect(() => {
     setTab("content");
+    setArchiveError("");
   }, [nodeId]);
   const devices = new Map<string, Device>();
   for (const node of state.nodes)
@@ -108,12 +143,24 @@ export default function Nodes({
             : "android",
         discovered: false,
       });
+  const known = new Set(devices.keys());
+  for (const id of archived)
+    if (!devices.has(id))
+      devices.set(id, {
+        id,
+        label: state.node_labels?.[id] || id,
+        profile: "",
+        model: "unknown",
+        discovered: false,
+      });
   const current = nodeId ? devices.get(nodeId) : null;
   const targets = [...devices.values()];
   const node = state.nodes.find((n) => n.nodeId === nodeId);
   const filtered = targets.filter(
     (d) =>
+      (filter === "archived" ? archived.has(d.id) : !archived.has(d.id)) &&
       (filter === "all" ||
+        filter === "archived" ||
         (filter === "app" ? !!d.app : !d.app && d.model === filter)) &&
       `${d.label} ${d.id}`.toLowerCase().includes(query.toLowerCase()),
   );
@@ -128,16 +175,51 @@ export default function Nodes({
       {nodeId ? (
         current ? (
           <>
-            <Link className="text-link" to="/nodes">
+            <Link
+              className="text-link"
+              to={
+                archived.has(current.id) ? "/nodes?filter=archived" : "/nodes"
+              }
+            >
               <ArrowLeft size={15} />
-              全部设备
+              {archived.has(current.id) ? "已归档设备" : "全部设备"}
             </Link>
             <DeviceName
               key={current.id}
               id={current.id}
               name={current.label}
               app={!!current.app}
-              disabled={appDevices === null}
+              disabled={
+                appDevices === null || archiveBusy || !known.has(current.id)
+              }
+              action={
+                <button
+                  className="button secondary"
+                  disabled={archiveBusy}
+                  aria-label={
+                    archived.has(current.id) ? "恢复设备" : "归档设备"
+                  }
+                  title={
+                    archived.has(current.id)
+                      ? "恢复到默认设备列表和总览"
+                      : "从默认列表和总览隐藏，保留同步和访问权限"
+                  }
+                  onClick={() =>
+                    void changeArchive(current.id, !archived.has(current.id))
+                  }
+                >
+                  {archived.has(current.id) ? (
+                    <ArchiveRestore size={16} />
+                  ) : (
+                    <Archive size={16} />
+                  )}
+                  {archiveBusy
+                    ? "处理中…"
+                    : archived.has(current.id)
+                      ? "恢复设备"
+                      : "归档"}
+                </button>
+              }
               onSaved={(label) => {
                 if (current.app)
                   setAppDevices(
@@ -153,111 +235,136 @@ export default function Nodes({
               description={
                 current.app
                   ? `Orbit App · ${current.app.platform}`
-                  : modelName(current.model)
+                  : current.model === "unknown"
+                    ? "暂未发现设备"
+                    : modelName(current.model)
               }
             />
-            {current.revoked && (
-              <div className="banner error">
-                此设备的访问已撤销。可在「连接与访问」中重新授权。
+            {archiveError && (
+              <div className="banner error" role="alert">
+                {archiveError}
               </div>
             )}
-            <div className="toolbar">
-              <div className="tabs" role="tablist" aria-label="设备设置">
-                {[
-                  ["content", "内容与显示"],
-                  ["shortcuts", "快捷操作"],
-                  ["access", "连接与访问"],
-                ].map(([id, label]) => (
-                  <button
-                    key={id}
-                    role="tab"
-                    aria-selected={tab === id}
-                    className={tab === id ? "selected" : ""}
-                    onClick={() => setTab(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
+            {archived.has(current.id) && (
+              <div className="banner" role="status">
+                <span>
+                  此设备已归档，从默认列表和总览隐藏。已有同步和访问权限保持不变。
+                </span>
               </div>
-            </div>
-            <div hidden={tab !== "content"}>
-              <DeviceContent
-                key={current.id}
-                nodeId={current.id}
-                profile={current.profile}
-                revoked={!!current.revoked || appDevices === null}
-                state={state}
-                document={document}
-                onChange={onChange}
-              />
-            </div>
-            <div hidden={tab !== "shortcuts"}>
-              {current.model === "oled-128x32" ? (
-                <div className="panel device-section">
-                  <p>此设备只显示指标，不提供快捷操作。</p>
-                </div>
-              ) : enabled ? (
-                <DeviceShortcuts
-                  key={current.id}
-                  nodeId={current.id}
-                  revoked={!!current.revoked}
-                  nfcd={
-                    current.profile === "overview-app" &&
-                    current.app?.platform === "android"
-                  }
-                />
-              ) : (
-                <div className="panel device-section">
-                  <p>
-                    请先在 Core 部署配置中启用 App 服务，以管理和同步快捷操作。
-                  </p>
-                </div>
-              )}
-            </div>
-            {tab === "access" && (
+            )}
+            {!known.has(current.id) ? (
+              <Empty title="暂未发现设备">
+                恢复后，设备再次接入时会重新显示。
+              </Empty>
+            ) : (
               <>
-                {current.app && (
-                  <Apps
-                    deviceId={current.id}
-                    onChanged={() => void load()}
-                    onRoutesChange={onChange}
-                  />
+                {current.revoked && (
+                  <div className="banner error">
+                    此设备的访问已撤销。可在「连接与访问」中重新授权。
+                  </div>
                 )}
-                <div className="device-section panel">
-                  <h2>状态与诊断</h2>
-                  <dl className="device-facts">
-                    <div>
-                      <dt>设备 ID</dt>
-                      <dd className="mono">{current.id}</dd>
+                <div className="toolbar">
+                  <div className="tabs" role="tablist" aria-label="设备设置">
+                    {[
+                      ["content", "内容与显示"],
+                      ["shortcuts", "快捷操作"],
+                      ["access", "连接与访问"],
+                    ].map(([id, label]) => (
+                      <button
+                        key={id}
+                        role="tab"
+                        aria-selected={tab === id}
+                        className={tab === id ? "selected" : ""}
+                        onClick={() => setTab(id)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div hidden={tab !== "content"}>
+                  <DeviceContent
+                    key={current.id}
+                    nodeId={current.id}
+                    profile={current.profile}
+                    revoked={!!current.revoked || appDevices === null}
+                    state={state}
+                    document={document}
+                    onChange={onChange}
+                  />
+                </div>
+                <div hidden={tab !== "shortcuts"}>
+                  {current.model === "oled-128x32" ? (
+                    <div className="panel device-section">
+                      <p>此设备只显示指标，不提供快捷操作。</p>
                     </div>
-                    <div>
-                      <dt>接入方式</dt>
-                      <dd>{current.app ? "App 令牌 · HTTP/SSE" : "MQTT"}</dd>
+                  ) : enabled ? (
+                    <DeviceShortcuts
+                      key={current.id}
+                      nodeId={current.id}
+                      revoked={!!current.revoked}
+                      nfcd={
+                        current.profile === "overview-app" &&
+                        current.app?.platform === "android"
+                      }
+                    />
+                  ) : (
+                    <div className="panel device-section">
+                      <p>
+                        请先在 Core 部署配置中启用 App
+                        服务，以管理和同步快捷操作。
+                      </p>
                     </div>
-                    {node && (
-                      <>
-                        <div>
-                          <dt>固件版本</dt>
-                          <dd>{node.firmwareVersion}</dd>
-                        </div>
-                        <div>
-                          <dt>硬件变体</dt>
-                          <dd>{node.variantId}</dd>
-                        </div>
-                        <div>
-                          <dt>自描述更新</dt>
-                          <dd>{date(node.metadata?.producedAt)}</dd>
-                        </div>
-                      </>
-                    )}
-                  </dl>
-                  {!current.app && (
-                    <p className="field-hint">
-                      MQTT 凭据在设备本机与 Broker
-                      配置。已发现自描述不代表此刻在线。
-                    </p>
                   )}
                 </div>
+                {tab === "access" && (
+                  <>
+                    {current.app && (
+                      <Apps
+                        deviceId={current.id}
+                        onChanged={() => void load()}
+                        onRoutesChange={onChange}
+                      />
+                    )}
+                    <div className="device-section panel">
+                      <h2>状态与诊断</h2>
+                      <dl className="device-facts">
+                        <div>
+                          <dt>设备 ID</dt>
+                          <dd className="mono">{current.id}</dd>
+                        </div>
+                        <div>
+                          <dt>接入方式</dt>
+                          <dd>
+                            {current.app ? "App 令牌 · HTTP/SSE" : "MQTT"}
+                          </dd>
+                        </div>
+                        {node && (
+                          <>
+                            <div>
+                              <dt>固件版本</dt>
+                              <dd>{node.firmwareVersion}</dd>
+                            </div>
+                            <div>
+                              <dt>硬件变体</dt>
+                              <dd>{node.variantId}</dd>
+                            </div>
+                            <div>
+                              <dt>自描述更新</dt>
+                              <dd>{date(node.metadata?.producedAt)}</dd>
+                            </div>
+                          </>
+                        )}
+                      </dl>
+                      {!current.app && (
+                        <p className="field-hint">
+                          MQTT 凭据在设备本机与 Broker
+                          配置。已发现自描述不代表此刻在线。
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
               </>
             )}
           </>
@@ -288,6 +395,7 @@ export default function Nodes({
             <div className="tabs">
               {[
                 ["all", "全部设备"],
+                ["archived", "已归档"],
                 ["app", "Orbit App"],
                 ["oled-128x32", "OLED"],
                 ["web", "Web"],
@@ -296,7 +404,7 @@ export default function Nodes({
                 <button
                   key={id}
                   className={filter === id ? "selected" : ""}
-                  onClick={() => setFilter(id)}
+                  onClick={() => setParams(id === "all" ? {} : { filter: id })}
                 >
                   {label}
                 </button>
@@ -318,22 +426,26 @@ export default function Nodes({
                 <div className="node-card-top">
                   <DeviceIcon model={device.model} />
                   <Badge tone={device.revoked ? "warn" : "neutral"}>
-                    {device.revoked
-                      ? "已撤销访问"
-                      : device.app
-                        ? device.app.activity.connections > 0
-                          ? "已连接"
-                          : "未连接"
-                        : device.discovered
-                          ? "已发现"
-                          : "预配置"}
+                    {archived.has(device.id)
+                      ? "已归档"
+                      : device.revoked
+                        ? "已撤销访问"
+                        : device.app
+                          ? device.app.activity.connections > 0
+                            ? "已连接"
+                            : "未连接"
+                          : device.discovered
+                            ? "已发现"
+                            : "预配置"}
                   </Badge>
                 </div>
                 <h2>{device.label}</h2>
                 <p>
                   {device.app
                     ? `Orbit App · ${device.app.platform}`
-                    : modelName(device.model)}
+                    : device.model === "unknown"
+                      ? "暂未发现设备"
+                      : modelName(device.model)}
                 </p>
                 <div className="node-route">
                   <span>
@@ -359,16 +471,24 @@ export default function Nodes({
                   ? error
                     ? "暂时无法加载设备"
                     : "正在加载设备…"
-                  : query || filter !== "all"
-                    ? "没有匹配的设备"
-                    : "连接第一台设备"
+                  : filter === "archived" && !query
+                    ? "没有已归档的设备"
+                    : filter === "all" && !query && archived.size > 0
+                      ? "没有未归档的设备"
+                      : query || filter !== "all"
+                        ? "没有匹配的设备"
+                        : "连接第一台设备"
               }
             >
               {error && appDevices === null
                 ? "请重试加载设备列表。"
-                : query || filter !== "all"
-                  ? "试试其他名称，或切换到全部设备。"
-                  : "添加 Orbit App 设备；显示屏接入后会自动出现在这里。"}
+                : filter === "archived" && !query
+                  ? "在设备详情中归档后，可在这里查看和恢复。"
+                  : filter === "all" && !query && archived.size > 0
+                    ? "已归档的设备可在「已归档」中查看和恢复。"
+                    : query || filter !== "all"
+                      ? "试试其他名称，或切换到全部设备。"
+                      : "添加 Orbit App 设备；显示屏接入后会自动出现在这里。"}
             </Empty>
           )}
           {!enabled && appDevices !== null && (

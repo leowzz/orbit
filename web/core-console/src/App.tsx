@@ -129,6 +129,18 @@ export default function App() {
         : current,
     );
   }, []);
+  const updateNodeArchive = useCallback((id: string, archived: boolean) => {
+    setState((current) =>
+      current
+        ? {
+            ...current,
+            archived_nodes: archived
+              ? [...new Set([...(current.archived_nodes ?? []), id])]
+              : (current.archived_nodes?.filter((item) => item !== id) ?? []),
+          }
+        : current,
+    );
+  }, []);
   async function logout() {
     try {
       await api("/auth/logout", { method: "POST" });
@@ -272,6 +284,7 @@ export default function App() {
                     document={routes}
                     onChange={setRoutes}
                     onLabelChange={updateNodeLabel}
+                    onArchiveChange={updateNodeArchive}
                   />
                 }
               />
@@ -283,6 +296,7 @@ export default function App() {
                     document={routes}
                     onChange={setRoutes}
                     onLabelChange={updateNodeLabel}
+                    onArchiveChange={updateNodeArchive}
                   />
                 }
               />

@@ -2347,3 +2347,18 @@ dt,
     flex-basis: 100%;
   }
 }
+
+.device-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+@media (max-width: 760px) {
+  .page-head:has(.device-heading-actions) {
+    flex-wrap: wrap;
+  }
+  .device-heading-actions {
+    flex-basis: 100%;
+  }
+}

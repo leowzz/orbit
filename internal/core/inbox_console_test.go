@@ -76,6 +76,14 @@ func TestInboxConsoleWithoutMQTTKeepsAuthorizationBoundaries(t *testing.T) {
 	if crossResponse.Code != 403 {
 		t.Fatal("cross-origin rename accepted", crossResponse.Code)
 	}
+	if w := call("PUT", "/api/nodes/"+device["id"]+"/archive", `{"archived":true}`, nil, device["token"]); w.Code != 401 {
+		t.Fatal("device token authorized archive", w.Code)
+	}
+	for _, body := range []string{`{"archived":true}`, `{"archived":false}`} {
+		if w := call("PUT", "/api/nodes/"+device["id"]+"/archive", body, cookie, ""); w.Code != 200 {
+			t.Fatal("console could not archive or restore App", w.Code, w.Body.String())
+		}
+	}
 	if w := call("GET", "/api/v1/status", "", cookie, ""); w.Code != 401 {
 		t.Fatal("admin cookie authorized personal API", w.Code)
 	}

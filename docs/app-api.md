@@ -120,6 +120,7 @@ SSE 仅提示追赶，不能推进本地 applied_cursor；相同 cursor 的心�
 - `POST /api/app/devices`：`{label, platform}`（android/macos/windows/web），生成设备 ID 与随机令牌，只在本次响应返回明文。
 - `PUT /api/app/devices/{id}`：`{label}` 修改 App 设备名称，去除首尾空白，必填且不超过 120 UTF-8 字节；复用登记中的名称字段，不改变 ID、平台、令牌或撤销状态。
 - `PUT /api/nodes/{id}/label`：`{label}` 修改已发现或已有数据配置的 MQTT 设备名称，长度规则同上；名称保存在 Core，与设备自描述及数据路由独立。`GET /api/state` 的 `node_labels` 返回这些名称。两种改名接口都只接受控制台会话。
+- `PUT /api/nodes/{id}/archive`：`{archived: true|false}` 归档或恢复 App/MQTT 设备，使用控制台会话。归档仅是管理页展示偏好，不修改路由、名称、设备登记、令牌或访问权限；同一状态重复提交结果不变。按稳定设备 ID 保存，因此设备暂未被发现时仍可恢复。`GET /api/state` 的 `archived_nodes` 返回已归档 ID 列表。
 - `POST /api/app/devices/{id}/rotate`：替换令牌并恢复授权；`.../revoke`：撤销访问，保留内容。
 - `DELETE /api/app/devices/{id}`：删除设备登记并立即断开同步、使令牌失效；保留共享消息、附件与转发规则。重启不会再次导入 YAML 中的同名设备，再次使用需重新添加。
 - `GET /api/app/items?after=...&kind=...&q=...&deleted=true`：默认未删除条目；deleted=true 仅列出已删除条目，支持同样的类型/正文筛选，每页 50 条，返回 `items` 和下一页 `next`；按稳定 ID 分页。

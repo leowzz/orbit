@@ -54,7 +54,20 @@ export interface NetworkState {
   agents: Agent[];
   nodes: Node[];
   node_labels?: Record<string, string>;
+  archived_nodes?: string[];
   now: string;
+}
+export function visibleDeviceRoutes(
+  document: RouteDocument,
+  state: NetworkState,
+): RouteDocument {
+  const archived = new Set(state.archived_nodes ?? []);
+  return {
+    ...document,
+    routes: Object.fromEntries(
+      Object.entries(document.routes).filter(([id]) => !archived.has(id)),
+    ),
+  };
 }
 export interface AppDevice {
   id: string;

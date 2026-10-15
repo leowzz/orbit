@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { agentSource } from "./api.ts";
-import type { Agent, Source } from "./api.ts";
+import { agentSource, visibleDeviceRoutes } from "./api.ts";
+import type { Agent, Source, NetworkState, RouteDocument } from "./api.ts";
 
 function agent(sources?: Source[]): Agent {
   return {
@@ -43,4 +43,33 @@ test("does not treat an unrelated source or data freshness as an enabled source"
   ]);
   assert.equal(agentSource(desktop, "usage"), undefined);
   assert.equal(agentSource(desktop, "codex"), undefined);
+});
+
+test("archive visibility filters the view without changing saved routes", () => {
+  const state: NetworkState = {
+    core_id: "test",
+    core_epoch: "test",
+    now: "",
+    agents: [],
+    nodes: [],
+    archived_nodes: ["old-device"],
+  };
+  const route = {
+    profile: "overview-web",
+    inputs: [{ agent_id: "desktop", observation_type: "usage" as const }],
+  };
+  const document: RouteDocument = {
+    revision: 12,
+    publish_pending: true,
+    routes: { "old-device": route, "active-device": route },
+  };
+  const visible = visibleDeviceRoutes(document, state);
+  assert.deepEqual(Object.keys(visible.routes), ["active-device"]);
+  assert.equal(visible.revision, 12);
+  assert.equal(visible.publish_pending, true);
+  assert.equal(Object.keys(document.routes).length, 2);
+  assert.deepEqual(
+    visibleDeviceRoutes(document, { ...state, archived_nodes: [] }).routes,
+    document.routes,
+  );
 });

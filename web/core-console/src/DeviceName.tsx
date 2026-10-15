@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Pencil } from "lucide-react";
 import { api, APIError } from "./api";
 import { PageHead } from "./components";
@@ -10,6 +11,7 @@ export default function DeviceName({
   app,
   disabled,
   onSaved,
+  action,
 }: {
   id: string;
   name: string;
@@ -17,6 +19,7 @@ export default function DeviceName({
   app: boolean;
   disabled: boolean;
   onSaved: (label: string) => void;
+  action?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
@@ -29,18 +32,21 @@ export default function DeviceName({
         description={description}
         action={
           !editing && (
-            <button
-              className="button secondary"
-              disabled={disabled}
-              onClick={() => {
-                setDraft(name);
-                setError("");
-                setEditing(true);
-              }}
-            >
-              <Pencil size={16} />
-              改名
-            </button>
+            <div className="device-heading-actions">
+              <button
+                className="button secondary"
+                disabled={disabled}
+                onClick={() => {
+                  setDraft(name);
+                  setError("");
+                  setEditing(true);
+                }}
+              >
+                <Pencil size={16} />
+                改名
+              </button>
+              {action}
+            </div>
           )
         }
       />
