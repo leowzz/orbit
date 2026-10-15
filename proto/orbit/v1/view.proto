@@ -70,4 +70,8 @@ message DeviceView {
   DisplaySlot footer = 9;
   UsageView usage = 10;
   CodexView codex = 11;
+  // Active display page; empty preserves the legacy combined overview.
+  string display_kind = 12;
+  // Session details are independent of the active metrics page.
+  optional bool sessions_enabled = 13;
 }

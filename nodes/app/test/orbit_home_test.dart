@@ -39,7 +39,7 @@ void main() {
   );
 
   testWidgets(
-    'Android keeps the inbox draft and existing widget settings across tabs',
+    'Android preserves drafts and uses the shared device connection',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -56,19 +56,15 @@ void main() {
       });
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, '保留草稿');
-      await tester.tap(find.text('状态与组件'));
+      await tester.tap(find.text('数据展示'));
       await tester.pumpAndSettle();
       expect(find.text('添加到桌面').hitTestable(), findsOneWidget);
       await tester.ensureVisible(find.text('Android 桌面组件'));
       await tester.tap(find.text('Android 桌面组件'));
       await tester.pumpAndSettle();
-      expect(find.text('开始同步').hitTestable(), findsOneWidget);
-      expect(calls.where((method) => method == 'load'), hasLength(1));
-      await tester.tap(find.text('开始同步'));
-      await tester.pumpAndSettle();
-      expect(calls, contains('start'));
-      await tester.pageBack();
-      await tester.pumpAndSettle();
+      expect(calls, contains('appConnection'));
+      expect(calls, isNot(contains('load')));
+      expect(calls, isNot(contains('start')));
       await tester.tap(find.text('收件箱'));
       await tester.pumpAndSettle();
       expect(find.text('保留草稿').hitTestable(), findsOneWidget);
@@ -127,7 +123,7 @@ void main() {
         await tester.tap(find.widgetWithText(NavigationDestination, '收件箱'));
         await tester.pumpAndSettle();
         expect(find.text('设置页切换时保留草稿'), findsOneWidget);
-        expect(calls, isEmpty);
+        expect(calls, widgetsEnabled ? ['appConnection'] : isEmpty);
         expect(tester.takeException(), isNull);
       },
     );

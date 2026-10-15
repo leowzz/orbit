@@ -10,10 +10,19 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { api, errorText, profileName } from "../api";
+import {
+  api,
+  errorText,
+  profileName,
+  displayMode,
+  displayModes,
+  sessionsEnabled,
+  supportsSessions,
+} from "../api";
 import type { AppDevice, NetworkState, Route, RouteDocument } from "../api";
 import { Badge, Empty, PageHead } from "../components";
-import OLEDModeSwitch from "../OLEDModeSwitch";
+import DisplayModeSwitch from "../DisplayModeSwitch";
+import SessionInfoSwitch from "../SessionInfoSwitch";
 interface Props {
   state: NetworkState;
   document: RouteDocument;
@@ -83,7 +92,7 @@ export default function Routing({ state, document, onChange }: Props) {
     <>
       <PageHead
         title="转发规则"
-        description="为每个 Node 选择视图，并决定 usage、codex 分别来自哪台主机。"
+        description="选择接收设备、数据来源和展示方式。Android 状态页、桌面组件与点阵屏共用一条规则。"
         action={
           <button
             className="button primary"
@@ -131,9 +140,10 @@ export default function Routing({ state, document, onChange }: Props) {
       </div>
       <div className="panel routes-table">
         <div className="route-table-head">
-          <span>接收设备 / NODE</span>
-          <span>视图配置</span>
-          <span>数据来源 / AGENT</span>
+          <span>接收设备</span>
+          <span>数据展示</span>
+          <span>Session 信息</span>
+          <span>数据来源</span>
           <span />
         </div>
         {entries.map(([id, r]) => (
@@ -154,16 +164,23 @@ export default function Routing({ state, document, onChange }: Props) {
               {!r.profile.endsWith("-oled-128x32") && (
                 <span className="profile-label">{profileName(r.profile)}</span>
               )}
-              <OLEDModeSwitch
+              <DisplayModeSwitch
                 nodeId={id}
                 document={document}
                 onChange={onChange}
               />
             </div>
+            <SessionInfoSwitch
+              nodeId={id}
+              document={document}
+              onChange={onChange}
+            />
             <div className="route-inputs">
               {r.inputs.map((input) => (
                 <div key={input.observation_type}>
-                  <span className="kind-label">{input.observation_type}</span>
+                  <span className="kind-label">
+                    {input.observation_type === "usage" ? "API 用量" : "Codex"}
+                  </span>
                   <ArrowRight size={12} />
                   <span className="mono">{input.agent_id}</span>
                 </div>
@@ -192,16 +209,18 @@ export default function Routing({ state, document, onChange }: Props) {
               </button>
             }
           >
-            一个 Node 对应一条规则。你可以将不同主机的数据组合到同一设备。
+            一台设备对应一条规则。你可以将不同主机的数据组合到同一设备。
           </Empty>
         )}
       </div>
       <div className="routing-note">
         <span className="note-number">i</span>
         <p>
-          保存后立即应用。移除来源或删除规则时，Core 会清空设备上的旧数据。
+          保存后立即应用。移除来源或删除规则时，设备会清空旧的状态数据。
           <br />
-          <span>每种数据只能选择一个来源；OLED 可选择固定展示或循环显示。</span>
+          <span>
+            每种数据保留一个来源，切换展示方式不会丢失来源配置。收件箱消息不受规则影响。
+          </span>
         </p>
         <Badge>本地持久化</Badge>
       </div>
@@ -252,6 +271,12 @@ function Editor({
             targets.find((t) => t.id === editing.id)?.profile ??
             "overview-web"),
     ),
+    [mode, setMode] = useState<string>(
+      editing.route ? displayMode(editing.route) : "usage",
+    ),
+    [sessions, setSessions] = useState(
+      editing.route ? sessionsEnabled(editing.route) : false,
+    ),
     [usage, setUsage] = useState(
       editing.route?.inputs.find((i) => i.observation_type === "usage")
         ?.agent_id ?? "",
@@ -290,7 +315,7 @@ function Editor({
     const node = id.trim();
     if (!deleted) {
       if (
-        profile === "rotating-oled-128x32" &&
+        mode === "rotating" &&
         (!usage.trim() ||
           !codex.trim() ||
           !Number.isInteger(rotationSeconds) ||
@@ -309,12 +334,13 @@ function Editor({
         return;
       }
       if (
-        (profile === "codex-weekly-oled-128x32" && !codex.trim()) ||
-        (profile !== "codex-weekly-oled-128x32" &&
-          !usage.trim() &&
-          (profile === "usage-oled-128x32" || !codex.trim()))
+        (mode === "usage" && !usage.trim()) ||
+        ((mode === "codex" ||
+          (sessions && !profile.endsWith("-oled-128x32"))) &&
+          !codex.trim()) ||
+        (!usage.trim() && !codex.trim())
       ) {
-        setError("请至少选择一个数据来源。");
+        setError("请选择当前展示方式需要的数据来源。");
         return;
       }
     }
@@ -323,18 +349,19 @@ function Editor({
     else
       routes[node] = {
         profile,
-        ...(profile === "rotating-oled-128x32"
-          ? { rotation_seconds: rotationSeconds }
-          : {}),
+        sessions_enabled: sessions && supportsSessions({ profile } as Route),
+        ...(mode ? { display_mode: mode as Route["display_mode"] } : {}),
+        ...(mode === "rotating" ? { rotation_seconds: rotationSeconds } : {}),
         inputs: [
-          ...(usage.trim() && profile !== "codex-weekly-oled-128x32"
+          ...(usage.trim()
             ? [{ agent_id: usage.trim(), observation_type: "usage" as const }]
             : []),
-          ...(codex.trim() && profile !== "usage-oled-128x32"
+          ...(codex.trim()
             ? [{ agent_id: codex.trim(), observation_type: "codex" as const }]
             : []),
         ],
       };
+
     setBusy(true);
     try {
       onSaved(
@@ -360,7 +387,6 @@ function Editor({
       <form onSubmit={save}>
         <header>
           <div>
-            <div className="eyebrow">PROJECTION ROUTE</div>
             <h2>{editing.route ? "编辑规则" : "新建规则"}</h2>
           </div>
           <button
@@ -416,10 +442,15 @@ function Editor({
               <p className="field-hint">
                 选择已发现设备，或填写新设备的 ID 进行预配置。
               </p>
-              <label htmlFor="profile">设备视图</label>
+              <label htmlFor="profile">接收方式</label>
               <select
                 id="profile"
-                value={profile}
+                value={
+                  profile.endsWith("-oled-128x32")
+                    ? "usage-oled-128x32"
+                    : profile
+                }
+                disabled={targets.some((t) => t.id === id)}
                 onChange={(e) => {
                   setProfile(e.target.value);
                   setDirty(true);
@@ -427,18 +458,45 @@ function Editor({
               >
                 {[
                   "usage-oled-128x32",
-                  "codex-weekly-oled-128x32",
-                  "rotating-oled-128x32",
                   "overview-web",
                   "overview-android",
                   "overview-app",
                 ].map((p) => (
                   <option key={p} value={p}>
-                    {profileName(p)}
+                    {p === "usage-oled-128x32" ? "OLED 显示屏" : profileName(p)}
                   </option>
                 ))}
               </select>
-              {profile === "rotating-oled-128x32" && (
+              <label htmlFor="display-mode">展示方式</label>
+              <select
+                id="display-mode"
+                value={mode}
+                onChange={(e) => {
+                  setMode(e.target.value);
+                  setDirty(true);
+                }}
+              >
+                {!mode && <option value="">综合展示（现有配置）</option>}
+                {displayModes.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+              {!profile.endsWith("-oled-128x32") && (
+                <label className="session-info-option">
+                  <input
+                    type="checkbox"
+                    checked={sessions}
+                    onChange={(e) => {
+                      setSessions(e.target.checked);
+                      setDirty(true);
+                    }}
+                  />
+                  转发 Session 信息（会话列表详情）
+                </label>
+              )}
+              {mode === "rotating" && (
                 <>
                   <label htmlFor="rotation-seconds">循环间隔（秒）</label>
                   <input
@@ -455,7 +513,7 @@ function Editor({
                     required
                   />
                   <p className="field-hint">
-                    由 Core 持续切换，关闭控制台后仍会循环。
+                    在 API 用量与账号周限之间循环，关闭控制台后仍会继续。
                   </p>
                 </>
               )}
@@ -463,11 +521,10 @@ function Editor({
             <div className="form-section">
               <span className="step-label">02 / 数据来源</span>
               <label htmlFor="usage-source">
-                <span className="source-glyph">U</span>Usage 用量
+                <span className="source-glyph">U</span>API 用量
               </label>
               <input
                 id="usage-source"
-                disabled={profile === "codex-weekly-oled-128x32"}
                 list="known-agents"
                 value={usage}
                 placeholder="选择或输入 Agent ID"
@@ -478,21 +535,13 @@ function Editor({
               />
               <label htmlFor="codex-source">
                 <span className="source-glyph">C</span>
-                {profile === "codex-weekly-oled-128x32" ||
-                profile === "rotating-oled-128x32"
-                  ? "Codex 周限"
-                  : "Codex 会话"}
+                Codex（周限 / 会话）
               </label>
               <input
                 id="codex-source"
                 list="known-agents"
                 value={codex}
-                disabled={profile === "usage-oled-128x32"}
-                placeholder={
-                  profile === "usage-oled-128x32"
-                    ? "此视图不支持 Codex"
-                    : "选择或输入 Agent ID"
-                }
+                placeholder="选择或输入 Agent ID"
                 onChange={(e) => {
                   setCodex(e.target.value);
                   setDirty(true);
@@ -506,9 +555,9 @@ function Editor({
                 ))}
               </datalist>
               <p className="field-hint">
-                {profile === "rotating-oled-128x32"
+                {mode === "rotating"
                   ? "循环显示需要两种数据来源，可来自不同 Agent。"
-                  : "留空表示不转发这一类数据。两种数据可以来自不同 Agent。"}
+                  : "两种数据可来自不同主机。配置后保留，展示切换无需重新选择。"}
               </p>
             </div>
             {error && (
@@ -540,7 +589,7 @@ function Editor({
             {remove && (
               <div className="confirm-box">
                 <strong>删除 {editing.id} 的转发规则？</strong>
-                <p>设备将停止接收数据，并清空旧内容。</p>
+                <p>设备将停止接收状态数据。已有收件箱消息会保留。</p>
                 <div>
                   <button
                     type="button"

@@ -60,8 +60,30 @@ YAML 路由仅在首次创建管理台数据库时导入；已有部署修改 YA
 
 管理台同域提供个人 API 和网页，但仍分别校验管理员会话与设备凭据。最少配置、Web Node 可选连接和浏览器缓存边界见 [个人收件箱](personal-inbox.md)。
 
+## 2026-10-15：统一展示链路部署
+
+- tx 的 Core/Web 更新为本机构建镜像 `orbit-core:unified-display-20261015`、`orbit-web:unified-display-20261015`，未推送镜像仓库。
+- 发布产物、源码差异、二进制哈希和验证记录：`/srv/orbit-deploy/releases/unified-display-20261015`。基线提交 `d24b4239a4f333ade5261a0244463abbbb7336c8` 加本次工作区改动。
+- 停机备份：`/srv/orbit-deploy/backups/unified-display-20261015T030750Z`，含 Compose、配置和完整 Core 数据。两个 SQLite 数据库完整性均为 `ok`。
+- 部署前后路由修订保持 94，7 条路由与 4 个设备授权不变；Core/Web HTTPS、原设备令牌和 protobuf 状态接口验证通过，运行二进制哈希与构建产物一致。
+- 此本地镜像使用 `docker compose up -d --pull never orbit-core orbit-web`，不要执行远程拉取。
+- 137（`10.10.16.137:5555`，Alipay Box）覆盖安装 ARM64 profile APK，安装后的 versionCode 为 4002，签名与原调试包一致；首次安装时间不变，原连接与应用数据保留。应用启动和共享状态接收正常。
+- 部署后设备验收发现 AP001 的 App 规则误选 OLED profile，仅将该规则改为 `overview-app` + `display_mode: usage`，保留原来源；保存为修订 116。修正前单条规则备份在发布目录的 `ap001-route-before.json`，未覆盖其他并发编辑。
+
 ## 2026-10-15：Web 账号周限四行展示
 
 - tx Web 更新为本机构建镜像 `orbit-web:weekly-four-rows-20261015`，左侧依次显示剩余额度、重置日期、重置时间、剩余时间（如 `6天23时`）。Core 未重启。
 - 产物、源码差异和验证记录：`/srv/orbit-deploy/releases/web-weekly-four-rows-20261015`；Compose 备份：`/srv/orbit-deploy/backups/web-weekly-four-rows-20261015T031828Z`，旧 Web 镜像保留。
 - 运行二进制及公网 JavaScript 哈希与构建产物一致；认证后的状态接口返回 200，当前 `display_kind` 为 `codex`。镜像未推送仓库，重建继续使用 `--pull never`。
+
+### 2026-10-15 Codex 会话转发
+
+新增独立展示模式 `sessions`，来源仍为 `codex`。选择会话仅投影会话信息，选择周限仅投影额度，旧综合模式保持兼容；循环显示仍轮换用量与周限。Core、Web 发布镜像为 `orbit-core:sessions-final-20261015`、`orbit-web:sessions-final-20261015`，构建清单、源码快照及部署结果位于 tx `/srv/orbit-deploy/releases/sessions-20261015`。每次更新前备份数据库、配置和 Compose，部署校验二进制摘要、数据库完整性、路由与设备注册不变及 HTTPS / Protobuf 接口。
+
+137（`10.10.16.137:5555`）已覆盖安装 ARM64 profile APK（versionCode 4003），首装时间及连接保留。临时切换 AP001 到 `sessions` 后，App 状态页与点阵屏均显示实时会话计数（验证时 1 运行中 / 1963 总数）；验证后恢复原来的 `codex` 周限模式。验证记录见发布目录 `android-verification.json`。Go 全量、Web 14 项、Flutter 48 项、Flutter analyze、Android JVM 测试与 ARM64 构建均通过。
+
+### 2026-10-15 Session 信息改为独立开关（替代上节的独立指标页）
+
+按用户澄清，数据展示仅保留 API 用量、账号周限、循环显示。转发规则新增独立的 Session 信息列，通过 `sessions_enabled` 控制会话详情，开启后与任何指标同时转发；关闭后不携带详情并清空接收端缓存。点阵屏继续只显示指标。旧 `display_mode=sessions` 兼容解释为周限指标及开启会话详情，前端不再提供该模式。
+
+已部署 `orbit-core:session-toggle-20261015`、`orbit-web:session-toggle-20261015` 至 tx，发布记录 `/srv/orbit-deploy/releases/session-toggle-20261015`，部署前备份 `/srv/orbit-deploy/backups/session-toggle-20261015T032921Z`；数据库完整性、路由及设备注册保留、二进制摘要和 HTTPS / Protobuf 验证通过。137 覆盖安装 ARM64 profile versionCode 4004，原连接及数据保留。Go 全量、Web 15 项、Flutter 47 项、Flutter analyze、Android JVM 测试和构建通过。实测 Web 用量及周限均可同时显示 20 条会话，关闭开关后会话行归零而指标保留；控制台桌面及 390px 窄屏无横向溢出。

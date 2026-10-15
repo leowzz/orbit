@@ -149,3 +149,15 @@ Core 的 App 监听器和管理台监听器均提供 `/inbox/` 网页和同一�
 - 撤销或轮换设备后，已有 Cookie 和 SSE 连接同样失效。
 
 Web Node 的可选 `web.inbox` 代理只转发消息、同步、状态和附件接口，使用自己的访问会话保护入口；不会代理管理台或上游会话接口。
+
+### 统一展示规则
+
+`ProjectionRoute.display_mode` 支持 `usage`、`codex`、`rotating`，与目的地 `profile` 分离。`rotation_seconds` 仅用于循环模式（1–3600 秒，省略默认 3 秒）。固定模式可以保留两种输入；Core 只投影当前页面，不修改来源配置。未指定模式时兼容原 OLED profile 和 App/Web/Android 综合视图。
+
+`DeviceView.displayKind` 返回当前指标页 `usage` 或 `codex`；空值表示旧综合视图。账号周限同时返回格式化的 primary/secondary/footer 以及具有独立有效期的 `codex.weeklyLimit`。无数据时保留当前页标识并清空数值，不能继续显示上一页缓存。
+
+Android 状态页、点阵屏和桌面组件共享 `/api/v1/status` 的设备授权。请求 `Accept: application/x-protobuf` 返回相同 DeviceView 的 protobuf 数据；无规则或无视图返回 204。JSON 响应保持兼容。消息同步、收件箱存储不受展示规则影响。
+
+`ProjectionRoute.sessions_enabled` 独立控制 Session 信息，与 `display_mode` 无关。开启需要 Codex 数据来源，支持 Web、App 和 Android 会话组件；OLED 仅展示指标。开启时任一指标页均携带会话列表、项目、模型、状态及计数；关闭时不投影会话详情与计数。`DeviceView.sessionsEnabled`（可选 bool）明确标识该开关，即使来源暂无数据也保留。Web / App 按此字段显示或清空列表，切换指标不改变开关，收件箱不受影响。
+
+兼容：未指定开关的旧综合视图沿用会话展示；旧固定/循环指标视图默认关闭。曾保存的 `display_mode=sessions` 按周限指标加会话详情解释，新界面不再提供该指标模式。

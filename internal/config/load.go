@@ -235,18 +235,38 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 			}
 			seen[input.ObservationType] = struct{}{}
 		}
-		if route.Profile == "usage-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "usage") {
+		if route.DisplayMode == "" && route.Profile == "usage-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "usage") {
 			return fmt.Errorf("projection route %q: usage-oled-128x32 requires exactly one usage input", nodeID)
 		}
-		if route.Profile == "codex-weekly-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "codex") {
+		if route.DisplayMode == "" && route.Profile == "codex-weekly-oled-128x32" && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != "codex") {
 			return fmt.Errorf("projection route %q: codex-weekly-oled-128x32 requires exactly one codex input", nodeID)
 		}
-		if route.Profile == "rotating-oled-128x32" {
+		if route.SessionsEnabled != nil && *route.SessionsEnabled {
+			if route.Profile != "overview-web" && route.Profile != "overview-android" && route.Profile != "overview-app" {
+				return fmt.Errorf("projection route %q: session details unsupported", nodeID)
+			}
+			if _, ok := seen["codex"]; !ok {
+				return fmt.Errorf("projection route %q: missing session source", nodeID)
+			}
+		}
+		if route.DisplayMode != "" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "sessions" && route.DisplayMode != "rotating" {
+			return fmt.Errorf("projection route %q: invalid display_mode", nodeID)
+		}
+		if route.DisplayMode == "usage" || route.DisplayMode == "codex" || route.DisplayMode == "sessions" {
+			kind := route.DisplayMode
+			if kind == "sessions" {
+				kind = "codex"
+			}
+			if _, ok := seen[kind]; !ok {
+				return fmt.Errorf("projection route %q: display source is missing", nodeID)
+			}
+		}
+		if route.DisplayMode == "rotating" || (route.DisplayMode == "" && route.Profile == "rotating-oled-128x32") {
 			if len(seen) != 2 || route.RotationSeconds < 0 || route.RotationSeconds > 3600 {
 				return fmt.Errorf("projection route %q: rotating OLED requires usage and codex inputs and an interval of 1–3600 seconds (0 defaults to 3)", nodeID)
 			}
 		} else if route.RotationSeconds != 0 {
-			return fmt.Errorf("projection route %q: rotation_seconds requires rotating-oled-128x32", nodeID)
+			return fmt.Errorf("projection route %q: rotation_seconds requires rotating display", nodeID)
 		}
 	}
 

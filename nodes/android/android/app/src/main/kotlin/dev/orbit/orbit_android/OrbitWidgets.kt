@@ -50,7 +50,10 @@ object OrbitWidgets {
         val now = System.currentTimeMillis()
         val data = ViewStore(context).load()?.takeIf { ViewPolicy.millis(it.retainUntil) > now }
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        for ((provider, usage) in listOf(UsageWidget::class.java to true, SessionWidget::class.java to false)) {
+        for ((provider, legacyUsage) in listOf(UsageWidget::class.java to true, SessionWidget::class.java to false)) {
+            val selected = data?.displayKind.orEmpty()
+            val usage = legacyUsage
+            val quota = selected == "codex"
             for (id in manager.getAppWidgetIds(ComponentName(context, provider))) {
                 val options = manager.getAppWidgetOptions(id)
                 val portrait = SizeF(options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 180).toFloat(),
@@ -61,7 +64,7 @@ object OrbitWidgets {
                 val sizes = if (Build.VERSION.SDK_INT >= 31)
                     options.getParcelableArrayList<SizeF>(AppWidgetManager.OPTION_APPWIDGET_SIZES)
                         ?.filter { it.width > 0 && it.height > 0 }?.distinct()?.take(16).orEmpty() else emptyList()
-                val key = mutableListOf<Any>(sizes.ifEmpty { listOf(portrait, landscape) }, context.resources.configuration.fontScale)
+                val key = mutableListOf<Any>(sizes.ifEmpty { listOf(portrait, landscape) }, context.resources.configuration.fontScale, selected)
                 var widgetHint = ""
                 fun render(size: SizeF): RemoteViews {
                     val layout = WidgetSizing.session(size.width, size.height, context.resources.configuration.fontScale)
@@ -74,18 +77,18 @@ object OrbitWidgets {
                     fun pixels(dp: Int) = (dp * context.resources.displayMetrics.density).toInt()
                     val vertical = if (usage) (size.height / 12).toInt().coerceIn(4, 18) else layout.padding
                     views.setViewPadding(R.id.widget_root, pixels(layout.padding), pixels(vertical), pixels(layout.padding), pixels(vertical))
-                    views.setTextViewText(R.id.widget_label, if (usage) "用量" else if (size.width < 180) "会话" else "Sessions")
+                    views.setTextViewText(R.id.widget_label, if (quota) "账号周限" else if (usage) "API 用量" else if (size.width < 180) "会话" else "Sessions")
                     views.setTextViewTextSize(R.id.widget_label, TypedValue.COMPLEX_UNIT_SP, layout.textSize)
                     views.setTextViewTextSize(R.id.widget_hint, TypedValue.COMPLEX_UNIT_SP, (layout.textSize - 2).coerceAtLeast(9f))
                     if (usage) {
                         val value = data?.takeIf { it.hasUsage() }?.usage
-                        val amount = if (value?.hasActualCostMicros() == true)
+                        val amount = if (quota) data?.primary?.text ?: "--%" else if (value?.hasActualCostMicros() == true)
                             WidgetPresentation.cost(value.actualCostMicros, value.currencyCode) else "—"
-                        widgetHint = if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
+                        widgetHint = if (quota && data != null) hint(data.freshness, data.freshUntil, now) else if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
                         views.setTextViewText(R.id.widget_amount, amount)
                         views.setTextViewText(R.id.widget_hint, widgetHint)
-                        val tok = "TOK  " + if (value?.hasTokenCount() == true) WidgetPresentation.metric(value.tokenCount) else "—"
-                        val tpm = "TPM  " + if (value?.hasTpm() == true) WidgetPresentation.metric(value.tpm) else "—"
+                        val tok = if (quota) "重置 " + data?.secondary?.text.orEmpty() else "TOK  " + if (value?.hasTokenCount() == true) WidgetPresentation.metric(value.tokenCount) else "—"
+                        val tpm = if (quota) "剩余 " + data?.footer?.text.orEmpty() else "TPM  " + if (value?.hasTpm() == true) WidgetPresentation.metric(value.tpm) else "—"
                         val inline = "$tok    $tpm"
                         val metrics = context.resources.displayMetrics
                         val paint = Paint().apply { textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11f, metrics) }
@@ -99,7 +102,7 @@ object OrbitWidgets {
                         val scale = context.resources.configuration.fontScale.coerceAtLeast(1f)
                         val requiredHeight = vertical * 2 + (layout.textSize * 1.5f + 42f) * scale +
                             (paint.fontSpacing / metrics.density) * lines + 4
-                        val showMetrics = value != null && (sideMetrics || (lines > 0 && size.height >= requiredHeight))
+                        val showMetrics = (quota || value != null) && (sideMetrics || (lines > 0 && size.height >= requiredHeight))
                         val detail = if (showMetrics) { if (!sideMetrics && lines == 1) inline else "$tok\n$tpm" } else ""
                         views.setViewVisibility(R.id.widget_metrics, if (showMetrics) View.VISIBLE else View.GONE)
                         views.setTextViewText(R.id.widget_metrics, detail)
@@ -107,8 +110,8 @@ object OrbitWidgets {
                         key.add(amount)
                         key.add(widgetHint)
                     } else {
-                        val value = data?.takeIf { it.hasCodex() }?.codex
-                        val state = if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
+                        val value = data?.takeIf { it.hasCodex() && (!it.hasSessionsEnabled() || it.sessionsEnabled) }?.codex
+                        val state = if (data?.hasSessionsEnabled() == true && !data.sessionsEnabled) "Session 信息已关闭" else if (value == null) "暂无数据" else hint(value.freshness, value.freshUntil, now)
                         widgetHint = state.ifBlank { "${value?.runningCount ?: 0} 运行中" }
                         views.setTextViewText(R.id.widget_hint, widgetHint)
                         key.add(widgetHint)
@@ -142,7 +145,7 @@ object OrbitWidgets {
                 val previous = rendered[id]
                 if (!force && previous != null) {
                     if (previous.key == key) continue
-                    if (usage && previous.hint == widgetHint && elapsed - previous.at < 60000) continue
+                    if (selected.isEmpty() && usage && previous.hint == widgetHint && elapsed - previous.at < 60000) continue
                 }
                 rendered[id] = Rendered(key, widgetHint, elapsed)
                 manager.updateAppWidget(id, views)

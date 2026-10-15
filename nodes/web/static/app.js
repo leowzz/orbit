@@ -376,7 +376,8 @@ function render(snapshot) {
   const mode = snapshot.display_kind || "";
   const quota = mode === "codex";
   document.querySelector("#overview-title").textContent = quota ? "账号周限" : mode ? "API 用量" : "今日概览";
-  document.querySelector(".sessions").hidden = !!mode;
+  const sessionsEnabled = snapshot.sessions_enabled == null ? !mode : snapshot.sessions_enabled;
+  document.querySelector(".sessions").hidden = !sessionsEnabled;
   document.querySelector(".metric-accent").hidden = !!mode && !quota;
   const labels = document.querySelectorAll("#usage-metrics .metric-label");
   const metricLabels = quota
@@ -393,6 +394,9 @@ function render(snapshot) {
   elements.tpm.textContent = usage ? integerFormat.format(usage.tpm) : "--";
 
   const codex = snapshot.codex;
+  document.querySelector("#sessions-title").textContent = sessionsEnabled && codex
+    ? `${codex.running_count || 0} 个运行中 · 共 ${codex.total_count || 0} 个会话`
+    : "最近任务";
   elements.runningCount.textContent = codex ? integerFormat.format(codex.running_count) : "--";
   elements.totalCount.textContent = codex ? `共 ${integerFormat.format(codex.total_count)} 个` : "共 -- 个";
   if (quota) {

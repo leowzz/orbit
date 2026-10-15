@@ -129,7 +129,7 @@ void main() {
       await waitForLocalUpdate(tester, () => c.pending.isNotEmpty);
       expect(jsonDecode(c.pending.single['payload'])['body'], '编辑后的待办');
       expect(tester.takeException(), isNull);
-      await tester.tap(find.text('状态与组件'));
+      await tester.tap(find.text('数据展示'));
       await tester.pumpAndSettle();
       expect(find.text('Android 桌面组件'), findsOneWidget);
       expect(find.text('开始同步'), findsNothing);

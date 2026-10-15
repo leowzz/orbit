@@ -456,20 +456,24 @@ func (x *CodexView) GetWeeklyLimit() *CodexWeeklyLimit {
 }
 
 type DeviceView struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Metadata      *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
-	NodeId        string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	CoreEpoch     string                 `protobuf:"bytes,3,opt,name=core_epoch,json=coreEpoch,proto3" json:"core_epoch,omitempty"`
-	Freshness     Freshness              `protobuf:"varint,4,opt,name=freshness,proto3,enum=orbit.v1.Freshness" json:"freshness,omitempty"`
-	FreshUntil    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
-	RetainUntil   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=retain_until,json=retainUntil,proto3" json:"retain_until,omitempty"`
-	Primary       *DisplaySlot           `protobuf:"bytes,7,opt,name=primary,proto3" json:"primary,omitempty"`
-	Secondary     *DisplaySlot           `protobuf:"bytes,8,opt,name=secondary,proto3" json:"secondary,omitempty"`
-	Footer        *DisplaySlot           `protobuf:"bytes,9,opt,name=footer,proto3" json:"footer,omitempty"`
-	Usage         *UsageView             `protobuf:"bytes,10,opt,name=usage,proto3" json:"usage,omitempty"`
-	Codex         *CodexView             `protobuf:"bytes,11,opt,name=codex,proto3" json:"codex,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Metadata    *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	NodeId      string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	CoreEpoch   string                 `protobuf:"bytes,3,opt,name=core_epoch,json=coreEpoch,proto3" json:"core_epoch,omitempty"`
+	Freshness   Freshness              `protobuf:"varint,4,opt,name=freshness,proto3,enum=orbit.v1.Freshness" json:"freshness,omitempty"`
+	FreshUntil  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
+	RetainUntil *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=retain_until,json=retainUntil,proto3" json:"retain_until,omitempty"`
+	Primary     *DisplaySlot           `protobuf:"bytes,7,opt,name=primary,proto3" json:"primary,omitempty"`
+	Secondary   *DisplaySlot           `protobuf:"bytes,8,opt,name=secondary,proto3" json:"secondary,omitempty"`
+	Footer      *DisplaySlot           `protobuf:"bytes,9,opt,name=footer,proto3" json:"footer,omitempty"`
+	Usage       *UsageView             `protobuf:"bytes,10,opt,name=usage,proto3" json:"usage,omitempty"`
+	Codex       *CodexView             `protobuf:"bytes,11,opt,name=codex,proto3" json:"codex,omitempty"`
+	// Active display page; empty preserves the legacy combined overview.
+	DisplayKind string `protobuf:"bytes,12,opt,name=display_kind,json=displayKind,proto3" json:"display_kind,omitempty"`
+	// Session details are independent of the active metrics page.
+	SessionsEnabled *bool `protobuf:"varint,13,opt,name=sessions_enabled,json=sessionsEnabled,proto3,oneof" json:"sessions_enabled,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeviceView) Reset() {
@@ -579,6 +583,20 @@ func (x *DeviceView) GetCodex() *CodexView {
 	return nil
 }
 
+func (x *DeviceView) GetDisplayKind() string {
+	if x != nil {
+		return x.DisplayKind
+	}
+	return ""
+}
+
+func (x *DeviceView) GetSessionsEnabled() bool {
+	if x != nil && x.SessionsEnabled != nil {
+		return *x.SessionsEnabled
+	}
+	return false
+}
+
 var File_orbit_v1_view_proto protoreflect.FileDescriptor
 
 const file_orbit_v1_view_proto_rawDesc = "" +
@@ -621,7 +639,7 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\rrunning_count\x18\x05 \x01(\rR\frunningCount\x12;\n" +
 	"\vobserved_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"observedAt\x12=\n" +
-	"\fweekly_limit\x18\a \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\x8e\x04\n" +
+	"\fweekly_limit\x18\a \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\xf6\x04\n" +
 	"\n" +
 	"DeviceView\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x17\n" +
@@ -637,7 +655,10 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\x06footer\x18\t \x01(\v2\x15.orbit.v1.DisplaySlotR\x06footer\x12)\n" +
 	"\x05usage\x18\n" +
 	" \x01(\v2\x13.orbit.v1.UsageViewR\x05usage\x12)\n" +
-	"\x05codex\x18\v \x01(\v2\x13.orbit.v1.CodexViewR\x05codex*g\n" +
+	"\x05codex\x18\v \x01(\v2\x13.orbit.v1.CodexViewR\x05codex\x12!\n" +
+	"\fdisplay_kind\x18\f \x01(\tR\vdisplayKind\x12.\n" +
+	"\x10sessions_enabled\x18\r \x01(\bH\x00R\x0fsessionsEnabled\x88\x01\x01B\x13\n" +
+	"\x11_sessions_enabled*g\n" +
 	"\tFreshness\x12\x19\n" +
 	"\x15FRESHNESS_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fFRESHNESS_FRESH\x10\x01\x12\x13\n" +
@@ -712,6 +733,7 @@ func file_orbit_v1_view_proto_init() {
 	file_orbit_v1_common_proto_init()
 	file_orbit_v1_observation_proto_init()
 	file_orbit_v1_view_proto_msgTypes[1].OneofWrappers = []any{}
+	file_orbit_v1_view_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

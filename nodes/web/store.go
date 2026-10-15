@@ -11,16 +11,21 @@ import (
 )
 
 type Snapshot struct {
-	NodeID      string         `json:"node_id"`
-	CoreEpoch   string         `json:"core_epoch"`
-	Revision    uint64         `json:"revision"`
-	Freshness   string         `json:"freshness"`
-	ProducedAt  *time.Time     `json:"produced_at,omitempty"`
-	ReceivedAt  time.Time      `json:"received_at"`
-	FreshUntil  *time.Time     `json:"fresh_until,omitempty"`
-	RetainUntil *time.Time     `json:"retain_until,omitempty"`
-	Usage       *UsageSnapshot `json:"usage,omitempty"`
-	Codex       *CodexSnapshot `json:"codex,omitempty"`
+	SessionsEnabled *bool          `json:"sessions_enabled,omitempty"`
+	DisplayKind     string         `json:"display_kind,omitempty"`
+	Primary         string         `json:"primary,omitempty"`
+	Secondary       string         `json:"secondary,omitempty"`
+	Footer          string         `json:"footer,omitempty"`
+	NodeID          string         `json:"node_id"`
+	CoreEpoch       string         `json:"core_epoch"`
+	Revision        uint64         `json:"revision"`
+	Freshness       string         `json:"freshness"`
+	ProducedAt      *time.Time     `json:"produced_at,omitempty"`
+	ReceivedAt      time.Time      `json:"received_at"`
+	FreshUntil      *time.Time     `json:"fresh_until,omitempty"`
+	RetainUntil     *time.Time     `json:"retain_until,omitempty"`
+	Usage           *UsageSnapshot `json:"usage,omitempty"`
+	Codex           *CodexSnapshot `json:"codex,omitempty"`
 }
 
 type UsageSnapshot struct {
@@ -97,7 +102,7 @@ func (s *Store) Update(view *orbitv1.DeviceView, receivedAt time.Time) error {
 }
 
 func mergeCachedSections(next, previous *Snapshot, receivedAt time.Time) {
-	if previous == nil || previous.NodeID != next.NodeID || previous.CoreEpoch != next.CoreEpoch ||
+	if next.SessionsEnabled != nil || next.DisplayKind != "" || previous == nil || previous.NodeID != next.NodeID || previous.CoreEpoch != next.CoreEpoch ||
 		previous.RetainUntil == nil || receivedAt.After(*previous.RetainUntil) {
 		return
 	}
@@ -157,6 +162,7 @@ func (s *Store) Subscribe() (<-chan []byte, func()) {
 
 func snapshotFromView(view *orbitv1.DeviceView, receivedAt time.Time) Snapshot {
 	result := Snapshot{
+		SessionsEnabled: view.SessionsEnabled, DisplayKind: view.DisplayKind, Primary: view.GetPrimary().GetText(), Secondary: view.GetSecondary().GetText(), Footer: view.GetFooter().GetText(),
 		NodeID: view.NodeId, CoreEpoch: view.CoreEpoch, Revision: view.Metadata.Revision,
 		Freshness: freshnessName(view.Freshness), ReceivedAt: receivedAt,
 		ProducedAt: timestamp(view.Metadata.ProducedAt), FreshUntil: timestamp(view.FreshUntil), RetainUntil: timestamp(view.RetainUntil),

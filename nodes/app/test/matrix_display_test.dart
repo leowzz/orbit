@@ -19,6 +19,29 @@ void main() {
     },
   };
 
+  test('API page follows the route even without a quota observation', () {
+    final reading = MatrixReading.fromView(
+      {
+        'displayKind': 'usage',
+        'usage': {
+          'actualCostMicros': '12345000',
+          'tokenCount': '1200000',
+          'tpm': '500',
+          'freshUntil': now.add(const Duration(minutes: 1)).toIso8601String(),
+        },
+      },
+      true,
+      now,
+    );
+    expect(reading.showUsage, isTrue);
+    expect(reading.costText, '12.35');
+    expect(reading.tokensText, '1.2M');
+    expect(reading.status, '实时');
+    expect(
+      MatrixReading.fromView({'displayKind': 'usage'}, true, now).status,
+      '暂无数据',
+    );
+  });
   test('weekly percentage, consumption and whole-minute countdown', () {
     final reading = MatrixReading.fromView(view(), true, now);
     expect(reading.percent, '72.5%');

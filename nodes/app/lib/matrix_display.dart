@@ -8,12 +8,18 @@ import 'local_store.dart';
 
 /// Only the quota observation can renew quota freshness; session activity cannot.
 class MatrixReading {
+  final bool showUsage;
+  final String costText, tokensText, tpmText;
   final double? remaining;
   final DateTime? reset, observed;
   final String status, countdown, usage;
   final int? hoursLeft;
 
   const MatrixReading({
+    this.showUsage = false,
+    this.costText = "--",
+    this.tokensText = "--",
+    this.tpmText = "--",
     this.remaining,
     this.reset,
     this.observed,
@@ -65,12 +71,25 @@ class MatrixReading {
 
     final usageFresh =
         online && (date(usage?['freshUntil'])?.isAfter(now) ?? false);
+    final showUsage = view?['displayKind'] == 'usage';
     return MatrixReading(
+      showUsage: showUsage,
+      costText: cost == null ? '--' : (cost / 1000000).toStringAsFixed(2),
+      tokensText: metric(usage?['tokenCount']),
+      tpmText: metric(usage?['tpm']),
       remaining: valid && !expired ? percent : null,
       reset: reset,
-      observed: observed,
+      observed: showUsage ? date(usage?['observedAt']) : observed,
       hoursLeft: valid && !expired ? minutes ~/ 60 : null,
-      status: !valid
+      status: showUsage
+          ? (usage == null
+                ? '暂无数据'
+                : usageFresh
+                ? '实时'
+                : online
+                ? '上次数据'
+                : '离线缓存')
+          : !valid
           ? '暂无周额度'
           : expired
           ? '等待重置更新'
@@ -115,10 +134,11 @@ class MatrixReading {
       ? '— / —  — : —'
       : '${_two(reset!.month)}/${_two(reset!.day)} ${_two(reset!.hour)}:${_two(reset!.minute)}';
   String get updatedLabel => observed == null
-      ? '尚未收到额度'
+      ? '尚未收到数据'
       : '更新于 ${_two(observed!.hour)}:${_two(observed!.minute)}';
-  String get description =>
-      '周额度剩余 $percent，$used，$status，重置时间 $resetLabel，$countdown。$usage';
+  String get description => showUsage
+      ? 'API 用量 $costText，Token $tokensText，TPM $tpmText，$status'
+      : '周额度剩余 $percent，$used，$status，重置时间 $resetLabel，$countdown。$usage';
 }
 
 class MatrixStyle {
@@ -263,6 +283,24 @@ void _drawContent(
     }
     p.paint(canvas, Offset(x, y));
     p.dispose();
+  }
+
+  if (reading.showUsage) {
+    final left = width * .57;
+    text(
+      reading.displayStatus.isEmpty ? 'USD' : reading.displayStatus,
+      4,
+      3,
+      9,
+      _mint,
+      left - 8,
+    );
+    text(reading.costText, 4, 19, 36, _white, left - 8);
+    text('TOKENS', left, 3, 9, _muted, width - left - 4);
+    text(reading.tokensText, left, 16, 18, _white, width - left - 4);
+    text('TPM', left, 39, 9, _muted, width - left - 4);
+    text(reading.tpmText, left, 51, 17, _amber, width - left - 4);
+    return;
   }
 
   // Keep the largest area for the percentage. Only wide displays get an icon.

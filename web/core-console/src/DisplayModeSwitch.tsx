@@ -1,19 +1,18 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { APIError, api, errorText } from "./api";
-import type { InputKind, RouteDocument } from "./api";
+import {
+  APIError,
+  api,
+  errorText,
+  displayMode,
+  displayModes,
+  sessionsEnabled,
+} from "./api";
+import type { RouteDocument } from "./api";
 
-const modes = [
-  { profile: "usage-oled-128x32", kinds: ["usage"], label: "API 用量" },
-  { profile: "codex-weekly-oled-128x32", kinds: ["codex"], label: "账号周限" },
-  {
-    profile: "rotating-oled-128x32",
-    kinds: ["usage", "codex"],
-    label: "循环显示",
-  },
-] satisfies { profile: string; kinds: InputKind[]; label: string }[];
+const rotationMode = displayModes.find((mode) => mode.value === "rotating")!;
 
-export default function OLEDModeSwitch({
+export default function DisplayModeSwitch({
   nodeId,
   document,
   onChange,
@@ -47,9 +46,10 @@ export default function OLEDModeSwitch({
     Number.isInteger(Number(interval)) &&
     Number(interval) >= 1 &&
     Number(interval) <= 3600;
-  if (!route || !modes.some((m) => m.profile === route.profile)) return null;
+  if (!route) return null;
+  const selected = displayMode(route);
 
-  async function select(mode: (typeof modes)[number], seconds = 3) {
+  async function select(mode: (typeof displayModes)[number], seconds = 3) {
     setBusy(true);
     setError("");
     setMessage("");
@@ -58,21 +58,26 @@ export default function OLEDModeSwitch({
       const latest = await api<RouteDocument>("/routes");
       onChange(latest);
       const current = latest.routes[nodeId];
-      if (
-        !current ||
-        !modes.some((m) => m.profile === current.profile) ||
-        current.inputs.length < 1 ||
-        current.inputs.length > 2
-      ) {
+      if (!current || current.inputs.length < 1 || current.inputs.length > 2) {
         throw new Error("这台设备的规则已更改，请到转发规则中重新配置。");
       }
       if (
-        current.profile === mode.profile &&
-        (mode.profile !== "rotating-oled-128x32" ||
+        displayMode(current) === mode.value &&
+        (mode.value !== "rotating" ||
           (current.rotation_seconds || 3) === seconds)
       ) {
         setMessage("已应用");
         return;
+      }
+      const required =
+        mode.value === "rotating" ? ["usage", "codex"] : [mode.value];
+      if (
+        required.some(
+          (kind) =>
+            !current.inputs.some((input) => input.observation_type === kind),
+        )
+      ) {
+        throw new Error("请先编辑规则，配置此展示方式需要的数据来源。");
       }
       const saved = await api<RouteDocument>("/routes", {
         method: "PUT",
@@ -81,24 +86,17 @@ export default function OLEDModeSwitch({
           routes: {
             ...latest.routes,
             [nodeId]: {
-              profile: mode.profile,
-              ...(mode.profile === "rotating-oled-128x32"
-                ? { rotation_seconds: seconds }
-                : {}),
-              inputs: mode.kinds.map((kind) => ({
-                agent_id:
-                  current.inputs.find(
-                    (input) => input.observation_type === kind,
-                  )?.agent_id || current.inputs[0].agent_id,
-                observation_type: kind,
-              })),
+              ...current,
+              display_mode: mode.value,
+              sessions_enabled: sessionsEnabled(current),
+              rotation_seconds: mode.value === "rotating" ? seconds : undefined,
             },
           },
         }),
       });
       onChange(saved);
       setMessage(
-        saved.publish_pending ? "已保存，连接恢复后更新屏幕。" : "已应用",
+        saved.publish_pending ? "已保存，连接恢复后更新设备。" : "已应用",
       );
     } catch (e) {
       setError(
@@ -117,42 +115,43 @@ export default function OLEDModeSwitch({
       aria-label={nodeId + " 显示模式"}
       aria-busy={busy}
     >
+      {!selected && <small>综合展示 · 选择下方模式切换</small>}
       <div className="oled-mode-buttons" role="group" aria-label="显示模式">
-        {modes.slice(0, 2).map((mode) => (
-          <button
-            key={mode.profile}
-            type="button"
-            aria-pressed={route.profile === mode.profile}
-            disabled={busy}
-            onClick={() => {
-              if (route.profile !== mode.profile || error) void select(mode);
-            }}
-          >
-            {mode.label}
-          </button>
-        ))}
+        {displayModes
+          .filter((mode) => mode.value !== "rotating")
+          .map((mode) => (
+            <button
+              key={mode.value}
+              type="button"
+              aria-pressed={selected === mode.value}
+              disabled={busy}
+              onClick={() => {
+                if (selected !== mode.value || error) void select(mode);
+              }}
+            >
+              {mode.label}
+            </button>
+          ))}
         <form
           className="oled-rotation-controls"
           onSubmit={(e) => {
             e.preventDefault();
-            if (validInterval && !busy) void select(modes[2], Number(interval));
+            if (validInterval && !busy)
+              void select(rotationMode, Number(interval));
           }}
         >
           <button
             type="button"
-            aria-pressed={route.profile === modes[2].profile}
+            aria-pressed={selected === rotationMode.value}
             disabled={busy || !validInterval}
             onClick={() => {
-              if (
-                validInterval &&
-                (route.profile !== modes[2].profile || error)
-              )
-                void select(modes[2], Number(interval));
+              if (validInterval && (selected !== rotationMode.value || error))
+                void select(rotationMode, Number(interval));
             }}
           >
             循环显示
           </button>
-          {route.profile === modes[2].profile && (
+          {selected === rotationMode.value && (
             <input
               type="number"
               min={1}

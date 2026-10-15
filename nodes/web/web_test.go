@@ -563,3 +563,31 @@ func testView(now time.Time) *orbitv1.DeviceView {
 		},
 	}
 }
+
+func TestSelectedPageDoesNotRestoreInactiveCachedSections(t *testing.T) {
+	now := time.Now()
+	until := now.Add(time.Hour)
+	previous := &Snapshot{NodeID: "node", CoreEpoch: "epoch", RetainUntil: &until, Usage: &UsageSnapshot{TokenCount: 123}}
+	next := &Snapshot{NodeID: "node", CoreEpoch: "epoch", DisplayKind: "codex"}
+	mergeCachedSections(next, previous, now)
+	if next.Usage != nil {
+		t.Fatal("selected quota page restored usage from a different page")
+	}
+}
+
+func TestDisabledSessionsNeverMergeCachedDetails(t *testing.T) {
+	now := time.Now().UTC()
+	retain := now.Add(time.Hour)
+	disabled := false
+	previous := &Snapshot{NodeID: "node", CoreEpoch: "epoch", RetainUntil: &retain, Codex: &CodexSnapshot{TotalCount: 1, Sessions: []SessionSnapshot{{ID: "old"}}}}
+	next := &Snapshot{NodeID: "node", CoreEpoch: "epoch", SessionsEnabled: &disabled}
+	mergeCachedSections(next, previous, now)
+	if next.Codex != nil {
+		t.Fatal("disabled sessions restored from cache")
+	}
+	view := &orbitv1.DeviceView{Metadata: &orbitv1.Metadata{}, SessionsEnabled: &disabled}
+	snapshot := snapshotFromView(view, now)
+	if snapshot.SessionsEnabled == nil || *snapshot.SessionsEnabled {
+		t.Fatal("lost explicit false flag")
+	}
+}

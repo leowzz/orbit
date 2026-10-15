@@ -9,8 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"
+	orbitv1 "orbit/gen/go/orbit/v1"
 	"strconv"
 	"strings"
 	"sync"
@@ -55,6 +58,26 @@ func (s *Server) Handler() http.Handler {
 		var value json.RawMessage = json.RawMessage(`null`)
 		if s.status != nil {
 			value = s.status(node)
+		}
+		if r.Header.Get("Accept") == "application/x-protobuf" {
+			w.Header().Set("Cache-Control", "no-store")
+			if string(value) == "null" || len(value) == 0 {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			view := &orbitv1.DeviceView{}
+			if err := protojson.Unmarshal(value, view); err != nil {
+				http.Error(w, "status unavailable", 500)
+				return
+			}
+			data, err := proto.Marshal(view)
+			if err != nil {
+				http.Error(w, "status unavailable", 500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/x-protobuf")
+			w.Write(data)
+			return
 		}
 		s.mu.Lock()
 		label := s.devices[node].Label

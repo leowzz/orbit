@@ -1111,3 +1111,5 @@ footer {
     justify-self: start;
   }
 }
+
+.sessions[hidden], .metric[hidden] { display: none; }

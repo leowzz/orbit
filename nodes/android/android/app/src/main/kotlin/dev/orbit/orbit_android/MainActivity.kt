@@ -59,6 +59,25 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.orbit/node").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "appConnection" -> {
+                        val args = call.arguments as? Map<*, *>
+                        val vault = ConfigVault(this, "orbit_app_connection")
+                        val next = args?.let { NodeConfig(it["server"].toString(), "", "", it["token"].toString()) }
+                        if (next != null) {
+                            val uri = java.net.URI(next.uri)
+                            require(uri.scheme in listOf("https", "http") && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null && next.password.isNotBlank())
+                        }
+                        val previous = vault.load()
+                        if (previous != next) {
+                            if (next == null) vault.clear() else vault.save(next)
+                            ViewStore(this).clear()
+                            if (next == null) stopService(Intent(this, OrbitService::class.java))
+                            OrbitWidgets.updateAll(this, force = true)
+                        }
+                        if (next != null && !OrbitService.active) startForegroundService(Intent(this, OrbitService::class.java))
+                        else if (next != null && previous != next) startForegroundService(Intent(this, OrbitService::class.java))
+                        result.success(null)
+                    }
                     "matrixFullscreen" -> { setMatrixFullscreen(call.arguments == true); result.success(null) }
                     "showInputMethodPicker" -> {
                         startActivity(InputMethodTools.pickerIntent(this))

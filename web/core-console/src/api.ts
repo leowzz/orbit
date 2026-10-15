@@ -1,6 +1,8 @@
 export type InputKind = "usage" | "codex";
 export interface Route {
   profile: string;
+  sessions_enabled?: boolean;
+  display_mode?: "usage" | "codex" | "sessions" | "rotating";
   rotation_seconds?: number;
   inputs: { agent_id: string; observation_type: InputKind }[];
 }
@@ -96,12 +98,12 @@ export const date = (value?: string) =>
     : "暂无记录";
 export const profileName = (profile: string) =>
   ({
-    "usage-oled-128x32": "OLED · 用量屏",
-    "codex-weekly-oled-128x32": "OLED · Codex 周限",
-    "rotating-oled-128x32": "OLED · 循环显示",
+    "usage-oled-128x32": "OLED 显示屏",
+    "codex-weekly-oled-128x32": "OLED 显示屏",
+    "rotating-oled-128x32": "OLED 显示屏",
     "overview-web": "Web · 工作台",
-    "overview-android": "Android · 小组件",
-    "overview-app": "App · 收件箱",
+    "overview-android": "Android · 旧版连接",
+    "overview-app": "Orbit App · 统一连接",
   })[profile] ?? profile;
 export const modelName = (model: string) =>
   ({
@@ -114,3 +116,29 @@ export function errorText(error: unknown) {
     return "规则已被其他会话修改。请先重新载入，再保存你的修改。";
   return error instanceof Error ? error.message : "请求失败，请稍后重试。";
 }
+
+export const displayMode = (
+  route: Route,
+): "usage" | "codex" | "sessions" | "rotating" | "" =>
+  (route.display_mode === "sessions" ? "codex" : route.display_mode) ??
+  (
+    {
+      "usage-oled-128x32": "usage",
+      "codex-weekly-oled-128x32": "codex",
+      "rotating-oled-128x32": "rotating",
+    } as Record<string, Route["display_mode"]>
+  )[route.profile] ??
+  "";
+export const displayModes = [
+  { value: "usage", label: "API 用量" },
+  { value: "codex", label: "账号周限" },
+  { value: "rotating", label: "循环显示" },
+] as const;
+
+export const supportsSessions = (route: Route) =>
+  !route.profile.endsWith("-oled-128x32");
+export const sessionsEnabled = (route: Route) =>
+  supportsSessions(route) &&
+  (route.sessions_enabled ??
+    ((!route.display_mode || route.display_mode === "sessions") &&
+      route.inputs.some((input) => input.observation_type === "codex")));

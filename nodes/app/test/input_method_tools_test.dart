@@ -16,6 +16,7 @@ void main() {
     fail = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'appConnection') return null;
           calls.add(call.method);
           if (fail) throw PlatformException(code: 'operation_failed');
           return call.method == 'pinInputMethodShortcut' ? pinResult : null;
@@ -36,7 +37,7 @@ void main() {
         home: OrbitHome(widgetsEnabled: true, inbox: Text('消息')),
       ),
     );
-    await tester.tap(find.text('状态与组件'));
+    await tester.tap(find.text('数据展示'));
     await tester.pumpAndSettle();
   }
 

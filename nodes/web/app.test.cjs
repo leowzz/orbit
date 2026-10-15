@@ -36,7 +36,7 @@ function client() {
     fetchState: () => new Promise((resolve) => requests.push(resolve)),
   });
   vm.runInContext(readFileSync(`${__dirname}/static/app.js`, "utf8"), context);
-  vm.runInContext("render = snapshot => rendered.push(snapshot.revision); fetchAPI = fetchState; connectEvents();", context);
+  vm.runInContext("globalThis.renderView = render; render = snapshot => rendered.push(snapshot.revision); fetchAPI = fetchState; connectEvents();", context);
   return {
     timers, sources, requests, rendered, context,
     tick: () => timers.shift()(),
@@ -148,4 +148,24 @@ test("failed reads retry even without a new event, and empty state is not render
   await retry;
   assert.deepEqual(c.rendered, []);
   assert.equal(c.timers.length, 0);
+});
+
+test("session details stay independent across metric switches and clear when disabled", () => {
+  const { context } = client();
+  vm.runInContext(`
+    const sections = {};
+    document.querySelector = selector => sections[selector] || (sections[selector] = {});
+    document.querySelectorAll = () => [{}, {}, {}, {}];
+    renderSessions = () => {};
+    globalThis.requestAnimationFrame = () => {};
+  `, context);
+  function render(revision, mode, enabled) {
+    vm.runInContext(`renderView(${JSON.stringify({revision, core_epoch:"test", display_kind:mode, sessions_enabled:enabled, codex:{running_count:2,total_count:5}})})`, context);
+    return vm.runInContext('sections[".sessions"].hidden', context);
+  }
+  assert.equal(render(1, "usage", true), false);
+  assert.equal(render(2, "codex", true), false);
+  assert.equal(render(3, "codex", false), true);
+  assert.equal(render(4, "usage", false), true);
+  assert.equal(render(5, "", undefined), false);
 });

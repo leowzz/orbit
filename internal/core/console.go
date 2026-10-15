@@ -98,7 +98,7 @@ func (s *RouteStore) save(d RouteDocument) error {
 func RoutesFromConfig(routes map[string]config.ProjectionRoute) []Route {
 	result := make([]Route, 0, len(routes))
 	for id, r := range routes {
-		item := Route{NodeID: id, Profile: r.Profile, RotationSeconds: r.RotationSeconds}
+		item := Route{NodeID: id, Profile: r.Profile, DisplayMode: r.DisplayMode, SessionsEnabled: r.SessionsEnabled, RotationSeconds: r.RotationSeconds}
 		for _, input := range r.Inputs {
 			kind := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
 			if input.ObservationType == "codex" {
@@ -136,7 +136,7 @@ func (e *Engine) replaceRoutes(now time.Time, routes []Route, persist func() err
 	old := e.config.Routes
 	starts := make(map[string]time.Time)
 	for _, route := range next.Routes {
-		if route.Profile != rotatingOLEDProfile {
+		if route.displayMode() != "rotating" {
 			continue
 		}
 		starts[route.NodeID] = now

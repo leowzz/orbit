@@ -20,6 +20,7 @@ class InboxController extends ChangeNotifier {
   final http.Client client;
   List<Json> items = [], pending = [];
   Json? view;
+  bool _hasLiveStatus = false;
   String? error;
   String? uploadingID;
   bool online = false, syncing = false, active = false;
@@ -28,6 +29,8 @@ class InboxController extends ChangeNotifier {
   bool hasMore = false;
   int _loadRevision = 0;
   Timer? _timer;
+  Timer? _statusTimer;
+  bool _statusBusy = false;
   http.Client? _events;
   int _epoch = 0;
   Future<void>? _sync;
@@ -120,7 +123,7 @@ class InboxController extends ChangeNotifier {
     items = matches.take(limit).toList();
     hasMore = matches.length > limit;
     pending = queue;
-    if (saved != null) view = jsonDecode(saved) as Json?;
+    if (!_hasLiveStatus && saved != null) view = jsonDecode(saved) as Json?;
     notifyListeners();
   }
 
@@ -142,6 +145,10 @@ class InboxController extends ChangeNotifier {
     final epoch = ++_epoch;
     unawaited(_listen(epoch));
     unawaited(sync());
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => unawaited(refreshStatus()),
+    );
     _timer = Timer.periodic(
       const Duration(seconds: 15),
       (_) => unawaited(sync()),
@@ -152,8 +159,30 @@ class InboxController extends ChangeNotifier {
     active = false;
     _epoch++;
     _timer?.cancel();
+    _statusTimer?.cancel();
     _events?.close();
     _events = null;
+  }
+
+  Future<void> refreshStatus() async {
+    if (_statusBusy || syncing || !active) return;
+    _statusBusy = true;
+    final epoch = _epoch;
+    try {
+      final status = await request('status');
+      if (!active || epoch != _epoch || syncing) return;
+      _hasLiveStatus = true;
+      view = status['view'] as Json?;
+      online = true;
+      notifyListeners();
+    } catch (_) {
+      if (active && epoch == _epoch) {
+        online = false;
+        notifyListeners();
+      }
+    } finally {
+      _statusBusy = false;
+    }
   }
 
   Future<void> _listen(int epoch) async {
@@ -234,6 +263,8 @@ class InboxController extends ChangeNotifier {
       await _catchUp();
       final status = await request('status');
       await local.setMeta('status', jsonEncode(status['view']));
+      _hasLiveStatus = true;
+      view = status['view'] as Json?;
       online = true;
       error = null;
     } on ApiError catch (e) {

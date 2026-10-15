@@ -32,8 +32,8 @@ data class NodeConfig(val uri: String, val nodeId: String, val username: String,
 }
 
 // Encrypt the entire configuration with a non-exportable Android Keystore key.
-class ConfigVault(private val context: Context) {
-    private val prefs get() = context.getSharedPreferences("orbit_config", Context.MODE_PRIVATE)
+class ConfigVault(private val context: Context, private val name: String = "orbit_config") {
+    private val prefs get() = context.getSharedPreferences(name, Context.MODE_PRIVATE)
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey("orbit_mqtt", null) as? SecretKey)?.let { return it }
@@ -43,11 +43,12 @@ class ConfigVault(private val context: Context) {
         }.generateKey()
     }
     fun save(config: NodeConfig) {
-        config.validate()
+        if (name == "orbit_config") config.validate()
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
         val encrypted = cipher.doFinal(JSONObject(config.map()).toString().toByteArray(Charsets.UTF_8))
         check(prefs.edit().putString("data", Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)).commit())
     }
+    fun clear() { check(prefs.edit().clear().commit()) }
     fun load(): NodeConfig? {
         val encoded = prefs.getString("data", null) ?: return null
         val bytes = Base64.decode(encoded, Base64.NO_WRAP)

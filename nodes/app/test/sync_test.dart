@@ -46,6 +46,33 @@ void main() {
     await dir.delete(recursive: true);
   });
 
+  test(
+    'live display switches and removed rules survive inbox reloads',
+    () async {
+      await local.setMeta('status', jsonEncode({'displayKind': 'usage'}));
+      Json? current = {'displayKind': 'codex'};
+      final c = InboxController(
+        local,
+        'https://example.test',
+        'token',
+        dir.path,
+        client: MockClient((_) async => response({'view': current})),
+      );
+      await c.load();
+      expect(c.view?['displayKind'], 'usage');
+      c.active = true;
+      await c.refreshStatus();
+      await c.search('', 'all');
+      expect(c.view?['displayKind'], 'codex');
+      current = null;
+      await c.refreshStatus();
+      await c.load();
+      expect(c.view, isNull);
+      c.stop();
+      c.client.close();
+    },
+  );
+
   test('search reaches older pages and offline creates stay visible', () async {
     final entries = List.generate(
       130,

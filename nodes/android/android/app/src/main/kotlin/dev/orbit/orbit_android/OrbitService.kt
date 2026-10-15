@@ -51,6 +51,8 @@ class OrbitService : Service() {
     private val worker = Executors.newSingleThreadScheduledExecutor()
     private var client: MqttClient? = null
     private var config: NodeConfig? = null
+    private var appConfig: NodeConfig? = null
+    private var appPoll: ScheduledFuture<*>? = null
     private var epoch = UUID.randomUUID().toString()
     private var revision = 0L
     private var awaitingSnapshot = false
@@ -104,6 +106,7 @@ class OrbitService : Service() {
         if (!appVisible && !OrbitWidgets.hasWidgets(this)) { stopSelf(); return }
         if (!power.isInteractive || !online()) {
             retry?.cancel(false); retry = null
+            appPoll?.cancel(false); appPoll = null
             redraw?.cancel(false); redraw = null
             val current = client
             client = null // Ignore any queued callbacks from the suspended connection.
@@ -117,6 +120,10 @@ class OrbitService : Service() {
             redraw = worker.scheduleWithFixedDelay({
                 if (alive && power.isInteractive) OrbitWidgets.updateAll(this)
             }, 60, 60, TimeUnit.SECONDS)
+        }
+        if (appConfig != null) {
+            if (appPoll == null) appPoll = worker.scheduleWithFixedDelay({ if (alive && power.isInteractive && online()) pollApp() }, 0, 1, TimeUnit.SECONDS)
+            return
         }
         if (config != null && client?.isConnected != true && retry == null) connect()
     }
@@ -143,6 +150,8 @@ class OrbitService : Service() {
             if (!alive) return@execute
             OrbitMqtt.close(client)
             client = null
+            appPoll?.cancel(false); appPoll = null
+            appConfig = runCatching { ConfigVault(this, "orbit_app_connection").load() }.getOrNull()
             val nextConfig = runCatching { ConfigVault(this).load()?.also { it.validate() } }.getOrNull()
             if (config != null && (config?.nodeId != nextConfig?.nodeId || config?.uri != nextConfig?.uri)) ViewStore(this).clear()
             config = nextConfig
@@ -150,10 +159,44 @@ class OrbitService : Service() {
             revision = 0
             retry?.cancel(false); retry = null
             backoff.reset()
-            connection = if (config == null) "请先配置 MQTT" else "正在连接"
-            if (config == null) stopSelf() else reconcileOnWorker()
+            connection = if (config == null && appConfig == null) "请先配置 MQTT" else "正在连接"
+            if (config == null && appConfig == null) stopSelf() else reconcileOnWorker()
         }
         return START_STICKY
+    }
+    private fun pollApp() {
+        val cfg = appConfig ?: return
+        val connection = java.net.URL(cfg.uri.trimEnd('/') + "/api/v1/status").openConnection() as java.net.HttpURLConnection
+        try {
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 10000
+            connection.readTimeout = 10000
+            connection.setRequestProperty("Authorization", "Bearer " + cfg.password)
+            connection.setRequestProperty("Accept", "application/x-protobuf")
+            val code = connection.responseCode
+            // A connection change invalidates any response already in flight.
+            if (!alive || ConfigVault(this, "orbit_app_connection").load() != cfg) return
+            when (code) {
+                200 -> {
+                    val bytes = connection.inputStream.use { input ->
+                        val output = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(4096)
+                        while (output.size() <= 32768) { val count = input.read(buffer); if (count < 0) break; output.write(buffer, 0, count) }
+                        output.toByteArray()
+                    }
+                    if (!alive || ConfigVault(this, "orbit_app_connection").load() != cfg) return
+                    val view = orbit.v1.View.DeviceView.parseFrom(bytes)
+                    if (ViewStore(this).accept(bytes, view.nodeId, System.currentTimeMillis())) {
+                        setConnection("已连接 · 已接收数据")
+                        OrbitWidgets.updateAll(this)
+                    }
+                }
+                204 -> { ViewStore(this).clear(); setConnection("已连接 · 尚未设置展示规则"); OrbitWidgets.updateAll(this) }
+                401, 403 -> { ViewStore(this).clear(); setConnection("连接已失效 · 请在应用中重新连接"); OrbitWidgets.updateAll(this); appPoll?.cancel(false); appPoll = null; stopSelf() }
+                else -> setConnection("暂时无法同步 · 等待重试")
+            }
+        } catch (_: Exception) { setConnection("暂时无法同步 · 等待重试") }
+        finally { connection.disconnect() }
     }
     private fun connect() {
         val cfg = config ?: return
@@ -216,6 +259,7 @@ class OrbitService : Service() {
         unregisterReceiver(screenEvents)
         network.unregisterNetworkCallback(networkEvents)
         retry?.cancel(false)
+        appPoll?.cancel(false)
         redraw?.cancel(false)
         connection = "已停止"
         worker.execute { OrbitMqtt.close(client); client = null }

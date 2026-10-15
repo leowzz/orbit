@@ -172,6 +172,8 @@ type CoreIdentity struct {
 }
 
 type ProjectionRoute struct {
+	SessionsEnabled *bool             `yaml:"sessions_enabled,omitempty" json:"sessions_enabled,omitempty"`
+	DisplayMode     string            `yaml:"display_mode,omitempty" json:"display_mode,omitempty"`
 	Profile         string            `yaml:"profile" json:"profile"`
 	Inputs          []ProjectionInput `yaml:"inputs" json:"inputs"`
 	RotationSeconds int               `yaml:"rotation_seconds,omitempty" json:"rotation_seconds,omitempty"`
