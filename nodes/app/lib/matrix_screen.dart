@@ -96,7 +96,10 @@ class _MatrixScreenState extends State<MatrixScreen> {
       Row(
         children: [
           Expanded(child: Text(label)),
-          Text(value, style: const TextStyle(color: Color(0xff277765))),
+          Text(
+            value,
+            style: TextStyle(color: Theme.of(context).colorScheme.primary),
+          ),
         ],
       ),
       SizedBox(

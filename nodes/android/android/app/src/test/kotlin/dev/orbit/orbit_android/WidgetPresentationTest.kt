@@ -4,8 +4,25 @@ import com.google.protobuf.Timestamp
 import orbit.v1.View.CodexSessionView
 import org.junit.Assert.*
 import org.junit.Test
+import kotlin.math.pow
 
 class WidgetPresentationTest {
+    @Test fun darkStatusColorsKeepLabelsAndReadableContrast() {
+        fun luminance(color: Int): Double {
+            fun channel(shift: Int): Double {
+                val value = ((color shr shift) and 255) / 255.0
+                return if (value <= 0.04045) value / 12.92 else ((value + 0.055) / 1.055).pow(2.4)
+            }
+            return 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
+        }
+        val background = luminance(0xFF151917.toInt())
+        for (status in 0..6) {
+            val (label, color) = WidgetPresentation.status(status, dark = true)
+            assertEquals(WidgetPresentation.status(status).first, label)
+            assertTrue("Unreadable status $status", (luminance(color) + 0.05) / (background + 0.05) >= 4.5)
+        }
+    }
+
     @Test fun compactCostTruncatesWithoutFloatingPointRounding() {
         assertEquals("$12.34", WidgetPresentation.cost(12349999, "USD"))
         assertEquals("$12", WidgetPresentation.cost(12000000, "USD"))

@@ -3,5 +3,5 @@
     <TextView android:id="@+id/session_status" android:layout_width="wrap_content" android:minWidth="40dp" android:layout_marginEnd="8dp" android:layout_height="wrap_content"
         android:textSize="11sp" android:fontFamily="sans-serif-medium" android:includeFontPadding="false" android:maxLines="1" />
     <TextView android:id="@+id/session_name" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
-        android:textColor="#35453A" android:textSize="12sp" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
+        android:textColor="@color/widget_text" android:textSize="12sp" android:includeFontPadding="false" android:maxLines="1" android:ellipsize="end" />
 </LinearLayout>

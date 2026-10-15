@@ -5,11 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'inbox_controller.dart';
 import 'navigation_bar.dart';
+import 'app_theme.dart';
 import 'local_store.dart' show Json;
-
-const _green = Color(0xff087f5b);
-const _muted = Color(0xff687078);
-const _line = Color(0xffdce1e2);
 
 /// Native counterpart of the Web Node's short landscape dashboard.
 class WorkbenchScreen extends StatefulWidget {
@@ -28,6 +25,10 @@ class WorkbenchScreen extends StatefulWidget {
 }
 
 class _WorkbenchScreenState extends State<WorkbenchScreen> {
+  OrbitColors get _colors => OrbitColors.of(context);
+  Color get _green => _colors.success;
+  Color get _muted => _colors.muted;
+  Color get _line => _colors.border;
   static const _channel = MethodChannel('dev.orbit/node');
   final _opening = <String>{};
   bool _leaving = false;
@@ -152,7 +153,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     child: Focus(
       autofocus: widget.fullscreen,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: _colors.surface,
         body: SafeArea(
           child: AnimatedBuilder(
             animation: widget.controller ?? const AlwaysStoppedAnimation(0),
@@ -224,7 +225,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                                             compact: true,
                                             fourRows: _isAlipayBox,
                                           )
-                                        : const Center(
+                                        : Center(
                                             child: Text(
                                               '未开启会话信息',
                                               style: TextStyle(color: _muted),
@@ -273,7 +274,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
               child: TextButton(
                 key: const ValueKey('workbench-fullscreen'),
                 style: TextButton.styleFrom(
-                  foregroundColor: const Color(0xff1f2328),
+                  foregroundColor: _colors.ink,
                   padding: EdgeInsets.zero,
                 ),
                 onPressed: _toggleFullscreen,
@@ -282,7 +283,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   children: [
                     CustomPaint(
                       size: const Size(24, 24),
-                      painter: _OrbitMark(widget.fullscreen),
+                      painter: _OrbitMark(widget.fullscreen, _colors),
                     ),
                     const SizedBox(width: 8),
                     const Text(
@@ -302,7 +303,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                       '${_two(date.month)}/${_two(date.day)} ${_two(date.hour)}:${_two(date.minute)}:${_two(date.second)}'
                       '${width >= 780 ? '  星期${'一二三四五六日'[date.weekday - 1]}' : ''}',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: _muted, fontSize: 12),
+                      style: TextStyle(color: _muted, fontSize: 12),
                     )
                   : const SizedBox(),
             ),
@@ -397,7 +398,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       children: [
         Text(
           metric.label,
-          style: const TextStyle(fontSize: 13, color: _muted, height: 1.15),
+          style: TextStyle(fontSize: 13, color: _muted, height: 1.15),
         ),
         const SizedBox(height: 3),
         Flexible(
@@ -410,9 +411,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                 fontSize: metric.prominent ? 44 : (compact ? 25 : 29),
                 height: 1.15,
                 fontWeight: FontWeight.w700,
-                color: metric.accent
-                    ? const Color(0xff1769aa)
-                    : const Color(0xff1f2328),
+                color: metric.accent ? _colors.info : _colors.ink,
               ),
             ),
           ),
@@ -441,7 +440,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           padding: const EdgeInsets.all(24),
           child: Text(
             view['codex'] == null ? '等待会话数据' : '暂无最近任务',
-            style: const TextStyle(color: _muted),
+            style: TextStyle(color: _muted),
           ),
         ),
       );
@@ -512,17 +511,17 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     };
     final statusColor = switch (session['status']) {
       'CODEX_SESSION_STATUS_RUNNING' => _green,
-      'CODEX_SESSION_STATUS_FAILED' => const Color(0xffb42318),
-      'CODEX_SESSION_STATUS_INTERRUPTED' => const Color(0xff9a6700),
+      'CODEX_SESSION_STATUS_FAILED' => _colors.error,
+      'CODEX_SESSION_STATUS_INTERRUPTED' => _colors.warning,
       _ => _muted,
     };
     final pending = _opening.contains(session['sessionId']);
     final title = '${session['displayName'] ?? '未命名会话'}';
     return Material(
-      color: running ? const Color(0xfff4faf7) : Colors.white,
+      color: running ? _colors.runningSurface : _colors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(6),
-        side: BorderSide(color: running ? const Color(0xffb9dfce) : _line),
+        side: BorderSide(color: running ? _colors.runningBorder : _line),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -556,11 +555,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                         title,
                         maxLines: titleLines,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           height: 1.2,
                           fontWeight: FontWeight.w700,
-                          color: Color(0xff1f2328),
+                          color: _colors.ink,
                         ),
                       ),
                     ),
@@ -598,7 +597,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                             '${session['projectName'] ?? '项目未公开'}',
                           ),
                         ),
-                        const Text(
+                        Text(
                           ' · ',
                           style: TextStyle(
                             fontSize: 13,
@@ -617,11 +616,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   const SizedBox(width: 10),
                   Text(
                     _relative(session['updatedAt']),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.2,
-                      color: _muted,
-                    ),
+                    style: TextStyle(fontSize: 13, height: 1.2, color: _muted),
                   ),
                 ],
               ),
@@ -638,7 +633,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       text,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: const TextStyle(fontSize: 13, height: 1.2, color: _muted),
+      style: TextStyle(fontSize: 13, height: 1.2, color: _muted),
     ),
   );
 }
@@ -714,7 +709,8 @@ String _relative(dynamic value) {
 
 class _OrbitMark extends CustomPainter {
   final bool active;
-  _OrbitMark(this.active);
+  final OrbitColors _colors;
+  _OrbitMark(this.active, this._colors);
   @override
   void paint(Canvas canvas, Size size) {
     canvas.scale(size.width / 96);
@@ -722,7 +718,7 @@ class _OrbitMark extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 8
-      ..color = active ? _green : const Color(0xff1f2328);
+      ..color = active ? _colors.success : _colors.ink;
     canvas.drawArc(
       const Rect.fromLTWH(16, 16, 64, 64),
       0,
@@ -735,16 +731,17 @@ class _OrbitMark extends CustomPainter {
       const Offset(70.5, 27.5),
       stroke
         ..strokeWidth = 6
-        ..color = _green,
+        ..color = _colors.success,
     );
-    canvas.drawCircle(const Offset(48, 48), 10, Paint()..color = _green);
     canvas.drawCircle(
-      const Offset(73, 25),
-      8,
-      Paint()..color = const Color(0xff1769aa),
+      const Offset(48, 48),
+      10,
+      Paint()..color = _colors.success,
     );
+    canvas.drawCircle(const Offset(73, 25), 8, Paint()..color = _colors.info);
   }
 
   @override
-  bool shouldRepaint(_OrbitMark oldDelegate) => active != oldDelegate.active;
+  bool shouldRepaint(_OrbitMark oldDelegate) =>
+      active != oldDelegate.active || _colors.dark != oldDelegate._colors.dark;
 }

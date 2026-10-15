@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_android/main.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,25 @@ void main() {
     () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null),
   );
+
+  testWidgets('dark QR dialog retains a readable black on white code', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: const QuickConfigDialog(urls: ['http://192.0.2.1:1234/example']),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final qr = find.byType(QrImageView);
+    final background = tester.widget<Container>(
+      find.ancestor(of: qr, matching: find.byType(Container)).first,
+    );
+    expect(background.color, Colors.white);
+    expect(tester.widget<QrImageView>(qr).dataModuleStyle.color, Colors.black);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('short landscape keeps config actions reachable with keyboard', (
     tester,

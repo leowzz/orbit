@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:orbit_app/app_viewport.dart';
+import 'package:orbit_app/app_theme.dart';
 import 'package:orbit_app/inbox_controller.dart';
 import 'package:orbit_app/local_store.dart';
 import 'package:orbit_app/orbit_home.dart';
@@ -104,6 +105,37 @@ void main() {
     await dir.delete(recursive: true);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('dev.orbit/node'), null);
+  });
+  testWidgets('workbench follows system theme with existing session data', (
+    tester,
+  ) async {
+    final platform = tester.binding.platformDispatcher;
+    addTearDown(platform.clearPlatformBrightnessTestValue);
+    platform.platformBrightnessTestValue = Brightness.light;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orbitTheme(Brightness.light),
+        darkTheme: orbitTheme(Brightness.dark),
+        home: WorkbenchScreen(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final brightness in [Brightness.dark, Brightness.light]) {
+      platform.platformBrightnessTestValue = brightness;
+      await tester.pumpAndSettle();
+      final session = find.byKey(const ValueKey('session-session-0'));
+      final text = tester.widget<Text>(
+        find.descendant(of: session, matching: find.text('完善工作台布局与交互')),
+      );
+      final material = tester.widget<Material>(
+        find.ancestor(of: session, matching: find.byType(Material)).first,
+      );
+      final colors = OrbitColors(brightness == Brightness.dark);
+      expect(text.style!.color, colors.ink);
+      expect(material.color, colors.runningSurface);
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox());
   });
   testWidgets('data display shows session counts without the workbench list', (
     tester,
@@ -526,7 +558,13 @@ void main() {
         'MaterialIcons',
       )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
     });
-    for (final atTop in [false, true]) {
+    for (final variant in [
+      (false, Brightness.light),
+      (true, Brightness.light),
+      (false, Brightness.dark),
+      (true, Brightness.dark),
+    ]) {
+      final (atTop, brightness) = variant;
       controller.navigation = {
         'at_top': atTop,
         'items': [
@@ -540,7 +578,11 @@ void main() {
         tester.view.devicePixelRatio = 1;
         await tester.pumpWidget(
           MaterialApp(
-            theme: ThemeData(fontFamily: 'Preview'),
+            theme: orbitTheme(brightness).copyWith(
+              textTheme: orbitTheme(
+                brightness,
+              ).textTheme.apply(fontFamily: 'Preview'),
+            ),
             builder: (_, child) => AppViewport(child: child!),
             home: RepaintBoundary(
               key: const ValueKey('preview'),
@@ -558,7 +600,7 @@ void main() {
           final output = Directory('build/workbench-preview')
             ..createSync(recursive: true);
           await File(
-            '${output.path}/${size.width.toInt()}x${size.height.toInt()}-${atTop ? 'top' : 'bottom'}.png',
+            '${output.path}/${size.width.toInt()}x${size.height.toInt()}-${atTop ? 'top' : 'bottom'}-${brightness.name}.png',
           ).writeAsBytes(data!.buffer.asUint8List());
           image.dispose();
         });

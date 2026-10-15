@@ -17,6 +17,7 @@ import 'connection_config.dart';
 import 'scan_connection_screen.dart';
 import 'app_viewport.dart';
 import 'app_location.dart';
+import 'app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -143,37 +144,13 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Orbit',
     debugShowCheckedModeBanner: false,
-    builder: (context, child) => AppViewport(child: child!),
-    theme: ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xff277765),
-        surface: const Color(0xfffafbf9),
-      ),
-      scaffoldBackgroundColor: const Color(0xfffafbf9),
-      appBarTheme: const AppBarTheme(
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarIconBrightness: Brightness.dark,
-          statusBarBrightness: Brightness.light,
-        ),
-        backgroundColor: Color(0xfffafbf9),
-        surfaceTintColor: Colors.transparent,
-        centerTitle: false,
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xffdce3df)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xffdce3df)),
-        ),
-      ),
+    builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+      value: orbitSystemUi(Theme.of(context).brightness),
+      child: AppViewport(child: child!),
     ),
+    theme: orbitTheme(Brightness.light),
+    darkTheme: orbitTheme(Brightness.dark),
+    themeMode: ThemeMode.system,
     home: loading
         ? const Scaffold(body: Center(child: CircularProgressIndicator()))
         : failure != null
@@ -342,9 +319,11 @@ class _ConnectionScreenState extends State<ConnectionScreen> {
               decoration: const InputDecoration(labelText: '设备令牌'),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               '从管理台复制连接信息或扫码即可。收件箱无需配置 MQTT 或转发规则。',
-              style: TextStyle(color: Colors.black54),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             if (error != null)
               Padding(

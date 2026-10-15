@@ -7,7 +7,7 @@
     <application
         android:label="Orbit"
         android:allowBackup="false"
-        android:name="${applicationName}"
+        android:name=".OrbitApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher">
         <activity
