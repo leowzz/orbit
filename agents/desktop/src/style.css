@@ -581,6 +581,15 @@ button.dock-item.with-title {
 }
 .shortcut-title-toggle {
   margin: 12px 0 22px;
+  padding-top: 0;
+  border-top: 0;
+}
+.shortcut-title-switch {
+  display: inline-flex;
+  flex: none;
+  padding: 6px;
+  margin: -6px;
+  cursor: pointer;
 }
 .shortcut-recommendations {
   display: grid;
@@ -588,7 +597,9 @@ button.dock-item.with-title {
   gap: 8px;
 }
 button.recommendation {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 14px;
+  white-space: normal;
   padding: 10px;
   gap: 9px;
   text-align: left;
@@ -604,7 +615,7 @@ button.recommendation {
   color: #38624e;
 }
 .recommendation span {
-  flex: 1;
+  min-width: 0;
   overflow-wrap: anywhere;
   line-height: 1.4;
   font-size: 13px;
@@ -708,4 +719,25 @@ button.recommendation {
   gap: 8px;
   justify-content: flex-end;
   margin-top: 24px;
+}
+
+.website-icon-fields {
+  display: grid;
+  gap: 10px;
+}
+.website-icon-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.website-icon-actions [role="status"],
+.website-icon-hint {
+  color: #577168;
+  font-size: 13px;
+}
+
+.website-icon-hint {
+  flex-basis: 100%;
+  line-height: 1.5;
 }

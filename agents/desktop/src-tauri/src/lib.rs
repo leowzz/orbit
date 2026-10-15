@@ -6,6 +6,7 @@ pub mod recent_apps;
 pub mod runtime;
 pub mod shortcuts;
 pub mod usage;
+pub mod website_icon;
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/orbit.v1.rs"));
 }
@@ -131,6 +132,10 @@ async fn shortcut_icon(path: String) -> Result<String, String> {
         .map_err(|_| "读取图标失败".to_string())?
 }
 #[tauri::command]
+async fn shortcut_website_icon(url: String) -> Result<website_icon::WebsiteInfo, String> {
+    website_icon::fetch(&url).await
+}
+#[tauri::command]
 async fn shortcut_recommendations(
     excluded: Vec<String>,
     recent: tauri::State<'_, Arc<recent_apps::RecentApps>>,
@@ -188,6 +193,7 @@ pub fn run() {
             settings_import,
             shortcut_import,
             shortcut_icon,
+            shortcut_website_icon,
             shortcut_recommendations,
             shortcut_preview,
             agent_status,

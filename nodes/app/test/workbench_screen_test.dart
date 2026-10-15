@@ -98,6 +98,32 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(const MethodChannel('dev.orbit/node'), null);
   });
+  testWidgets('data display shows session counts without the workbench list', (
+    tester,
+  ) async {
+    (controller.view!['codex'] as Map)['totalCount'] = 123;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrbitHome(
+          widgetsEnabled: false,
+          controller: controller,
+          inbox: const Text('消息'),
+        ),
+      ),
+    );
+    await tester.tap(find.widgetWithText(NavigationDestination, '数据展示'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 个运行中 · 共 123 个'), findsOneWidget);
+    expect(find.text('完善工作台布局与交互'), findsNothing);
+    expect(find.text('检查同步状态和消息展示'), findsNothing);
+    await tester.tap(find.widgetWithText(NavigationDestination, '工作台'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('session-session-0')), findsOneWidget);
+    expect(find.text('完善工作台布局与交互'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final size in [
     const Size(800, 360),
     const Size(640, 280),

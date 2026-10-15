@@ -24,3 +24,57 @@ export function moveShortcut(
   next.splice(to, 0, next.splice(from, 1)[0]);
   return next;
 }
+
+export type WebsiteInfo = {
+  icon: string;
+  title: string;
+  warning: string | null;
+};
+
+export function applyWebsiteInfo(
+  current: Shortcut,
+  requested: Shortcut,
+  info: WebsiteInfo,
+): Shortcut {
+  if (current.id !== requested.id || current.target !== requested.target)
+    return current;
+  return {
+    ...current,
+    icon:
+      current.icon === requested.icon && info.icon ? info.icon : current.icon,
+    title:
+      !requested.title.trim() && !current.title.trim() && info.title
+        ? info.title
+        : current.title,
+  };
+}
+
+export function isShortcutUrl(value: string): boolean {
+  if (
+    !value ||
+    value.trim() !== value ||
+    /[\u0000-\u001f\u007f-\u009f]/.test(value) ||
+    new TextEncoder().encode(value).length > 4096
+  )
+    return false;
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function canFetchWebsiteInfo(value: string): boolean {
+  try {
+    const url = new URL(value.trim());
+    return (
+      ["http:", "https:"].includes(url.protocol) &&
+      !!url.hostname &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+}

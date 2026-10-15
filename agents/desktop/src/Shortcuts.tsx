@@ -15,7 +15,14 @@ import {
 } from "lucide-react";
 import { call } from "./bridge";
 import type { Shortcut } from "./types";
-import { mergeShortcuts, moveShortcut } from "./shortcut-model";
+import {
+  mergeShortcuts,
+  moveShortcut,
+  applyWebsiteInfo,
+  isShortcutUrl,
+  canFetchWebsiteInfo,
+  type WebsiteInfo,
+} from "./shortcut-model";
 
 type Recommendations = {
   supported: boolean;
@@ -291,7 +298,7 @@ export function Shortcuts({
                 id: crypto.randomUUID(),
                 title: "",
                 kind: "url",
-                target: "",
+                target: "https://",
                 icon: "",
               })
             }
@@ -369,17 +376,20 @@ export function Shortcuts({
           ))}
         </div>
       </div>
-      <label className="toggle-row shortcut-title-toggle">
+      <div className="toggle-row shortcut-title-toggle">
         <span>
-          <strong>在工作台显示标题</strong>
+          <strong id="shortcut-title-label">在工作台显示标题</strong>
         </span>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={showTitles}
-          onChange={(e) => onShowTitles(e.target.checked)}
-        />
-      </label>
+        <label className="shortcut-title-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-labelledby="shortcut-title-label"
+            checked={showTitles}
+            onChange={(e) => onShowTitles(e.target.checked)}
+          />
+        </label>
+      </div>
       <div className="shortcut-heading">
         <h2>最近使用 · 点击添加</h2>
         <button
@@ -526,9 +536,50 @@ function ShortcutEditor({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState("");
+  const [fetchingIcon, setFetchingIcon] = useState(false);
+  const [iconNotice, setIconNotice] = useState("");
+  const latest = useRef(item);
+  latest.current = item;
+  const mounted = useRef(false);
   useEffect(() => {
+    mounted.current = true;
     ref.current?.showModal();
+    return () => {
+      mounted.current = false;
+    };
   }, []);
+  async function fetchWebsiteIcon() {
+    if (fetchingIcon) return;
+    const requested = item;
+    setFetchingIcon(true);
+    setError("");
+    setIconNotice("");
+    try {
+      const info = await call<WebsiteInfo>("shortcut_website_icon", {
+        url: requested.target.trim(),
+      });
+      if (mounted.current && latest.current.target === requested.target) {
+        const next = applyWebsiteInfo(latest.current, requested, info);
+        const named = next.title !== latest.current.title;
+        onChange(next);
+        if (info.warning) setError(info.warning);
+        setIconNotice(
+          named
+            ? info.icon
+              ? "已获取网站图标和名称"
+              : "已获取网站名称"
+            : info.icon
+              ? "已获取网站图标"
+              : "",
+        );
+      }
+    } catch (e) {
+      if (mounted.current && latest.current.target === requested.target)
+        setError(String(e));
+    } finally {
+      if (mounted.current) setFetchingIcon(false);
+    }
+  }
   async function choose() {
     try {
       const path = await open({
@@ -577,20 +628,11 @@ function ShortcutEditor({
             setError("请填写名称，过长时请缩短后重试");
             return;
           }
-          if (next.kind === "url") {
-            try {
-              const url = new URL(next.target);
-              if (
-                !["http:", "https:"].includes(url.protocol) ||
-                !url.hostname ||
-                url.username ||
-                url.password
-              )
-                throw Error();
-            } catch {
-              setError("请填写有效的 http/https 网址");
-              return;
-            }
+          if (next.kind === "url" && !isShortcutUrl(next.target)) {
+            setError(
+              "请填写包含协议的完整网址，例如 https://、ftp:// 或 codex://",
+            );
+            return;
           }
           try {
             onApply(next);
@@ -620,7 +662,7 @@ function ShortcutEditor({
             aria-label="更换图标"
             title="选择图片，或将图片拖到这里"
             onClick={onIcon}
-            disabled={busy}
+            disabled={busy || fetchingIcon}
           >
             <AppIcon item={item} />
             <ImagePlus size={12} className="icon-edit" />
@@ -636,14 +678,38 @@ function ShortcutEditor({
           </label>
         </div>
         {item.kind === "url" ? (
-          <label className="field">
-            <span>网址</span>
-            <input
-              value={item.target}
-              placeholder="https://example.com"
-              onChange={(e) => onChange({ ...item, target: e.target.value })}
-            />
-          </label>
+          <div className="website-icon-fields">
+            <label className="field">
+              <span>网址</span>
+              <input
+                value={item.target}
+                placeholder="https://example.com"
+                onChange={(e) => {
+                  onChange({ ...item, target: e.target.value });
+                  setIconNotice("");
+                  setError("");
+                }}
+              />
+            </label>
+            <div className="website-icon-actions">
+              <button
+                type="button"
+                disabled={
+                  busy || fetchingIcon || !canFetchWebsiteInfo(item.target)
+                }
+                onClick={() => void fetchWebsiteIcon()}
+              >
+                <RefreshCw size={15} />
+                {fetchingIcon ? "正在获取…" : "获取网站图标"}
+              </button>
+              <span role="status">{iconNotice}</span>
+              {!canFetchWebsiteInfo(item.target) && item.target.trim() && (
+                <span className="website-icon-hint">
+                  仅 HTTP/HTTPS 网址支持自动获取，其他协议可手动选择图标。
+                </span>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="shortcut-path-row">
             <span className="shortcut-path">{item.target}</span>

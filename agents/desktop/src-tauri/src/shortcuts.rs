@@ -16,6 +16,14 @@ pub struct Shortcut {
     #[serde(default)]
     pub icon: String,
 }
+// The OS chooses the registered handler; no protocol allowlist for saved shortcuts.
+pub fn shortcut_url(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 4096
+        && value.trim() == value
+        && !value.chars().any(char::is_control)
+        && url::Url::parse(value).is_ok()
+}
 pub fn web_url(value: &str) -> bool {
     url::Url::parse(value).is_ok_and(|u| {
         matches!(u.scheme(), "http" | "https")
@@ -58,9 +66,9 @@ pub fn validate(items: &[Shortcut]) -> Result<(), String> {
             return Err("请填写有效且不重复的快捷入口".into());
         }
         match i.kind.as_str() {
-            "url" if web_url(&i.target) => {}
+            "url" if shortcut_url(&i.target) => {}
             "app" if app_path(Path::new(&i.target)) => {}
-            _ => return Err("请选择本机应用或填写 http/https 网址".into()),
+            _ => return Err("请选择本机应用或填写包含协议的完整网址".into()),
         }
         let icon = STANDARD.decode(&i.icon).map_err(|_| "图标格式不正确")?;
         if icon.len() > 32768 || (!icon.is_empty() && !icon.starts_with(b"\x89PNG\r\n\x1a\n")) {
@@ -238,7 +246,7 @@ pub(crate) async fn open_shortcut(item: Shortcut) -> Result<(), ()> {
     if item.kind == "app" && !app_path(Path::new(&item.target)) {
         return Err(());
     }
-    if item.kind == "url" && !web_url(&item.target) {
+    if item.kind == "url" && !shortcut_url(&item.target) {
         return Err(());
     }
     #[cfg(windows)]
@@ -291,7 +299,7 @@ pub(crate) async fn open_shortcut(item: Shortcut) -> Result<(), ()> {
 mod tests {
     use super::*;
     #[test]
-    fn urls_are_not_commands() {
+    fn website_fetch_only_accepts_http_without_credentials() {
         for v in [
             "file:///tmp/x",
             "javascript:alert(1)",
@@ -302,6 +310,39 @@ mod tests {
         }
         assert!(web_url("https://example.com/a?q=hello"));
     }
+    #[test]
+    fn shortcuts_accept_absolute_urls_with_any_scheme() {
+        for target in [
+            "ftp://192.168.1.1",
+            "codex://threads/01a13dc3-58a7-7861-95ed-dee3470de4fd",
+            "mailto:hello@example.com",
+            "file:///tmp/example.txt",
+            "my-app+v2:open?name=test",
+            "http://example.com",
+            "https://example.com",
+        ] {
+            let item = Shortcut {
+                id: uuid::Uuid::new_v4().to_string(),
+                title: "Test".into(),
+                kind: "url".into(),
+                target: target.into(),
+                icon: String::new(),
+            };
+            assert!(shortcut_url(target), "{target}");
+            assert!(validate(&[item]).is_ok(), "{target}");
+        }
+        for target in [
+            "",
+            "example.com",
+            "/tmp/example",
+            "https://",
+            "--help",
+            "https://example.com\n",
+        ] {
+            assert!(!shortcut_url(target), "{target:?}");
+        }
+    }
+
     #[test]
     fn catalog_does_not_export_targets() {
         let mut c = Config::default();

@@ -313,7 +313,7 @@ class _ConnectionStatus extends StatelessWidget {
                     ),
                   if (view['sessionsEnabled'] == true ||
                       (view['sessionsEnabled'] == null &&
-                          view['displayKind'] == null)) ...[
+                          view['displayKind'] == null))
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Session 信息'),
@@ -323,22 +323,6 @@ class _ConnectionStatus extends StatelessWidget {
                             : '${codex['runningCount'] ?? 0} 个运行中 · 共 ${codex['totalCount'] ?? 0} 个',
                       ),
                     ),
-                    for (final session
-                        in (codex?['sessions'] as List? ?? []).whereType<Map>())
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('${session['displayName'] ?? '未命名会话'}'),
-                        subtitle: Text('${session['projectName'] ?? ''}'),
-                        trailing: Text(switch (session['status']) {
-                          'CODEX_SESSION_STATUS_RUNNING' => '运行中',
-                          'CODEX_SESSION_STATUS_FAILED' => '失败',
-                          'CODEX_SESSION_STATUS_INTERRUPTED' => '已中断',
-                          'CODEX_SESSION_STATUS_CANCELLED' => '已取消',
-                          'CODEX_SESSION_STATUS_COMPLETED' => '已完成',
-                          _ => '最近会话',
-                        }),
-                      ),
-                  ],
                 ] else
                   const Text(
                     '尚未设置状态摘要。不影响收件箱使用；需要时可在管理台为此设备选择状态来源。',

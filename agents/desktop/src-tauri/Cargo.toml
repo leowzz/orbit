@@ -43,6 +43,9 @@ rust_decimal = "1"
 open = "5"
 base64 = "0.22"
 sysinfo = "0.33"
+scraper = "0.24"
+image = { version = "0.25", default-features = false, features = ["png", "ico", "jpeg", "gif", "webp"] }
+resvg = { version = "0.45", default-features = false }
 
 [dev-dependencies]
 bytes = "1"
