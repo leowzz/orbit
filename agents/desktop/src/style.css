@@ -473,10 +473,11 @@ footer > div {
   gap: 10px;
 }
 
-.shortcut-help {
-  color: #69736a;
-  line-height: 1.6;
-  margin: 10px 0 16px;
+.shortcuts-section > .shortcut-heading {
+  margin-bottom: 16px;
+}
+.shortcuts-section > .shortcut-catalog + .shortcut-heading {
+  margin-top: 24px;
 }
 
 .shortcut-heading {

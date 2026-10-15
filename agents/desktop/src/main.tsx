@@ -784,13 +784,7 @@ function App() {
           )}
         </div>
         <footer>
-          <span>
-            {busy
-              ? "正在处理…"
-              : dirty
-                ? "有未保存的修改"
-                : "修改后保存即可生效"}
-          </span>
+          <span>{busy ? "正在处理…" : dirty ? "有未保存的修改" : ""}</span>
           <div>
             <button disabled={busy || !dirty} onClick={() => void action(load)}>
               还原修改

@@ -305,9 +305,6 @@ export function Shortcuts({
           </button>
         </div>
       </div>
-      <p className="shortcut-help">
-        拖拽调整顺序 · 双击在本机打开 · 右键编辑或删除，也可直接拖入应用
-      </p>
       {error && (
         <div role="alert" className="alert error">
           {error}
@@ -378,10 +375,6 @@ export function Shortcuts({
           ))}
         </div>
       </div>
-      <p className="field-hint">
-        在 Core 的「设备 →
-        快捷操作」中配对接收设备，并设置各设备的标题显示、顺序和位置。
-      </p>
       <div className="shortcut-heading">
         <h2>最近使用 · 点击添加</h2>
         <button
@@ -394,9 +387,6 @@ export function Shortcuts({
           <RefreshCw size={16} />
         </button>
       </div>
-      <p className="shortcut-help">
-        记录 Agent 运行期间打开或切换使用的应用，仅保存在这台电脑上。
-      </p>
       {recommendationError ? (
         <div className="alert error" role="alert">
           {recommendationError}
@@ -439,9 +429,6 @@ export function Shortcuts({
           ))}
         </div>
       )}
-      <p className="shortcut-help">
-        保存并应用后同步到工作台。仅已添加并保存的入口允许被工作台打开。
-      </p>
       {menu &&
         createPortal(
           <div
