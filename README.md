@@ -412,7 +412,9 @@ Without `V`, `make release` increments the last component (for example,
 other settings, comments and blank lines are preserved.
 
 Pushing a `v*` tag triggers the [release workflow](docs/releases.md): signed GHCR
-images, a release-signed Android APK, and a signed ESP32-S3 firmware archive.
+images, a release-signed Android APK, a macOS Agent Universal DMG, and an ESP32-S3
+firmware archive. Downloads include SHA-256 checksums and Cosign signatures; the
+macOS app does not yet have Apple Developer ID signing or notarization.
 The GitHub Release includes image addresses/digests and downloadable artifacts.
 Configure the Android signing secrets before the first tag push. Public ESP32-S3
 firmware uses example network settings; connected devices need a private build.

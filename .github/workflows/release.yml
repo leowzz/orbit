@@ -27,8 +27,10 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          [[ "$TAG" =~ ^v[A-Za-z0-9_.-]+$ && ${#TAG} -le 128 ]] || {
-            echo "::error::Expected a Docker-compatible v-prefixed tag, e.g. v1.2.3 or v1.2.3-rc.1"
+          number='(0|[1-9][0-9]*)'
+          prerelease='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          [[ "$TAG" =~ ^v$number\.$number\.$number(-$prerelease(\.$prerelease)*)?$ && ${#TAG} -le 128 ]] || {
+            echo "::error::Expected a Docker-compatible semantic version tag, e.g. v1.2.3 or v1.2.3-rc.1"
             exit 1
           }
           for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
@@ -175,6 +177,58 @@ jobs:
           path: dist/*.apk
           if-no-files-found: error
 
+  macos-agent:
+    needs: preflight
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.ref_name }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: agents/desktop
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Install build tools
+        run: |
+          npm install --global pnpm@11.9.0
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check and test Agent
+        run: |
+          pnpm check
+          pnpm test:ui
+          cargo fmt --manifest-path src-tauri/Cargo.toml --check
+          cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build universal macOS DMG
+        run: |
+          pnpm tauri build --target universal-apple-darwin --bundles app,dmg \
+            --config "$(jq -cn --arg version "${TAG#v}" '{version: $version}')" -- --locked
+          app='src-tauri/target/universal-apple-darwin/release/bundle/macos/Orbit Agent.app'
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
+          lipo "$app/Contents/MacOS/$executable" -verify_arch arm64 x86_64
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" == "${TAG#v}" ]]
+          shopt -s nullglob
+          packages=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
+          [[ ${#packages[@]} -eq 1 ]] || { echo '::error::Expected exactly one macOS DMG'; exit 1; }
+          hdiutil verify "${packages[0]}"
+          mkdir -p ../../dist
+          cp "${packages[0]}" "../../dist/orbit-agent-macos-universal-$TAG.dmg"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-macos-agent
+          path: dist/*.dmg
+          if-no-files-found: error
+
   esp32s3:
     needs: preflight
     runs-on: ubuntu-latest
@@ -210,7 +264,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [images, android, esp32s3]
+    needs: [images, android, macos-agent, esp32s3]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -235,8 +289,8 @@ jobs:
       - name: Sign and verify downloadable artifacts
         working-directory: dist
         run: |
-          sha256sum ./*.apk ./*.tar.gz > SHA256SUMS
-          for artifact in ./*.apk ./*.tar.gz SHA256SUMS; do
+          sha256sum ./*.apk ./*.dmg ./*.tar.gz > SHA256SUMS
+          for artifact in ./*.apk ./*.dmg ./*.tar.gz SHA256SUMS; do
             cosign sign-blob --yes --bundle "$artifact.sigstore.json" "$artifact"
             cosign verify-blob --bundle "$artifact.sigstore.json" \
               --certificate-identity "$IDENTITY" \
@@ -250,6 +304,7 @@ jobs:
             printf '\nImages are signed with Cosign using GitHub Actions OIDC.\n'
             printf '\n## Downloads\n\n'
             printf -- '- Android: release-key-signed APK.\n'
+            printf -- '- macOS Agent: Universal DMG for Apple Silicon and Intel (macOS 12+). No Apple Developer ID signing or notarization; Gatekeeper may require manual approval.\n'
             printf -- '- ESP32-S3: YD-ESP32-S3 / OLED 128x32 firmware archive, including a factory image and flash instructions. Uses placeholder Wi-Fi/MQTT configuration; rebuild with private configuration for a connected device.\n'
             printf -- '- SHA256SUMS and Cosign bundles for download verification (not ESP Secure Boot).\n'
             # shellcheck disable=SC2016

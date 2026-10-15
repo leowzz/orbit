@@ -1,8 +1,8 @@
 # Tagged releases
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`. Use Docker-compatible
-tags such as `v1.2.3` or `v1.2.3-rc.1` (letters, digits, dots, underscores and
-hyphens, at most 128 characters). A tag containing a hyphen becomes a prerelease.
+semantic version tags such as `v1.2.3` or `v1.2.3-rc.1` (no build metadata,
+at most 128 characters). A tag containing a hyphen becomes a prerelease.
 `make release V=v1.2.3` creates a local commit/tag; it does not push them.
 
 ## Outputs
@@ -15,6 +15,12 @@ hyphens, at most 128 characters). A tag containing a hyphen becomes a prerelease
 - `orbit-android-TAG.apk`: a release APK signed with the persistent Android key.
   The version name is the tag without `v`; the version code is the workflow run
   number. Keep the workflow and key stable for upgrades.
+- `orbit-agent-macos-universal-TAG.dmg`: the Tauri desktop Agent for Apple Silicon
+  and Intel, requiring macOS 12 or later. The app version is injected from the tag
+  without `v`. CI verifies both binary architectures, the app version and the DMG.
+  Apple Developer ID signing, notarization and automatic updates are not configured;
+  first launch may require manual approval in System Settings → Privacy & Security.
+  Cosign verifies the download but does not replace Apple signing or notarization.
 - `orbit-esp32s3-yd-oled-128x32-TAG.tar.gz`: application, bootloader, partitions,
   boot_app0, merged factory image and flash instructions for YD-ESP32-S3 / OLED
   128x32. Firmware reports the tag version. It embeds example network placeholders;
@@ -22,8 +28,9 @@ hyphens, at most 128 characters). A tag containing a hyphen becomes a prerelease
 - `SHA256SUMS` and a `.sigstore.json` Cosign bundle for each download/checksum file.
   These are artifact signatures, not ESP Secure Boot signatures or eFuse changes.
 
-Go tests, Flutter analysis/tests and ESP32-S3 config/native tests run before their
-builds. The final job requires all builds and image signatures to succeed, uploads
+Go tests, desktop Agent TypeScript/UI/Rust checks and tests, Flutter analysis/tests
+and ESP32-S3 config/native tests run before their builds. The final job requires
+all builds and image signatures to succeed, uploads
 files to a draft, then publishes the Release with GHCR tags and immutable digests.
 A published Release cannot be overwritten by rerunning the final job.
 
@@ -67,7 +74,8 @@ cosign verify-blob --bundle SHA256SUMS.sigstore.json \
 sha256sum --check SHA256SUMS
 ```
 
-Download both the APK and firmware archive to check the complete checksum list.
+Download the APK, macOS DMG and firmware archive to check the complete checksum list.
 You can also verify an individual download with its matching Cosign bundle.
-See [Sigstore CI signing](https://docs.sigstore.dev/quickstart/quickstart-ci/) and
-[Flutter Android signing](https://docs.flutter.dev/deployment/android).
+See [Sigstore CI signing](https://docs.sigstore.dev/quickstart/quickstart-ci/),
+[Flutter Android signing](https://docs.flutter.dev/deployment/android) and
+[Tauri macOS distribution](https://v2.tauri.app/distribute/macos-application-bundle/).

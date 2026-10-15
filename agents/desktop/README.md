@@ -53,7 +53,9 @@ pnpm tauri build --debug --bundles app   # macOS
 pnpm tauri build --debug --bundles nsis  # Windows
 ```
 
-构建产物在 `src-tauri/target/debug/bundle/`。当前构建流程产出本地测试包，未配置分发签名、公证或自动更新，不会发布到现有 Release。
+调试构建产物在 `src-tauri/target/debug/bundle/`。`build-desktop-agent.yml` 在 PR、main 分支变更或手动触发时构建 macOS / Windows 调试包。
+
+推送 `vX.Y.Z` 或 `vX.Y.Z-rc.N` tag 时，`release.yml` 检查并构建 macOS Universal DMG（Apple Silicon / Intel，macOS 12+），以 `orbit-agent-macos-universal-TAG.dmg` 上传到同一 GitHub Release。应用版本由 tag 去掉 `v` 后注入；产物纳入 `SHA256SUMS` 和 Cosign 下载签名。未配置 Apple Developer ID 签名、公证或自动更新，首次打开可能需要在系统「隐私与安全性」中手动允许。Windows 仍仅提供 CI 调试包。完整发布与校验说明见 [Tagged releases](../../docs/releases.md)。
 
 仅检查界面时可运行 `pnpm dev` 并打开 `http://127.0.0.1:1420/?preview`。预览明确标记且禁止保存、连接、打开会话等操作；正式构建不包含预览入口。
 
