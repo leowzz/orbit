@@ -14,11 +14,12 @@ import {
   Search,
 } from "lucide-react";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
-import { api, appConnectionLabel, date, modelName } from "../api";
-import { Badge, DeviceIcon, Empty, PageHead } from "../components";
+import { api, date, modelName } from "../api";
+import { DeviceIcon, Empty, PageHead } from "../components";
 import DeviceContent from "./DeviceContent";
 import DeviceName from "../DeviceName";
 import DeviceSummary from "../DeviceSummary";
+import DeviceStatus from "../DeviceStatus";
 import Apps, { DeviceForm, TokenDialog } from "./Apps";
 import DeviceShortcuts from "./DeviceShortcuts";
 
@@ -432,17 +433,15 @@ export default function Nodes({
               <article className="panel node-card" key={device.id}>
                 <div className="node-card-top">
                   <DeviceIcon model={device.model} />
-                  <Badge tone={device.revoked ? "warn" : "neutral"}>
-                    {archived.has(device.id)
-                      ? "已归档"
-                      : device.revoked
-                        ? "已撤销访问"
-                        : device.app
-                          ? appConnectionLabel(device.app.activity)
-                          : device.discovered
-                            ? "已发现"
-                            : "预配置"}
-                  </Badge>
+                  <DeviceStatus
+                    app={device.app}
+                    archived={archived.has(device.id)}
+                    discovered={device.discovered}
+                    reportedAt={
+                      state.nodes.find((n) => n.nodeId === device.id)?.metadata
+                        ?.producedAt
+                    }
+                  />
                 </div>
                 <h2>{device.label}</h2>
                 <p>

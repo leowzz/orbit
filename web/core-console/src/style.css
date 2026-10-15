@@ -185,6 +185,90 @@ strong {
   color: #956112;
   background: #fff5df;
 }
+.badge.device-status.connected {
+  color: #16765d;
+  background: #eaf8f1;
+}
+.badge.device-status.active {
+  color: #167583;
+  background: #e8f7fa;
+}
+.badge.device-status.discovered {
+  color: #386cb0;
+  background: #edf4ff;
+}
+.badge.device-status.offline {
+  color: #687487;
+  background: #f0f2f5;
+}
+.badge.device-status.archived {
+  color: #79649c;
+  background: #f3effa;
+}
+.badge.device-status.revoked {
+  color: #af5363;
+  background: #fceef1;
+}
+.badge.device-status.pending {
+  color: #956112;
+  background: #fff5df;
+}
+.device-status-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 4px;
+  cursor: default;
+}
+.device-status-wrap:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.device-status-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 36px));
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  box-shadow: 0 5px 20px #24344914;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    opacity 120ms,
+    transform 120ms,
+    visibility 120ms;
+}
+.device-status-wrap .device-status-tooltip time {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.device-status-tooltip small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.device-status-wrap:hover .device-status-tooltip,
+.device-status-wrap:focus-within .device-status-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+}
 .orbit-mark {
   display: inline-block;
   width: 37px;
@@ -726,6 +810,7 @@ main {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow: visible;
 }
 .node-card-top {
   display: flex;

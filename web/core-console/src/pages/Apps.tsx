@@ -8,9 +8,10 @@ import {
   X,
   Image as ImageIcon,
 } from "lucide-react";
-import { api, APIError, appConnectionLabel, date } from "../api";
+import { api, APIError, date } from "../api";
 import type { AppDevice, RouteDocument } from "../api";
 import { Badge, Empty, PageHead } from "../components";
+import DeviceStatus from "../DeviceStatus";
 
 type Item = {
   id: string;
@@ -262,17 +263,7 @@ export default function Apps({
                         <h2>{d.label || d.id}</h2>
                         <span>{d.platform}</span>
                       </div>
-                      <Badge
-                        tone={
-                          d.revoked
-                            ? "warn"
-                            : d.activity.connections > 0
-                              ? "good"
-                              : "neutral"
-                        }
-                      >
-                        {d.revoked ? "已撤销" : appConnectionLabel(d.activity)}
-                      </Badge>
+                      <DeviceStatus app={d} />
                     </div>
                     <dl>
                       <div>
