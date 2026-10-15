@@ -54,6 +54,8 @@ message CodexView {
   uint32 total_count = 4;
   uint32 running_count = 5;
   google.protobuf.Timestamp observed_at = 6;
+  // Account quota keeps its own observation and expiry, independent of sessions.
+  CodexWeeklyLimit weekly_limit = 7;
 }
 
 message DeviceView {

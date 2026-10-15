@@ -5,6 +5,9 @@ import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
+import android.view.View
+import android.view.WindowManager
 import android.os.Build
 import android.net.Uri
 import android.provider.Settings
@@ -15,11 +18,48 @@ import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
     private val io = Executors.newSingleThreadExecutor()
+    private var matrixFullscreen = false
+    private var previousOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    private var previousSystemUi = 0
+    private var previousKeepScreenOn = false
+
+    @Suppress("DEPRECATION")
+    private fun setMatrixFullscreen(enabled: Boolean) {
+        if (enabled == matrixFullscreen) return
+        if (enabled) {
+            previousOrientation = requestedOrientation
+            previousSystemUi = window.decorView.systemUiVisibility
+            previousKeepScreenOn = window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0
+            matrixFullscreen = true
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            applyMatrixSystemUi()
+        } else {
+            matrixFullscreen = false
+            requestedOrientation = previousOrientation
+            window.decorView.systemUiVisibility = previousSystemUi
+            if (!previousKeepScreenOn) window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyMatrixSystemUi() {
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && matrixFullscreen) applyMatrixSystemUi()
+    }
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.orbit/node").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "matrixFullscreen" -> { setMatrixFullscreen(call.arguments == true); result.success(null) }
                     "showInputMethodPicker" -> {
                         startActivity(InputMethodTools.pickerIntent(this))
                         result.success(null)

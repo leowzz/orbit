@@ -537,6 +537,9 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 			RunningCount: codex.value.RunningCount,
 			ObservedAt:   codex.value.ObservedAt,
 		}
+		if route.Profile == appProfile && codex.value.WeeklyLimit != nil {
+			view.Codex.WeeklyLimit = proto.Clone(codex.value.WeeklyLimit).(*orbitv1.CodexWeeklyLimit)
+		}
 		for _, session := range codex.value.Sessions {
 			view.Codex.Sessions = append(view.Codex.Sessions, &orbitv1.CodexSessionView{
 				SessionId:    session.SessionId,

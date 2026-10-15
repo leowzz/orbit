@@ -49,6 +49,11 @@ Item 修改、Change、Receipt 在同一 SQLite 事务提交。成功回执和�
 - `GET /api/v1/status`：`{node_id,label,view}`。view 使用现有 DeviceView 的 Protobuf JSON
   字段（camelCase、int64 字符串），不含 Agent 身份；freshUntil 决定是否过期。App 不提供
   打开主机会话操作，不把 HTTP 请求受理当作执行成功。
+  `overview-app` 的 Codex 来源还可提供 `view.codex.weeklyLimit`：
+  `remainingPercent`（double，proto3 省略时为 0）、`resetsAt`、`observedAt`、`freshUntil`。
+  对象缺失表示没有周额度数据；额度新鲜度由自己的 `freshUntil` 和 Codex 来源的
+  `freshUntil` 共同限制，不能用会话更新延长。`resetsAt` 到期后不得继续显示旧比例或
+  自行恢复满额，应等待新的观察值。此字段是向后兼容的新增字段。
 - `GET /api/v1/sync/snapshot?limit=100`：首次一致快照。
 - `GET /api/v1/items`：与 snapshot 相同的浏览分页语义。初始按稳定 item UUID 排序；App
   同步到本地后按 created_at + id 倒序浏览，分批显示。服务端快照可含 tombstone。

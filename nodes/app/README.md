@@ -20,6 +20,22 @@ Note（收件箱）与 Web Node 沿用同一套浅绿背景、白色卡片与绿
 
 在「状态与组件」点击「切换输入法」，从系统列表选择输入法；点击「添加到桌面」并按桌面提示确认后，可从桌面直接打开该列表。无需连接收件箱，也无需 Root。部分桌面需要允许 Orbit 创建桌面快捷方式。
 
+## 点阵屏
+
+从「状态与组件」或「设置 → 点阵屏」进入。可调像素密度、光晕范围和光晕强度，预览即时更新，设置保存在本机。「横向全屏」隐藏系统栏并保持屏幕常亮，轻触画面或按返回键回到设置；退出后恢复原方向策略。低高度横屏使用左右分栏，预览和全屏按钮保持可达。
+
+点阵展示精简为三项：大号整数剩余百分比（LEFT）、重置日期（RESET，月/日）和剩余天/小时（D/H）。展示区不含中文，移除已用比例、进度条、费用、Token、TPM 和更新时间；只有足够宽的屏幕保留 ChatGPT 图标。日期使用设备本地时区，离线和过期数据分别标记 OFFLINE / STALE，到达重置时间后显示 RESETTING 并等待新额度，不自动恢复为 100%。设置页面保持中文。
+
+数据沿用收件箱连接，需要 Core 包含 `codex.weeklyLimit` 的 App 投影，并在管理台为此设备的 `overview-app` 路由选择 Codex 来源；Agent 需启用周额度采集。状态与组件页仍可显示 usage 来源的 API 用量。旧 Core 或没有周额度来源时，点阵屏显示 NO DATA。视觉参考 [glow-clock](https://github.com/leowzz/glow-clock)，图标来源与许可见 [assets/matrix/README.md](assets/matrix/README.md)。
+
+真机布局测试使用独立临时数据库和明确的测试额度，不改现有收件箱连接：
+
+```sh
+flutter drive --no-pub --driver=test_driver/matrix_driver.dart --target=integration_test/matrix_smoke_test.dart -d <device-id>
+```
+
+测试截图写入 `build/matrix-smoke/`。该命令安装测试入口 APK；完成后重新构建并安装普通 `lib/main.dart` APK。
+
 ## 工具链与运行
 
 本次使用 Flutter 3.44.8 / Dart 3.12.2；实际插件版本锁定在 pubspec.lock：

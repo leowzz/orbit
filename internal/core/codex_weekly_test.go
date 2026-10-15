@@ -5,10 +5,51 @@ import (
 	"testing"
 	"time"
 
+	"encoding/json"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	orbitv1 "orbit/gen/go/orbit/v1"
 )
+
+func TestAppWeeklyQuotaKeepsIndependentFreshness(t *testing.T) {
+	now := time.Date(2026, 10, 15, 8, 0, 0, 0, time.UTC)
+	engine := newTestEngine(t)
+	route := Route{NodeID: "phone", Profile: appProfile, Inputs: []RouteInput{{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_CODEX}}}
+	engine.config.Routes = []Route{route}
+	limit := &orbitv1.CodexWeeklyLimit{RemainingPercent: 0, ResetsAt: timestamppb.New(now.Add(time.Hour)), ObservedAt: timestamppb.New(now.Add(-4 * time.Minute)), FreshUntil: timestamppb.New(now.Add(-time.Minute))}
+	engine.codex["agent-a"] = canonicalCodex{value: &orbitv1.CodexObservation{WeeklyLimit: limit}, expiresAt: now.Add(time.Hour)}
+	view := engine.AppView(now, "phone")
+	if view == nil || !proto.Equal(view.Codex.WeeklyLimit, limit) {
+		t.Fatalf("quota missing or freshness changed: %v", view)
+	}
+	encoded, err := protojson.Marshal(view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(encoded, &body); err != nil {
+		t.Fatal(err)
+	}
+	quota := body["codex"].(map[string]any)["weeklyLimit"].(map[string]any)
+	if quota["resetsAt"] == nil || quota["freshUntil"] == nil {
+		t.Fatalf("incomplete app JSON: %s", encoded)
+	}
+	// Projection callers cannot mutate the cached observation.
+	view.Codex.WeeklyLimit.RemainingPercent = 80
+	if limit.RemainingPercent != 0 {
+		t.Fatal("projection aliases source quota")
+	}
+	// Preserve the old reset timestamp; clients must not invent a new allowance.
+	view = engine.AppView(now.Add(2*time.Hour), "phone")
+	if !proto.Equal(view.Codex.WeeklyLimit, limit) {
+		t.Fatal("expired quota rewritten")
+	}
+	engine.codex["agent-a"].value.WeeklyLimit = nil
+	if engine.AppView(now, "phone").Codex.WeeklyLimit != nil {
+		t.Fatal("absent quota was fabricated")
+	}
+}
 
 func TestCodexWeeklyOLEDProjection(t *testing.T) {
 	now := time.Date(2026, 10, 10, 8, 0, 0, 0, time.UTC)

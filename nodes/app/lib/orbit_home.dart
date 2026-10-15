@@ -3,6 +3,7 @@ import 'package:orbit_android/main.dart' show NodePage;
 import 'inbox_screen.dart' show InboxReadingNotification;
 import 'inbox_controller.dart';
 import 'input_method_tools.dart';
+import 'matrix_screen.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -110,6 +111,18 @@ class _AppSettings extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: onSettings,
             ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.grid_on_outlined),
+              title: const Text('点阵屏'),
+              subtitle: const Text('周额度与用量 · 横向全屏'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => MatrixScreen(controller: controller),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -170,6 +183,18 @@ class _ConnectionStatus extends StatelessWidget {
                     style: TextStyle(height: 1.6),
                   ),
                 const SizedBox(height: 24),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.grid_on_outlined),
+                  title: const Text('点阵屏'),
+                  subtitle: const Text('周额度与用量 · 横向全屏'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => MatrixScreen(controller: controller),
+                    ),
+                  ),
+                ),
                 if (view != null) ...[
                   Text(
                     fresh ? '当前状态' : '上次同步的状态',

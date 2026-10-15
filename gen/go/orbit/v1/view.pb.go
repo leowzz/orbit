@@ -363,13 +363,15 @@ func (x *CodexSessionView) GetProcessAlive() bool {
 }
 
 type CodexView struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Freshness     Freshness              `protobuf:"varint,1,opt,name=freshness,proto3,enum=orbit.v1.Freshness" json:"freshness,omitempty"`
-	FreshUntil    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
-	Sessions      []*CodexSessionView    `protobuf:"bytes,3,rep,name=sessions,proto3" json:"sessions,omitempty"`
-	TotalCount    uint32                 `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
-	RunningCount  uint32                 `protobuf:"varint,5,opt,name=running_count,json=runningCount,proto3" json:"running_count,omitempty"`
-	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Freshness    Freshness              `protobuf:"varint,1,opt,name=freshness,proto3,enum=orbit.v1.Freshness" json:"freshness,omitempty"`
+	FreshUntil   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
+	Sessions     []*CodexSessionView    `protobuf:"bytes,3,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	TotalCount   uint32                 `protobuf:"varint,4,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	RunningCount uint32                 `protobuf:"varint,5,opt,name=running_count,json=runningCount,proto3" json:"running_count,omitempty"`
+	ObservedAt   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	// Account quota keeps its own observation and expiry, independent of sessions.
+	WeeklyLimit   *CodexWeeklyLimit `protobuf:"bytes,7,opt,name=weekly_limit,json=weeklyLimit,proto3" json:"weekly_limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -442,6 +444,13 @@ func (x *CodexView) GetRunningCount() uint32 {
 func (x *CodexView) GetObservedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ObservedAt
+	}
+	return nil
+}
+
+func (x *CodexView) GetWeeklyLimit() *CodexWeeklyLimit {
+	if x != nil {
+		return x.WeeklyLimit
 	}
 	return nil
 }
@@ -601,7 +610,7 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\x06status\x18\x05 \x01(\x0e2\x1c.orbit.v1.CodexSessionStatusR\x06status\x129\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12#\n" +
-	"\rprocess_alive\x18\a \x01(\bR\fprocessAlive\"\xb6\x02\n" +
+	"\rprocess_alive\x18\a \x01(\bR\fprocessAlive\"\xf5\x02\n" +
 	"\tCodexView\x121\n" +
 	"\tfreshness\x18\x01 \x01(\x0e2\x13.orbit.v1.FreshnessR\tfreshness\x12;\n" +
 	"\vfresh_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -611,7 +620,8 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"totalCount\x12#\n" +
 	"\rrunning_count\x18\x05 \x01(\rR\frunningCount\x12;\n" +
 	"\vobserved_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"observedAt\"\x8e\x04\n" +
+	"observedAt\x12=\n" +
+	"\fweekly_limit\x18\a \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\x8e\x04\n" +
 	"\n" +
 	"DeviceView\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x17\n" +
@@ -663,7 +673,8 @@ var file_orbit_v1_view_proto_goTypes = []any{
 	(*DeviceView)(nil),            // 6: orbit.v1.DeviceView
 	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
 	(CodexSessionStatus)(0),       // 8: orbit.v1.CodexSessionStatus
-	(*Metadata)(nil),              // 9: orbit.v1.Metadata
+	(*CodexWeeklyLimit)(nil),      // 9: orbit.v1.CodexWeeklyLimit
+	(*Metadata)(nil),              // 10: orbit.v1.Metadata
 }
 var file_orbit_v1_view_proto_depIdxs = []int32{
 	1,  // 0: orbit.v1.DisplaySlot.emphasis:type_name -> orbit.v1.Emphasis
@@ -676,20 +687,21 @@ var file_orbit_v1_view_proto_depIdxs = []int32{
 	7,  // 7: orbit.v1.CodexView.fresh_until:type_name -> google.protobuf.Timestamp
 	4,  // 8: orbit.v1.CodexView.sessions:type_name -> orbit.v1.CodexSessionView
 	7,  // 9: orbit.v1.CodexView.observed_at:type_name -> google.protobuf.Timestamp
-	9,  // 10: orbit.v1.DeviceView.metadata:type_name -> orbit.v1.Metadata
-	0,  // 11: orbit.v1.DeviceView.freshness:type_name -> orbit.v1.Freshness
-	7,  // 12: orbit.v1.DeviceView.fresh_until:type_name -> google.protobuf.Timestamp
-	7,  // 13: orbit.v1.DeviceView.retain_until:type_name -> google.protobuf.Timestamp
-	2,  // 14: orbit.v1.DeviceView.primary:type_name -> orbit.v1.DisplaySlot
-	2,  // 15: orbit.v1.DeviceView.secondary:type_name -> orbit.v1.DisplaySlot
-	2,  // 16: orbit.v1.DeviceView.footer:type_name -> orbit.v1.DisplaySlot
-	3,  // 17: orbit.v1.DeviceView.usage:type_name -> orbit.v1.UsageView
-	5,  // 18: orbit.v1.DeviceView.codex:type_name -> orbit.v1.CodexView
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	9,  // 10: orbit.v1.CodexView.weekly_limit:type_name -> orbit.v1.CodexWeeklyLimit
+	10, // 11: orbit.v1.DeviceView.metadata:type_name -> orbit.v1.Metadata
+	0,  // 12: orbit.v1.DeviceView.freshness:type_name -> orbit.v1.Freshness
+	7,  // 13: orbit.v1.DeviceView.fresh_until:type_name -> google.protobuf.Timestamp
+	7,  // 14: orbit.v1.DeviceView.retain_until:type_name -> google.protobuf.Timestamp
+	2,  // 15: orbit.v1.DeviceView.primary:type_name -> orbit.v1.DisplaySlot
+	2,  // 16: orbit.v1.DeviceView.secondary:type_name -> orbit.v1.DisplaySlot
+	2,  // 17: orbit.v1.DeviceView.footer:type_name -> orbit.v1.DisplaySlot
+	3,  // 18: orbit.v1.DeviceView.usage:type_name -> orbit.v1.UsageView
+	5,  // 19: orbit.v1.DeviceView.codex:type_name -> orbit.v1.CodexView
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_view_proto_init() }
