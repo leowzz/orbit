@@ -30,12 +30,12 @@ object WidgetPresentation {
             .thenByDescending { it.updatedAt.nanos }
     ).take(limit)
 
-    fun status(value: Int): Pair<String, Int> = when (value) {
-        2 -> "运行中" to 0xFF33785B.toInt()
-        3 -> "完成" to 0xFF788379.toInt()
-        4 -> "失败" to 0xFFB25049.toInt()
-        5 -> "中断" to 0xFFA17C3D.toInt()
-        6 -> "取消" to 0xFF92988F.toInt()
-        else -> "未知" to 0xFF92988F.toInt()
+    fun status(value: Int, dark: Boolean = false): Pair<String, Int> = when (value) {
+        2 -> "运行中" to (if (dark) 0xFF55C59A else 0xFF33785B).toInt()
+        3 -> "完成" to (if (dark) 0xFF9AA49F else 0xFF788379).toInt()
+        4 -> "失败" to (if (dark) 0xFFED7B7B else 0xFFB25049).toInt()
+        5 -> "中断" to (if (dark) 0xFFDDA154 else 0xFFA17C3D).toInt()
+        6 -> "取消" to (if (dark) 0xFF9AA49F else 0xFF92988F).toInt()
+        else -> "未知" to (if (dark) 0xFF9AA49F else 0xFF92988F).toInt()
     }
 }

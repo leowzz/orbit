@@ -23,6 +23,27 @@ class OrbitApp extends StatelessWidget {
         fillColor: Colors.white,
       ),
     ),
+    darkTheme: ThemeData(
+      colorScheme:
+          ColorScheme.fromSeed(
+            seedColor: const Color(0xff24634c),
+            brightness: Brightness.dark,
+            dynamicSchemeVariant: DynamicSchemeVariant.monochrome,
+            surface: const Color(0xff151917),
+          ).copyWith(
+            primary: const Color(0xff55c59a),
+            onPrimary: const Color(0xff10231b),
+            surfaceTint: Colors.transparent,
+          ),
+      scaffoldBackgroundColor: const Color(0xff151917),
+      useMaterial3: true,
+      inputDecorationTheme: const InputDecorationTheme(
+        border: OutlineInputBorder(),
+        filled: true,
+        fillColor: Color(0xff151917),
+      ),
+    ),
+    themeMode: ThemeMode.system,
     home: const NodePage(),
   );
 }
@@ -253,7 +274,9 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
     IconData icon, {
     bool compact = false,
   }) => Card(
-    color: const Color(0xff102827),
+    color: Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xff151917)
+        : const Color(0xff102827),
     margin: const EdgeInsets.only(bottom: 14),
     child: Padding(
       padding: EdgeInsets.all(compact ? 12 : 22),
@@ -319,7 +342,7 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
       const SizedBox(height: 10),
       Text(
         snapshot['connection'] as String? ?? '未连接',
-        style: const TextStyle(color: Color(0xff24634c)),
+        style: TextStyle(color: Theme.of(context).colorScheme.primary),
       ),
       Text(
         snapshot['updated'] as String? ?? '尚未接收数据',

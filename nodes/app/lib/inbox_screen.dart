@@ -7,14 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'app_viewport.dart';
+import 'app_theme.dart';
 import 'inbox_controller.dart';
 import 'local_store.dart';
 
-const _background = Color(0xfff6f8f5);
-const _ink = Color(0xff263b33);
-const _accent = Color(0xff287663);
-const _muted = Color(0xff738078);
-const _border = Color(0xffdfe6df);
 const _composerTodoKey = ValueKey('composer-todo');
 
 class InboxReadingNotification extends Notification {
@@ -30,6 +26,12 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
+  OrbitColors get _colors => OrbitColors.of(context);
+  Color get _background => _colors.inboxBackground;
+  Color get _ink => _colors.ink;
+  Color get _accent => _colors.accent;
+  Color get _muted => _colors.muted;
+  Color get _border => _colors.border;
   final text = TextEditingController();
   final searchText = TextEditingController();
   final composerBounds = GlobalKey();
@@ -215,13 +217,13 @@ class _InboxScreenState extends State<InboxScreen> {
     content: content,
     actions: actions,
     scrollable: true,
-    backgroundColor: Colors.white,
+    backgroundColor: _colors.surface,
     surfaceTintColor: Colors.transparent,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(16),
-      side: const BorderSide(color: _border),
+      side: BorderSide(color: _border),
     ),
-    titleTextStyle: const TextStyle(
+    titleTextStyle: TextStyle(
       color: _ink,
       fontSize: 20,
       fontWeight: FontWeight.w600,
@@ -397,8 +399,8 @@ class _InboxScreenState extends State<InboxScreen> {
         data: theme.copyWith(
           colorScheme: theme.colorScheme.copyWith(
             primary: _accent,
-            onPrimary: Colors.white,
-            surface: Colors.white,
+            onPrimary: _colors.onAccent,
+            surface: _colors.surface,
             onSurface: _ink,
             onSurfaceVariant: _muted,
             outline: _border,
@@ -411,12 +413,12 @@ class _InboxScreenState extends State<InboxScreen> {
             surfaceTintColor: Colors.transparent,
             elevation: 0,
             centerTitle: false,
-            shape: const Border(bottom: BorderSide(color: _border)),
+            shape: Border(bottom: BorderSide(color: _border)),
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
               backgroundColor: _accent,
-              foregroundColor: Colors.white,
+              foregroundColor: _colors.onAccent,
               shape: shape,
               minimumSize: const Size(64, 40),
             ),
@@ -424,8 +426,8 @@ class _InboxScreenState extends State<InboxScreen> {
           outlinedButtonTheme: OutlinedButtonThemeData(
             style: OutlinedButton.styleFrom(
               foregroundColor: _ink,
-              backgroundColor: Colors.white,
-              side: const BorderSide(color: _border),
+              backgroundColor: _colors.surface,
+              side: BorderSide(color: _border),
               shape: shape,
               minimumSize: const Size(0, 40),
             ),
@@ -437,11 +439,11 @@ class _InboxScreenState extends State<InboxScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(3),
             ),
-            side: const BorderSide(color: _muted, width: 1.5),
+            side: BorderSide(color: _muted, width: 1.5),
           ),
           chipTheme: theme.chipTheme.copyWith(
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: _border),
+            backgroundColor: _colors.surface,
+            side: BorderSide(color: _border),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -473,7 +475,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       Container(
                         height: 20,
                         margin: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           border: Border(left: BorderSide(color: _border)),
                         ),
                       ),
@@ -513,7 +515,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       : c.online
                       ? '已同步'
                       : '等待同步',
-                  style: const TextStyle(color: _muted, fontSize: 13),
+                  style: TextStyle(color: _muted, fontSize: 13),
                 ),
               if (!searching || wide)
                 IconButton(
@@ -551,8 +553,8 @@ class _InboxScreenState extends State<InboxScreen> {
                         ),
                         padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
                         decoration: BoxDecoration(
-                          color: const Color(0xfffff2d8),
-                          border: Border.all(color: const Color(0xffebd29e)),
+                          color: _colors.warningSurface,
+                          border: Border.all(color: _colors.warningBorder),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
@@ -629,10 +631,10 @@ class _InboxScreenState extends State<InboxScreen> {
                                                   : '暂未取得消息')
                                             : '还没有${{'todo': '待办', 'image': '图片', 'links': '链接', 'completed': '已完成待办'}[filter] ?? '消息'}',
                                         textAlign: TextAlign.center,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.w500,
-                                          color: Color(0xff456454),
+                                          color: _ink,
                                         ),
                                       ),
                                       const SizedBox(height: 8),
@@ -642,7 +644,7 @@ class _InboxScreenState extends State<InboxScreen> {
                                             ? '试试其他关键词或筛选。'
                                             : '随手存下链接、文字和图片，在自己的设备间接着看。',
                                         textAlign: TextAlign.center,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: _muted,
                                           height: 1.8,
                                         ),
@@ -704,7 +706,7 @@ class _InboxScreenState extends State<InboxScreen> {
       controller: searchText,
       autofocus: true,
       style: const TextStyle(fontSize: 14),
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         hintText: '搜索文字、链接…',
         hintStyle: TextStyle(color: _muted, fontSize: 14),
         filled: false,
@@ -772,8 +774,8 @@ class _InboxScreenState extends State<InboxScreen> {
     key: const ValueKey('composer'),
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: const Color(0xffccdacf)),
+      color: _colors.surface,
+      border: Border.all(color: _border),
       borderRadius: BorderRadius.circular(15),
       boxShadow: const [
         BoxShadow(
@@ -802,7 +804,7 @@ class _InboxScreenState extends State<InboxScreen> {
             maxLength: 4000,
             style: const TextStyle(fontSize: 16, height: 1.6),
             onChanged: (value) => c.local.setMeta('draft', value),
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: '写点什么，留给自己…',
               hintStyle: TextStyle(color: _muted),
               counterText: '',
@@ -820,12 +822,12 @@ class _InboxScreenState extends State<InboxScreen> {
             padding: const EdgeInsets.only(top: 4),
             child: Row(
               children: [
-                const Icon(Icons.image_outlined, size: 18, color: _accent),
+                Icon(Icons.image_outlined, size: 18, color: _accent),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     attachment!.name,
-                    style: const TextStyle(fontSize: 13, color: _accent),
+                    style: TextStyle(fontSize: 13, color: _accent),
                   ),
                 ),
                 TextButton(
@@ -881,7 +883,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     child: const Text('添加图片', style: TextStyle(fontSize: 14)),
                   ),
                   if (wide)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text(
                         '⌘ / Ctrl + Enter 发送',
@@ -927,7 +929,7 @@ class _InboxScreenState extends State<InboxScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xfffff6e3),
+        color: _colors.warningSurface,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -1008,7 +1010,7 @@ class _InboxScreenState extends State<InboxScreen> {
             padding: const EdgeInsets.fromLTRB(2, 12, 2, 10),
             child: Text(
               heading,
-              style: const TextStyle(
+              style: TextStyle(
                 color: _muted,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
@@ -1020,7 +1022,7 @@ class _InboxScreenState extends State<InboxScreen> {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: _colors.surface,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: _border),
           ),
@@ -1036,7 +1038,7 @@ class _InboxScreenState extends State<InboxScreen> {
                           : busy
                           ? ' · 需要处理'
                           : ''}',
-                      style: const TextStyle(color: _muted, fontSize: 13),
+                      style: TextStyle(color: _muted, fontSize: 13),
                     ),
                   ),
                   if ((item['body'] as String).isNotEmpty)
@@ -1054,7 +1056,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     ),
                   PopupMenuButton<String>(
                     tooltip: '更多操作',
-                    icon: const Icon(Icons.more_horiz, color: _muted, size: 22),
+                    icon: Icon(Icons.more_horiz, color: _muted, size: 22),
                     padding: EdgeInsets.zero,
                     onSelected: (action) {
                       if (action == 'edit') edit(item);

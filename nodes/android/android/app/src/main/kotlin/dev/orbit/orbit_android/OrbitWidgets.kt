@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Paint
 import android.os.Bundle
 import android.os.Build
@@ -29,7 +30,7 @@ class SessionWidget : AppWidgetProvider() {
     override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, options: Bundle) { OrbitWidgets.updateAll(context, force = true) }
 }
 object OrbitWidgets {
-    private data class Rendered(val key: List<Any>, val hint: String, val at: Long)
+    private data class Rendered(val key: List<Any>, val hint: String, val at: Long, val nightMode: Int)
     private val rendered = mutableMapOf<Int, Rendered>()
     fun hasWidgets(context: Context): Boolean {
         val manager = AppWidgetManager.getInstance(context)
@@ -47,6 +48,8 @@ object OrbitWidgets {
     fun updateAll(context: Context, force: Boolean = false) {
         if (!context.getSystemService(PowerManager::class.java).isInteractive) return
         val manager = AppWidgetManager.getInstance(context)
+        val nightMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val dark = nightMode == Configuration.UI_MODE_NIGHT_YES
         val now = System.currentTimeMillis()
         val data = ViewStore(context).load()?.takeIf { ViewPolicy.millis(it.retainUntil) > now }
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -64,7 +67,7 @@ object OrbitWidgets {
                 val sizes = if (Build.VERSION.SDK_INT >= 31)
                     options.getParcelableArrayList<SizeF>(AppWidgetManager.OPTION_APPWIDGET_SIZES)
                         ?.filter { it.width > 0 && it.height > 0 }?.distinct()?.take(16).orEmpty() else emptyList()
-                val key = mutableListOf<Any>(sizes.ifEmpty { listOf(portrait, landscape) }, context.resources.configuration.fontScale, selected)
+                val key = mutableListOf<Any>(sizes.ifEmpty { listOf(portrait, landscape) }, context.resources.configuration.fontScale, selected, nightMode)
                 var widgetHint = ""
                 fun render(size: SizeF): RemoteViews {
                     val layout = WidgetSizing.session(size.width, size.height, context.resources.configuration.fontScale)
@@ -123,9 +126,17 @@ object OrbitWidgets {
                             row.setViewPadding(R.id.session_row, 0, pixels(4), 0, pixels(4))
                             row.setTextViewTextSize(R.id.session_status, TypedValue.COMPLEX_UNIT_SP, layout.textSize - 1)
                             row.setTextViewTextSize(R.id.session_name, TypedValue.COMPLEX_UNIT_SP, layout.textSize)
-                            val (label, color) = WidgetPresentation.status(session.statusValue)
+                            val (label, color) = WidgetPresentation.status(session.statusValue, dark)
                             row.setTextViewText(R.id.session_status, label)
-                            row.setTextColor(R.id.session_status, if (state.isBlank()) color else 0xFF92988F.toInt())
+                            val status = if (state.isBlank()) session.statusValue else 0
+                            if (Build.VERSION.SDK_INT >= 31) {
+                                // Resolve against the host configuration when RemoteViews is reapplied.
+                                row.setColorInt(R.id.session_status, "setTextColor",
+                                    WidgetPresentation.status(status).second,
+                                    WidgetPresentation.status(status, true).second)
+                            } else {
+                                row.setTextColor(R.id.session_status, WidgetPresentation.status(status, dark).second)
+                            }
                             val name = session.displayName.ifBlank { session.projectName }
                                 .ifBlank { session.model }.ifBlank { session.sessionId.take(8) }.take(80)
                             row.setTextViewText(R.id.session_name, name)
@@ -145,9 +156,9 @@ object OrbitWidgets {
                 val previous = rendered[id]
                 if (!force && previous != null) {
                     if (previous.key == key) continue
-                    if (selected.isEmpty() && usage && previous.hint == widgetHint && elapsed - previous.at < 60000) continue
+                    if (previous.nightMode == nightMode && selected.isEmpty() && usage && previous.hint == widgetHint && elapsed - previous.at < 60000) continue
                 }
-                rendered[id] = Rendered(key, widgetHint, elapsed)
+                rendered[id] = Rendered(key, widgetHint, elapsed, nightMode)
                 manager.updateAppWidget(id, views)
             }
         }

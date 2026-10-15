@@ -393,9 +393,12 @@ class _ConnectionStatus extends StatelessWidget {
                       ),
                     ),
                 ] else
-                  const Text(
+                  Text(
                     '尚未设置状态摘要。不影响收件箱使用；需要时可在管理台为此设备选择状态来源。',
-                    style: TextStyle(color: Colors.black54, height: 1.6),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      height: 1.6,
+                    ),
                   ),
                 if (widgetsEnabled) ...[
                   const SizedBox(height: 32),

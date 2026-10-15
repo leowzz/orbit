@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'inbox_controller.dart';
+import 'app_theme.dart';
 import 'local_store.dart' show Json;
 
 IconData navigationIcon(String? name) => switch (name) {
@@ -13,7 +14,6 @@ Widget shortcutIcon(Json item, InboxController controller, {double size = 30}) {
   final fallback = Icon(
     navigationIcon(item['icon_name'] as String?),
     size: size,
-    color: const Color(0xff38624e),
   );
   if (url.isEmpty) return fallback;
   final internal = RegExp(
@@ -86,10 +86,10 @@ class _WorkbenchNavigationState extends State<WorkbenchNavigation> {
       key: const ValueKey('workbench-navigation'),
       height: height,
       decoration: BoxDecoration(
-        color: const Color(0xfff6f9f7),
+        color: OrbitColors.of(context).navigation,
         border: atTop
-            ? const Border(bottom: BorderSide(color: Color(0xffe1e8e3)))
-            : const Border(top: BorderSide(color: Color(0xffe1e8e3))),
+            ? Border(bottom: BorderSide(color: OrbitColors.of(context).border))
+            : Border(top: BorderSide(color: OrbitColors.of(context).border)),
       ),
       child: LayoutBuilder(
         builder: (context, bounds) {

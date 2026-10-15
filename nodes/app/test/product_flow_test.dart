@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_app/inbox_controller.dart';
+import 'package:orbit_app/app_theme.dart';
 import 'package:orbit_app/inbox_screen.dart';
 import 'package:orbit_app/local_store.dart';
 import 'package:orbit_app/orbit_home.dart';
@@ -22,8 +23,16 @@ void main() {
       [Uri.parse('https://example.com/a')],
     );
   });
-  for (final width in [360.0, 900.0]) {
-    testWidgets('capture, find and copy flow at $width', (tester) async {
+  for (final variant in [
+    (360.0, Brightness.light),
+    (900.0, Brightness.light),
+    (360.0, Brightness.dark),
+    (900.0, Brightness.dark),
+  ]) {
+    final (width, brightness) = variant;
+    testWidgets('capture, find and copy flow at $width in $brightness', (
+      tester,
+    ) async {
       tester.view.physicalSize = Size(width, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
@@ -69,13 +78,12 @@ void main() {
           key: capture,
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(
-                seedColor: const Color(0xff277765),
+            theme: orbitTheme(brightness).copyWith(
+              textTheme: orbitTheme(brightness).textTheme.apply(
+                fontFamily: Platform.environment['ORBIT_CAPTURE'] != null
+                    ? 'Capture'
+                    : null,
               ),
-              fontFamily: Platform.environment['ORBIT_CAPTURE'] != null
-                  ? 'Capture'
-                  : null,
             ),
             home: OrbitHome(
               controller: c,
@@ -106,7 +114,7 @@ void main() {
           final image = await boundary.toImage();
           final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
           await File(
-            '/tmp/orbit-app-${width.toInt()}.png',
+            'build/orbit-inbox-${width.toInt()}-${brightness.name}.png',
           ).writeAsBytes(bytes!.buffer.asUint8List());
           image.dispose();
         });

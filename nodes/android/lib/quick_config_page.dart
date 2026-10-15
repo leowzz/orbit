@@ -1,10 +1,11 @@
 const quickConfigPage = r'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Orbit 快捷配置</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f5f5ef;color:#102827;font:16px system-ui,sans-serif}
+:root{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;background:#f5f5ef;color:#102827;font:16px system-ui,sans-serif}
 main{max-width:540px;margin:32px auto;padding:24px}h1{font-size:28px}p{line-height:1.6;color:#52645c}
-label{display:block;margin-top:20px;font-weight:600}input{display:block;width:100%;margin-top:8px;padding:14px;border:1px solid #b6c5bc;border-radius:10px;font:inherit;background:white}
+label{display:block;margin-top:20px;font-weight:600}input{display:block;width:100%;margin-top:8px;padding:14px;border:1px solid #b6c5bc;border-radius:10px;font:inherit;background:white;color:#102827}
 small{display:block;margin-top:6px;color:#52645c}.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:24px}button{padding:13px 20px;border:1px solid #24634c;border-radius:24px;background:#24634c;color:white;font:inherit;cursor:pointer}button:first-child{background:white;color:#24634c}button:disabled{opacity:.5}#message{white-space:pre-wrap}
+@media(prefers-color-scheme:dark){body{background:#151917;color:#e6ebe8}p,small{color:#9aa49f}input{background:#151917;color:#e6ebe8;border-color:#313a36}button{background:#55c59a;color:#10231b;border-color:#55c59a}button:first-child{background:#151917;color:#55c59a}}
 </style></head><body><main><h1>Orbit 快捷配置</h1><p>在这里配置设备的 MQTT 连接。请保持设备上的二维码弹窗打开，并连接同一局域网。</p>
 <form id="form"><fieldset id="fields" disabled style="border:0;padding:0;margin:0">
 <label>MQTT 服务地址<input id="uri" required placeholder="ssl://mqtt.example.com:8883" autocapitalize="none" spellcheck="false"></label><small>支持 ssl://、mqtts://、tcp://、mqtt://，需填写端口。</small>

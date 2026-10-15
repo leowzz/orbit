@@ -1,0 +1,9 @@
+<resources>
+    <color name="widget_background">#F5F7F3</color>
+    <color name="widget_label">#526456</color>
+    <color name="widget_muted">#788379</color>
+    <color name="widget_hint">#997346</color>
+    <color name="widget_amount">#233B2E</color>
+    <color name="widget_text">#35453A</color>
+    <color name="app_background">#FAFBF9</color>
+</resources>
