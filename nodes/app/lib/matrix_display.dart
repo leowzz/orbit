@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -124,6 +125,11 @@ class MatrixReading {
     '等待重置更新' => 'RESETTING',
     _ => 'NO DATA',
   };
+  // Accessibility includes finer-grained data that is not drawn on the LEDs.
+  Object get _paintKey => showUsage
+      ? (true, costText, tokensText, tpmText, displayStatus)
+      : (false, displayPercent, displayDate, displayCountdown, displayStatus);
+
   String get used =>
       remaining == null ? '已用 —' : '已用 ${_percent(100 - remaining!)}%';
   static String _percent(double value) => value == value.roundToDouble()
@@ -180,66 +186,207 @@ class MatrixDisplay extends StatefulWidget {
 }
 
 class _MatrixDisplayState extends State<MatrixDisplay> {
-  Uint8List? pixels;
-  int columns = 0, rows = 0, revision = 0;
-  String? signature;
+  _LedFrame? frame;
+  ui.Image? sprite;
+  Object? spriteKey, requestedKey;
+  _RenderRequest? pending;
+  bool rendering = false;
 
-  void rasterize(int width, int height) {
-    final next =
-        '$width:$height:${widget.reading.description}:${widget.reading.updatedLabel}';
-    if (next == signature) return;
-    signature = next;
-    final current = ++revision;
-    final reading = widget.reading;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final scale = height / 72;
-    canvas.scale(scale);
-    _drawContent(canvas, width / scale, reading, width >= 150);
-    final picture = recorder.endRecording();
-    () async {
-      try {
-        final image = await picture.toImage(width, height);
-        final bytes = await image.toByteData(
-          format: ui.ImageByteFormat.rawRgba,
-        );
-        image.dispose();
-        if (!mounted || current != revision || bytes == null) return;
+  void request(int width, int height) {
+    final next = _RenderRequest(width, height, widget.reading, widget.style);
+    if (next.key == requestedKey) return;
+    requestedKey = next.key;
+    // One conversion at a time; replace queued slider positions with the latest.
+    pending = next;
+    if (!rendering) {
+      rendering = true;
+      scheduleMicrotask(render);
+    }
+  }
+
+  Future<void> render() async {
+    try {
+      while (mounted && pending != null) {
+        final next = pending!;
+        pending = null;
+        final nextFrame = frame?.key == next.rasterKey
+            ? frame!
+            : await _rasterize(next);
+        if (!mounted) return;
+        final nextSprite = spriteKey == next.spriteKey && sprite != null
+            ? sprite!
+            : await _makeSprite(next.style);
+        if (!mounted) {
+          if (nextSprite != sprite) nextSprite.dispose();
+          return;
+        }
+        final previousSprite = sprite;
         setState(() {
-          pixels = bytes.buffer.asUint8List();
-          columns = width;
-          rows = height;
+          frame = nextFrame;
+          sprite = nextSprite;
+          spriteKey = next.spriteKey;
         });
-      } finally {
-        picture.dispose();
+        if (previousSprite != nextSprite) previousSprite?.dispose();
       }
-    }();
+    } catch (error, stack) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stack,
+          library: 'Orbit matrix display',
+        ),
+      );
+    } finally {
+      rendering = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    pending = null;
+    sprite?.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => Semantics(
     label: widget.reading.description,
     image: true,
-    child: ColoredBox(
-      color: Colors.black,
-      child: LayoutBuilder(
-        builder: (context, bounds) {
-          if (bounds.maxWidth <= 0 || bounds.maxHeight <= 0) {
-            return const SizedBox.shrink();
-          }
-          final height = widget.style.density;
-          // Letterbox unusually square windows instead of squeezing the text.
-          final aspect = math.max(16 / 9, bounds.maxWidth / bounds.maxHeight);
-          final width = (height * aspect).round().clamp(1, 512);
-          rasterize(width, height);
-          return CustomPaint(
-            painter: _LedPainter(pixels, columns, rows, widget.style),
-            size: Size.infinite,
-          );
-        },
+    child: RepaintBoundary(
+      child: ColoredBox(
+        color: Colors.black,
+        child: LayoutBuilder(
+          builder: (context, bounds) {
+            if (bounds.maxWidth <= 0 || bounds.maxHeight <= 0) {
+              return const SizedBox.shrink();
+            }
+            final height = widget.style.density;
+            // Letterbox unusually square windows instead of squeezing the text.
+            final aspect = math.max(16 / 9, bounds.maxWidth / bounds.maxHeight);
+            final width = (height * aspect).round().clamp(1, 512);
+            request(width, height);
+            return CustomPaint(
+              painter: _LedPainter(frame, sprite),
+              size: Size.infinite,
+            );
+          },
+        ),
       ),
     ),
   );
+}
+
+class _RenderRequest {
+  final int width, height;
+  final MatrixReading reading;
+  final MatrixStyle style;
+  _RenderRequest(this.width, this.height, this.reading, this.style);
+  Object get rasterKey => (width, height, reading._paintKey);
+  Object get spriteKey => style.glowRadius <= 0 || style.glowStrength <= 0
+      ? (0.0, 0.0)
+      : (style.glowRadius, style.glowStrength);
+  Object get key => (rasterKey, spriteKey);
+}
+
+Future<_LedFrame> _rasterize(_RenderRequest request) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final scale = request.height / 72;
+  canvas.scale(scale);
+  _drawContent(
+    canvas,
+    request.width / scale,
+    request.reading,
+    request.width >= 150,
+  );
+  final picture = recorder.endRecording();
+  ui.Image? image;
+  try {
+    image = await picture.toImage(request.width, request.height);
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (bytes == null) throw StateError('Matrix raster has no pixel data');
+    return _LedFrame(request, bytes.buffer.asUint8List());
+  } finally {
+    image?.dispose();
+    picture.dispose();
+  }
+}
+
+// A reusable white LED tile is tinted per cell by drawRawAtlas. Keeping its
+// dimensions fixed lets density changes reuse the same glow texture.
+const _spriteCell = 32.0;
+const _spriteSize = 160; // Covers the maximum 2.5-cell glow on both sides.
+const _spriteCenter = Offset(_spriteSize / 2, _spriteSize / 2);
+
+Future<ui.Image> _makeSprite(MatrixStyle style) async {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  final paint = Paint()..isAntiAlias = true;
+  if (style.glowRadius > 0 && style.glowStrength > 0) {
+    final radius = _spriteCell * style.glowRadius;
+    paint.shader = ui.Gradient.radial(_spriteCenter, radius, [
+      Colors.white.withValues(alpha: style.glowStrength * .55),
+      Colors.white.withValues(alpha: 0),
+    ]);
+    canvas.drawCircle(_spriteCenter, radius, paint);
+    paint.shader = null;
+  }
+  paint.color = Colors.white;
+  canvas.drawRRect(
+    RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: _spriteCenter,
+        width: _spriteCell * .78,
+        height: _spriteCell * .78,
+      ),
+      const Radius.circular(_spriteCell * .08),
+    ),
+    paint,
+  );
+  final picture = recorder.endRecording();
+  try {
+    return await picture.toImage(_spriteSize, _spriteSize);
+  } finally {
+    picture.dispose();
+  }
+}
+
+class _LedFrame {
+  final Object key;
+  final int columns, rows;
+  late final Float32List transforms, rects;
+  late final Int32List colors;
+
+  _LedFrame(_RenderRequest request, Uint8List pixels)
+    : key = request.rasterKey,
+      columns = request.width,
+      rows = request.height {
+    var count = 0;
+    for (var i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] >= 65) count++;
+    }
+    transforms = Float32List(count * 4);
+    rects = Float32List(count * 4);
+    colors = Int32List(count);
+    var cell = 0;
+    for (var y = 0; y < rows; y++) {
+      for (var x = 0; x < columns; x++) {
+        final i = (y * columns + x) * 4;
+        if (pixels[i + 3] < 65) continue;
+        final offset = cell * 4;
+        transforms[offset] = 1;
+        transforms[offset + 2] = (x + .5) * _spriteCell - _spriteCenter.dx;
+        transforms[offset + 3] = (y + .5) * _spriteCell - _spriteCenter.dy;
+        rects[offset + 2] = _spriteSize.toDouble();
+        rects[offset + 3] = _spriteSize.toDouble();
+        colors[cell++] =
+            0xff000000 |
+            (pixels[i] << 16) |
+            (pixels[i + 1] << 8) |
+            pixels[i + 2];
+      }
+    }
+  }
 }
 
 const _mint = Color(0xffa8e6cd);
@@ -335,71 +482,35 @@ void _drawContent(
 }
 
 class _LedPainter extends CustomPainter {
-  final Uint8List? pixels;
-  final int columns, rows;
-  final MatrixStyle style;
-  _LedPainter(this.pixels, this.columns, this.rows, this.style);
+  final _LedFrame? frame;
+  final ui.Image? sprite;
+  _LedPainter(this.frame, this.sprite);
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (pixels == null || columns == 0 || rows == 0) return;
-    final cell = math.min(size.width / columns, size.height / rows);
-    final origin = Offset(
-      (size.width - columns * cell) / 2,
-      (size.height - rows * cell) / 2,
-    );
-    final paint = Paint()..isAntiAlias = true;
-    final halos = <int, ui.Shader>{};
+    final cells = frame;
+    if (cells == null || sprite == null || cells.colors.isEmpty) return;
+    final cell = math.min(size.width / cells.columns, size.height / cells.rows);
     canvas.save();
     canvas.clipRect(Offset.zero & size);
-    for (var y = 0; y < rows; y++) {
-      for (var x = 0; x < columns; x++) {
-        final i = (y * columns + x) * 4;
-        if (pixels![i + 3] < 65) continue;
-        final color = Color.fromARGB(
-          255,
-          pixels![i],
-          pixels![i + 1],
-          pixels![i + 2],
-        );
-        final center = origin + Offset((x + .5) * cell, (y + .5) * cell);
-        if (style.glowRadius > 0 && style.glowStrength > 0) {
-          final radius = cell * style.glowRadius;
-          final shader = halos.putIfAbsent(
-            color.toARGB32(),
-            () => ui.Gradient.radial(Offset.zero, radius, [
-              color.withValues(alpha: style.glowStrength * .55),
-              color.withValues(alpha: 0),
-            ]),
-          );
-          canvas.save();
-          canvas.translate(center.dx, center.dy);
-          paint.shader = shader;
-          canvas.drawCircle(Offset.zero, radius, paint);
-          paint.shader = null;
-          canvas.restore();
-        }
-        paint.color = color;
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromCenter(
-              center: center,
-              width: cell * .78,
-              height: cell * .78,
-            ),
-            Radius.circular(cell * .08),
-          ),
-          paint,
-        );
-      }
-    }
+    canvas.translate(
+      (size.width - cells.columns * cell) / 2,
+      (size.height - cells.rows * cell) / 2,
+    );
+    canvas.scale(cell / _spriteCell);
+    canvas.drawRawAtlas(
+      sprite!,
+      cells.transforms,
+      cells.rects,
+      cells.colors,
+      BlendMode.modulate,
+      null,
+      Paint()..filterQuality = FilterQuality.low,
+    );
     canvas.restore();
   }
 
   @override
   bool shouldRepaint(_LedPainter old) =>
-      pixels != old.pixels ||
-      columns != old.columns ||
-      rows != old.rows ||
-      style != old.style;
+      frame != old.frame || sprite != old.sprite;
 }

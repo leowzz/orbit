@@ -31,13 +31,32 @@ Note（收件箱）与 Web Node 沿用同一套浅绿背景、白色卡片与绿
 
 数据沿用 Orbit 连接；在管理台为此设备的 `overview-app` 规则配置 usage / codex 来源和展示方式。账号周限需要 Agent 启用周额度采集。循环显示由 Core 统一选择当前页面。没有对应来源数据时显示 NO DATA。视觉参考 [glow-clock](https://github.com/leowzz/glow-clock)，图标来源与许可见 [assets/matrix/README.md](assets/matrix/README.md)。
 
-真机布局测试使用独立临时数据库和明确的测试额度，不改现有收件箱连接：
+真机布局测试使用独立包名 `dev.orbit.orbit_android.benchmark`、临时数据库和明确的测试额度：
 
 ```sh
-flutter drive --no-pub --driver=test_driver/matrix_driver.dart --target=integration_test/matrix_smoke_test.dart -d <device-id>
+flutter drive --no-pub --keep-app-running --driver=test_driver/matrix_driver.dart --target=integration_test/matrix_smoke_test.dart -d <device-id>
+adb -s <device-id> uninstall dev.orbit.orbit_android.benchmark
 ```
 
-测试截图写入 `build/matrix-smoke/`。该命令安装测试入口 APK；完成后重新构建并安装普通 `lib/main.dart` APK。
+测试截图写入 `build/matrix-smoke/`。完成后只清理独立测试包，正常应用保持安装。
+
+滑块性能回归使用独立包名 `dev.orbit.orbit_android.benchmark`，Gradle 根据下方测试入口自动添加后缀。
+测试使用临时数据库和模拟显示设置，不连接服务器。先构建，再确认 APK 的 application ID
+为上述独立包名后运行；不要把正式包名的 APK 交给 `flutter drive`，它默认在测试结束时卸载应用。
+
+```sh
+flutter build apk --profile --target-platform android-arm64 --target integration_test/matrix_performance_test.dart
+MATRIX_PERF_LABEL=after flutter drive --profile --no-pub --no-dds --keep-app-running --target integration_test/matrix_performance_test.dart --driver test_driver/matrix_performance_driver.dart --use-application-binary build/app/outputs/flutter-apk/app-profile.apk -d <device>
+adb -s <device> uninstall dev.orbit.orbit_android.benchmark
+```
+
+`MATRIX_PERF_LABEL=before` / `after` 将三组固定拖动的帧耗时和预览截图写入
+`build/matrix-performance/` 下的对应目录。清理时仅卸载上述独立测试包。
+
+2026-10-15 在 137（1600×720）上用 profile 模式与上述固定数据实测：
+批量绘制与缓存后，密度、光晕范围、光晕强度拖动的平均 raster 耗时分别从
+308.7 / 311.6 / 333.0 ms 降至 7.8 / 12.1 / 11.6 ms。
+这是高密度压力场景的单帧绘制耗时，不代表所有页面或设备的帧率。
 
 ## 工具链与运行
 

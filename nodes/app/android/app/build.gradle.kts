@@ -9,6 +9,12 @@ plugins {
 
 // CI supplies a persistent release keystore through environment variables.
 val releaseStore = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
+// The performance fixture must never replace the user's installed Orbit app.
+val matrixBenchmark = providers.gradleProperty("target").orNull
+    ?.replace('\\', '/')?.let {
+        it.endsWith("integration_test/matrix_performance_test.dart") ||
+            it.endsWith("integration_test/matrix_smoke_test.dart")
+    } == true
 fun signingSecret(name: String): String = providers.environmentVariable(name).orNull
     ?.takeIf { it.isNotBlank() } ?: error("Missing Android release signing variable: $name")
 
@@ -25,6 +31,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "dev.orbit.orbit_android"
+        if (matrixBenchmark) applicationIdSuffix = ".benchmark"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
