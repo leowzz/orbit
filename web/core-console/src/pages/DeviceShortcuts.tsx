@@ -27,7 +27,6 @@ export default function DeviceShortcuts({
   const [saved, setSaved] = useState<NavigationSettings | null>(null);
   const [draft, setDraft] = useState<NavigationSettings | null>(null);
   const [endpoints, setEndpoints] = useState<ExecutionEndpoint[]>([]);
-  const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
@@ -87,12 +86,12 @@ export default function DeviceShortcuts({
       setMessage(
         publish_pending
           ? "配置已保存，连接恢复后更新设备。"
-          : "配置已保存。设备连接后同步。 ",
+          : "已保存，设备连接后同步。",
       );
     } catch (e) {
       setError(
         e instanceof APIError && e.status === 409
-          ? "配置或入口已在别处更新。草稿已保留，请重新载入后调整。"
+          ? "配置或入口已在别处更新。修改已保留，请载入最新配置后调整。"
           : "未能保存，请检查连接及执行端状态后重试。",
       );
     } finally {
@@ -118,14 +117,10 @@ export default function DeviceShortcuts({
   return (
     <div className="device-shortcuts">
       <div className="device-section panel">
-        <h2>执行端配对</h2>
-        <p>
-          入口由执行端维护，也在该端打开。每组配对独立保存，不随数据来源变化。
-        </p>
+        <h2>快捷操作来自</h2>
+        <p>选择电脑或设备，在这台设备上使用它的快捷入口。</p>
         {draft.pairs.length === 0 && (
-          <Empty title="还没有快捷配对">
-            选择一台提供快捷入口的电脑或设备。
-          </Empty>
+          <p className="field-hint">还没有添加来源，从下方选择一个即可。</p>
         )}
         {draft.pairs.map((pair, index) => {
           const endpoint = endpoints.find(
@@ -139,10 +134,7 @@ export default function DeviceShortcuts({
                 <div>
                   <strong>{endpoint?.host_label || pair.executor_id}</strong>
                   <small>
-                    {pair.executor_kind === "agent"
-                      ? "电脑 Agent"
-                      : "设备 Node"}{" "}
-                    ·{" "}
+                    {pair.executor_kind === "agent" ? "电脑" : "设备"} ·{" "}
                     {endpoint
                       ? `${entries.length} 个入口`
                       : "暂不可用，可停用或移除"}
@@ -152,7 +144,7 @@ export default function DeviceShortcuts({
                   <button
                     className="icon-button"
                     disabled={busy || revoked || index === 0}
-                    aria-label="上移配对"
+                    aria-label={`上移 ${endpoint?.host_label || pair.executor_id}`}
                     onClick={() =>
                       setDraft({
                         ...draft,
@@ -167,7 +159,7 @@ export default function DeviceShortcuts({
                     disabled={
                       busy || revoked || index === draft.pairs.length - 1
                     }
-                    aria-label="下移配对"
+                    aria-label={`下移 ${endpoint?.host_label || pair.executor_id}`}
                     onClick={() =>
                       setDraft({ ...draft, pairs: move(draft.pairs, index, 1) })
                     }
@@ -188,7 +180,7 @@ export default function DeviceShortcuts({
                   <button
                     className="icon-button"
                     disabled={busy || revoked}
-                    aria-label="移除配对"
+                    aria-label={`移除 ${endpoint?.host_label || pair.executor_id}`}
                     onClick={() =>
                       setDraft({
                         ...draft,
@@ -200,136 +192,148 @@ export default function DeviceShortcuts({
                   </button>
                 </div>
               </div>
-              <label className="inline-check">
-                <input
-                  type="checkbox"
-                  disabled={busy || revoked}
-                  checked={pair.items === null}
-                  onChange={(e) =>
-                    updatePair(index, {
-                      items: e.target.checked ? null : entries.map((i) => i.id),
-                    })
-                  }
-                />
-                全部入口，跟随执行端新增和排序
-              </label>
-              {pair.items !== null && (
-                <div className="pair-entries">
-                  {order.map((id, position) => (
-                    <div className="pair-entry" key={id}>
-                      <span>
-                        {entries.find((e) => e.id === id)?.title ??
-                          `${id}（已移除）`}
-                      </span>
-                      <button
-                        className="icon-button"
-                        disabled={busy || revoked || position === 0}
-                        aria-label="上移入口"
-                        onClick={() =>
-                          updatePair(index, {
-                            items: move(order, position, -1),
-                          })
-                        }
-                      >
-                        <ArrowUp size={15} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        disabled={
-                          busy || revoked || position === order.length - 1
-                        }
-                        aria-label="下移入口"
-                        onClick={() =>
-                          updatePair(index, { items: move(order, position, 1) })
-                        }
-                      >
-                        <ArrowDown size={15} />
-                      </button>
-                      <button
-                        className="icon-button"
-                        disabled={busy || revoked}
-                        aria-label="移除此入口"
-                        onClick={() =>
-                          updatePair(index, {
-                            items: order.filter((i) => i !== id),
-                          })
-                        }
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  ))}
-                  {entries
-                    .filter((e) => !order.includes(e.id))
-                    .map((entry) => (
-                      <button
-                        key={entry.id}
-                        disabled={busy || revoked}
-                        className="button secondary"
-                        onClick={() =>
-                          updatePair(index, { items: [...order, entry.id] })
-                        }
-                      >
-                        <Plus size={14} />
-                        {entry.title}
-                      </button>
+              <details className="pair-customize">
+                <summary>
+                  {pair.items === null
+                    ? "全部入口 · 自定义"
+                    : `已选择 ${order.length} 个入口 · 调整`}
+                </summary>
+                <label className="inline-check">
+                  <input
+                    type="checkbox"
+                    disabled={busy || revoked}
+                    checked={pair.items === null}
+                    onChange={(e) =>
+                      updatePair(index, {
+                        items: e.target.checked
+                          ? null
+                          : entries.map((i) => i.id),
+                      })
+                    }
+                  />
+                  跟随来源的全部入口与排序
+                </label>
+                {pair.items !== null && (
+                  <div className="pair-entries">
+                    {order.map((id, position) => (
+                      <div className="pair-entry" key={id}>
+                        <span>
+                          {entries.find((e) => e.id === id)?.title ??
+                            `${id}（已移除）`}
+                        </span>
+                        <button
+                          className="icon-button"
+                          disabled={busy || revoked || position === 0}
+                          aria-label="上移入口"
+                          onClick={() =>
+                            updatePair(index, {
+                              items: move(order, position, -1),
+                            })
+                          }
+                        >
+                          <ArrowUp size={15} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          disabled={
+                            busy || revoked || position === order.length - 1
+                          }
+                          aria-label="下移入口"
+                          onClick={() =>
+                            updatePair(index, {
+                              items: move(order, position, 1),
+                            })
+                          }
+                        >
+                          <ArrowDown size={15} />
+                        </button>
+                        <button
+                          className="icon-button"
+                          disabled={busy || revoked}
+                          aria-label="移除此入口"
+                          onClick={() =>
+                            updatePair(index, {
+                              items: order.filter((i) => i !== id),
+                            })
+                          }
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     ))}
-                  {order.length === 0 && <small>尚未选择入口。</small>}
-                </div>
-              )}
+                    {entries
+                      .filter((e) => !order.includes(e.id))
+                      .map((entry) => (
+                        <button
+                          key={entry.id}
+                          disabled={busy || revoked}
+                          className="button secondary"
+                          onClick={() =>
+                            updatePair(index, { items: [...order, entry.id] })
+                          }
+                        >
+                          <Plus size={14} />
+                          {entry.title}
+                        </button>
+                      ))}
+                    {order.length === 0 && <small>尚未选择入口。</small>}
+                  </div>
+                )}
+              </details>
             </section>
           );
         })}
-        <div className="pair-add">
-          <select
-            aria-label="选择执行端"
-            value={selected}
-            disabled={busy || revoked}
-            onChange={(e) => setSelected(e.target.value)}
-          >
-            <option value="">选择执行端…</option>
-            {available.map((e) => (
-              <option key={endpointKey(e)} value={endpointKey(e)}>
-                {e.host_label || e.executor_id} ·{" "}
-                {e.executor_kind === "agent" ? "Agent" : "Node"}
-              </option>
+        {available.length > 0 && (
+          <div className="endpoint-options">
+            {available.map((endpoint) => (
+              <button
+                key={endpointKey(endpoint)}
+                className="endpoint-option"
+                disabled={busy || revoked}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    pairs: [
+                      ...draft.pairs,
+                      {
+                        executor_kind: endpoint.executor_kind,
+                        executor_id: endpoint.executor_id,
+                        enabled: true,
+                        items: null,
+                      },
+                    ],
+                  })
+                }
+              >
+                <Plus size={18} />
+                <span>
+                  <strong>{endpoint.host_label || endpoint.executor_id}</strong>
+                  <small>
+                    {endpoint.executor_kind === "agent" ? "电脑" : "设备"} ·{" "}
+                    {endpoint.items.length} 个入口
+                  </small>
+                </span>
+              </button>
             ))}
-          </select>
-          <button
-            className="button secondary"
-            disabled={!selected || busy || revoked}
-            onClick={() => {
-              const e = available.find((e) => endpointKey(e) === selected);
-              if (e) {
-                setDraft({
-                  ...draft,
-                  pairs: [
-                    ...draft.pairs,
-                    {
-                      executor_kind: e.executor_kind,
-                      executor_id: e.executor_id,
-                      enabled: true,
-                      items: null,
-                    },
-                  ],
-                });
-                setSelected("");
-              }
-            }}
-          >
-            <Plus size={16} />
-            添加配对
-          </button>
-        </div>
-        <p className="field-hint">
-          电脑在 Agent 的「快捷导航」中配置入口。具备执行能力的 App Node
-          在「设置 → 本机快捷操作」中配置；在前台连接时接收请求。
-        </p>
+          </div>
+        )}
+        {endpoints.length === 0 && (
+          <Empty title="还没有可用快捷来源">
+            在电脑 Agent 的「快捷导航」或 App
+            的「本机快捷操作」中添加入口，再载入此页。
+          </Empty>
+        )}
       </div>
       <div className="device-section panel">
-        <h2>快捷栏与设备显示</h2>
-        <label className="inline-check">
+        <h2>快捷栏</h2>
+        <label className="setting-row">
+          <span>
+            <strong>显示入口名称</strong>
+            <small>在图标旁显示文字</small>
+          </span>
           <input
+            className="toggle-input"
+            role="switch"
             type="checkbox"
             checked={draft.show_titles}
             disabled={busy || revoked}
@@ -337,16 +341,20 @@ export default function DeviceShortcuts({
               setDraft({ ...draft, show_titles: e.target.checked })
             }
           />
-          显示入口标题
         </label>
-        <label className="inline-check">
+        <label className="setting-row">
+          <span>
+            <strong>置于顶部</strong>
+            <small>在内容上方显示快捷栏</small>
+          </span>
           <input
+            className="toggle-input"
+            role="switch"
             type="checkbox"
             checked={draft.at_top}
             disabled={busy || revoked}
             onChange={(e) => setDraft({ ...draft, at_top: e.target.checked })}
           />
-          导航栏置顶
         </label>
         {nfcd && (
           <label className="device-padding">
@@ -373,29 +381,41 @@ export default function DeviceShortcuts({
           {error}
         </div>
       )}
-      {message && (
+      {message && !dirty && (
         <div className="banner success" role="status">
           {message}
         </div>
       )}
       <div className="device-save">
-        <span>{dirty ? "有未保存的修改" : `修订 ${draft.revision}`}</span>
+        <span>{dirty ? "有未保存的修改" : "已保存"}</span>
+        {dirty && (
+          <button
+            className="button"
+            disabled={busy}
+            onClick={() => {
+              setDraft(saved);
+              setError("");
+            }}
+          >
+            撤销修改
+          </button>
+        )}
         <button
           className="button secondary"
           disabled={busy}
           onClick={() => {
-            if (!dirty || window.confirm("重新载入会放弃当前草稿，继续？"))
+            if (!dirty || window.confirm("载入最新配置会放弃当前修改，继续？"))
               void load();
           }}
         >
-          重新载入
+          载入最新配置
         </button>
         <button
           className="button primary"
           disabled={busy || !dirty || revoked}
           onClick={() => void save()}
         >
-          {busy ? "保存中…" : "保存并应用"}
+          {busy ? "保存中…" : "保存修改"}
         </button>
       </div>
     </div>

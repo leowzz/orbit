@@ -1,21 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, Plus, Search, Settings2 } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Plus, Search } from "lucide-react";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
-import {
-  api,
-  date,
-  modelName,
-  displayMode,
-  displayModes,
-  sessionsEnabled,
-} from "../api";
+import { api, date, modelName } from "../api";
 import { Badge, DeviceIcon, Empty, PageHead } from "../components";
-import { Editor, type Target } from "./Routing";
+import DeviceContent from "./DeviceContent";
 import Apps, { DeviceForm, TokenDialog } from "./Apps";
 import DeviceShortcuts from "./DeviceShortcuts";
 
-type Device = Target & { app?: AppDevice; model: string; discovered: boolean };
+type Device = {
+  id: string;
+  label: string;
+  profile: string;
+  revoked?: boolean;
+  app?: AppDevice;
+  model: string;
+  discovered: boolean;
+};
 export default function Nodes({
   state,
   document,
@@ -33,9 +34,7 @@ export default function Nodes({
     [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all");
   const [tab, setTab] = useState("content"),
-    [editing, setEditing] = useState(false),
-    [creating, setCreating] = useState(false),
-    [preconfigure, setPreconfigure] = useState(false);
+    [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<{ id: string; token: string } | null>(
     null,
   );
@@ -66,7 +65,6 @@ export default function Nodes({
   }, [load]);
   useEffect(() => {
     setTab("content");
-    setEditing(false);
   }, [nodeId]);
   const devices = new Map<string, Device>();
   for (const node of state.nodes)
@@ -109,7 +107,6 @@ export default function Nodes({
       });
   const current = nodeId ? devices.get(nodeId) : null;
   const targets = [...devices.values()];
-  const route = nodeId ? document.routes[nodeId] : undefined;
   const node = state.nodes.find((n) => n.nodeId === nodeId);
   const filtered = targets.filter(
     (d) =>
@@ -164,68 +161,17 @@ export default function Nodes({
                 ))}
               </div>
             </div>
-            {tab === "content" && (
-              <div className="device-section panel">
-                <div className="device-section-head">
-                  <h2>数据内容与展示</h2>
-                  <button
-                    className="button secondary"
-                    disabled={current.revoked || appDevices === null}
-                    onClick={() => setEditing(true)}
-                  >
-                    <Settings2 size={16} />
-                    {route ? "调整配置" : "配置数据内容"}
-                  </button>
-                </div>
-                {route ? (
-                  <>
-                    <dl className="device-facts">
-                      <div>
-                        <dt>指标展示</dt>
-                        <dd>
-                          {displayModes.find(
-                            (m) => m.value === displayMode(route),
-                          )?.label ?? "综合展示"}
-                          {displayMode(route) === "rotating"
-                            ? ` · 每 ${route.rotation_seconds || 3} 秒`
-                            : ""}
-                        </dd>
-                      </div>
-                      {route.inputs.map((input) => (
-                        <div key={input.observation_type}>
-                          <dt>
-                            {input.observation_type === "usage"
-                              ? "API 用量来源"
-                              : "Codex 来源"}
-                          </dt>
-                          <dd>
-                            {state.agents.find((a) => a.id === input.agent_id)
-                              ?.state.hostLabel || input.agent_id}
-                          </dd>
-                        </div>
-                      ))}
-                      {!route.profile.endsWith("-oled-128x32") && (
-                        <div>
-                          <dt>会话详情与会话打开操作</dt>
-                          <dd>
-                            {sessionsEnabled(route)
-                              ? "已开启（仍需本机允许执行）"
-                              : "已关闭"}
-                          </dd>
-                        </div>
-                      )}
-                    </dl>
-                    <p className="field-hint">
-                      更换这里的数据来源不会改变快捷配对。
-                    </p>
-                  </>
-                ) : (
-                  <Empty title="尚未设置数据内容">
-                    需要状态摘要时，在这里选择来源。不影响收件箱和独立快捷操作。
-                  </Empty>
-                )}
-              </div>
-            )}
+            <div hidden={tab !== "content"}>
+              <DeviceContent
+                key={current.id}
+                nodeId={current.id}
+                profile={current.profile}
+                revoked={!!current.revoked || appDevices === null}
+                state={state}
+                document={document}
+                onChange={onChange}
+              />
+            </div>
             <div hidden={tab !== "shortcuts"}>
               {current.model === "oled-128x32" ? (
                 <div className="panel device-section">
@@ -295,20 +241,6 @@ export default function Nodes({
                 </div>
               </>
             )}
-            {editing && (
-              <Editor
-                key={current.id}
-                editing={{ id: current.id, route }}
-                state={state}
-                targets={targets}
-                document={document}
-                onClose={() => setEditing(false)}
-                onSaved={(d) => {
-                  onChange(d);
-                  setEditing(false);
-                }}
-              />
-            )}
           </>
         ) : (
           <Empty title={appDevices === null ? "正在读取设备…" : "未找到设备"}>
@@ -319,23 +251,16 @@ export default function Nodes({
         <>
           <PageHead
             title="设备"
-            description="选择一台设备，配置它的数据内容、快捷操作和连接访问。"
+            description="选择设备，管理显示内容和快捷操作。"
             action={
               <>
-                <button
-                  className="button secondary"
-                  disabled={appDevices === null}
-                  onClick={() => setPreconfigure(true)}
-                >
-                  预配置设备
-                </button>
                 <button
                   className="button primary"
                   disabled={!enabled || appDevices === null}
                   onClick={() => setCreating(true)}
                 >
                   <Plus size={16} />
-                  添加 App 设备
+                  添加设备
                 </button>
               </>
             }
@@ -397,7 +322,6 @@ export default function Nodes({
                       ? "已设置数据内容"
                       : "尚未设置数据内容"}
                   </span>
-                  <small>快捷操作独立配置</small>
                 </div>
                 <Link
                   className="node-link"
@@ -410,31 +334,28 @@ export default function Nodes({
             ))}
           </div>
           {!filtered.length && (
-            <Empty title="没有匹配的设备">
-              添加 App 设备，或等待 MQTT 设备发布自描述。
+            <Empty
+              title={
+                appDevices === null
+                  ? error
+                    ? "暂时无法加载设备"
+                    : "正在加载设备…"
+                  : query || filter !== "all"
+                    ? "没有匹配的设备"
+                    : "连接第一台设备"
+              }
+            >
+              {error && appDevices === null
+                ? "请重试加载设备列表。"
+                : query || filter !== "all"
+                  ? "试试其他名称，或切换到全部设备。"
+                  : "添加 Orbit App 设备；显示屏接入后会自动出现在这里。"}
             </Empty>
           )}
-          {!enabled && (
+          {!enabled && appDevices !== null && (
             <p className="footnote">App 服务尚未启用；当前可查看 MQTT 设备。</p>
           )}
         </>
-      )}
-      {preconfigure && (
-        <Editor
-          editing={{ id: "" }}
-          state={state}
-          targets={targets}
-          document={document}
-          onClose={() => setPreconfigure(false)}
-          onSaved={(d) => {
-            const added = Object.keys(d.routes).find(
-              (id) => !document.routes[id],
-            );
-            onChange(d);
-            setPreconfigure(false);
-            if (added) navigate(`/nodes/${encodeURIComponent(added)}`);
-          }}
-        />
       )}
       {creating && (
         <DeviceForm
