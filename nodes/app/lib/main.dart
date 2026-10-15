@@ -15,6 +15,7 @@ import 'local_store.dart';
 import 'orbit_home.dart';
 import 'connection_config.dart';
 import 'scan_connection_screen.dart';
+import 'app_viewport.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -138,6 +139,7 @@ class _OrbitAppState extends State<OrbitApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Orbit',
     debugShowCheckedModeBanner: false,
+    builder: (context, child) => AppViewport(child: child!),
     theme: ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,

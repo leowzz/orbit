@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'app_viewport.dart';
 import 'inbox_controller.dart';
 import 'local_store.dart';
 
@@ -387,6 +388,7 @@ class _InboxScreenState extends State<InboxScreen> {
           ValueKey<String>(visible[i]['id']): drafts.length + i,
       };
       final wide = MediaQuery.sizeOf(context).width > 600;
+      final compact = AppViewport.compactOf(context);
       final theme = Theme.of(context);
       final shape = RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(9),
@@ -451,7 +453,7 @@ class _InboxScreenState extends State<InboxScreen> {
         ),
         child: Scaffold(
           appBar: AppBar(
-            toolbarHeight: wide ? 76 : 66,
+            toolbarHeight: compact ? 48 : (wide ? 76 : 66),
             titleSpacing: wide ? 24 : 12,
             title: searching
                 ? _searchField()
@@ -662,7 +664,7 @@ class _InboxScreenState extends State<InboxScreen> {
                       duration: const Duration(milliseconds: 200),
                       alignment: Alignment.bottomCenter,
                       child: Visibility(
-                        visible: !reading,
+                        visible: !reading && !compact,
                         maintainState: true,
                         child: Padding(
                           padding: EdgeInsets.fromLTRB(

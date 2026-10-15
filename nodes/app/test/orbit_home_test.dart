@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_app/orbit_home.dart';
+import 'package:orbit_app/app_viewport.dart';
 import 'package:orbit_app/inbox_controller.dart';
 import 'package:orbit_app/inbox_screen.dart';
 import 'package:orbit_app/local_store.dart';
@@ -128,6 +129,88 @@ void main() {
       },
     );
   }
+
+  testWidgets(
+    'short landscape is a viewing layout with search and no composer',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 312);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      late Directory dir;
+      late InboxController controller;
+      await tester.runAsync(() async {
+        dir = await Directory.systemTemp.createTemp('orbit-short-display-');
+        final local = await LocalStore.open(
+          databaseFactoryFfi,
+          '${dir.path}/cache.sqlite',
+        );
+        await local.applyPage(
+          page(
+            '1',
+            List.generate(
+              12,
+              (i) => {...item('1', body: '查看消息 $i'), 'id': 'message-$i'},
+            ),
+          ),
+        );
+        await local.setMeta('draft', '保留原来的草稿');
+        controller = InboxController(
+          local,
+          'https://example.test',
+          'token',
+          dir.path,
+        );
+        await controller.load();
+      });
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => AppViewport(child: child!),
+          home: OrbitHome(
+            widgetsEnabled: false,
+            inbox: InboxScreen(controller: controller),
+          ),
+        ),
+      );
+      await tester.runAsync(() => controller.local.meta('draft'));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(find.byKey(const ValueKey('composer')), findsNothing);
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('发送'), findsNothing);
+      expect(find.text('添加图片'), findsNothing);
+      final list = find.byKey(const PageStorageKey('inbox'));
+      expect(tester.getSize(list).height, greaterThan(300));
+      await tester.drag(list, const Offset(0, -120));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationRail), findsOneWidget);
+      expect(find.byKey(const ValueKey('composer')), findsNothing);
+      await tester.tap(find.byTooltip('搜索消息'));
+      tester.view.viewInsets = const FakeViewPadding(bottom: 222);
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(TextField, '搜索文字、链接…').hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('composer')), findsNothing);
+      await tester.tap(find.byTooltip('关闭搜索'));
+      await tester.runAsync(() => controller.load());
+      tester.view.viewInsets = const FakeViewPadding();
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      tester.view.physicalSize = const Size(360, 800);
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byKey(const ValueKey('composer')), findsOneWidget);
+      expect(find.text('保留原来的草稿'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() async {
+        await controller.close();
+        await dir.delete(recursive: true);
+      });
+    },
+  );
 
   for (final width in [360.0, 900.0]) {
     testWidgets('inbox chrome follows scroll and preserves draft at $width', (

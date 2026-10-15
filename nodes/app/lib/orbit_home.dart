@@ -4,6 +4,7 @@ import 'inbox_screen.dart' show InboxReadingNotification;
 import 'inbox_controller.dart';
 import 'input_method_tools.dart';
 import 'matrix_screen.dart';
+import 'app_viewport.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -63,6 +64,26 @@ class _OrbitHomeState extends State<OrbitHome> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = AppViewport.compactOf(context);
+    final pages = IndexedStack(
+      index: selected,
+      children: [
+        widget.inbox,
+        _ConnectionStatus(
+          controller: widget.controller,
+          widgetsEnabled: widget.widgetsEnabled,
+        ),
+        _AppSettings(
+          controller: widget.controller,
+          onSettings: widget.onSettings,
+        ),
+      ],
+    );
+    void select(int value) => setState(() {
+      selected = value;
+      reading = false;
+    });
+
     return Scaffold(
       body: NotificationListener<InboxReadingNotification>(
         onNotification: (notification) {
@@ -71,51 +92,66 @@ class _OrbitHomeState extends State<OrbitHome> {
           }
           return true;
         },
-        child: IndexedStack(
-          index: selected,
+        child: Row(
           children: [
-            widget.inbox,
-            _ConnectionStatus(
-              controller: widget.controller,
-              widgetsEnabled: widget.widgetsEnabled,
-            ),
-            _AppSettings(
-              controller: widget.controller,
-              onSettings: widget.onSettings,
-            ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: AnimatedSize(
-        duration: const Duration(milliseconds: 200),
-        alignment: Alignment.bottomCenter,
-        child: reading && selected == 0
-            ? const SizedBox.shrink()
-            : NavigationBar(
+            if (compact)
+              NavigationRail(
+                minWidth: 80,
+                scrollable: true,
+                labelType: NavigationRailLabelType.all,
                 selectedIndex: selected,
-                onDestinationSelected: (value) => setState(() {
-                  selected = value;
-                  reading = false;
-                }),
-                destinations: [
-                  const NavigationDestination(
+                onDestinationSelected: select,
+                destinations: const [
+                  NavigationRailDestination(
                     icon: Icon(Icons.inbox_outlined),
                     selectedIcon: Icon(Icons.inbox),
-                    label: '收件箱',
+                    label: Text('收件箱'),
                   ),
-                  const NavigationDestination(
+                  NavigationRailDestination(
                     icon: Icon(Icons.widgets_outlined),
                     selectedIcon: Icon(Icons.widgets),
-                    label: '数据展示',
+                    label: Text('数据展示'),
                   ),
-                  const NavigationDestination(
+                  NavigationRailDestination(
                     icon: Icon(Icons.settings_outlined),
                     selectedIcon: Icon(Icons.settings),
-                    label: '设置',
+                    label: Text('设置'),
                   ),
                 ],
               ),
+            Expanded(child: pages),
+          ],
+        ),
       ),
+      bottomNavigationBar: compact
+          ? null
+          : AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              alignment: Alignment.bottomCenter,
+              child: reading && selected == 0
+                  ? const SizedBox.shrink()
+                  : NavigationBar(
+                      selectedIndex: selected,
+                      onDestinationSelected: select,
+                      destinations: [
+                        const NavigationDestination(
+                          icon: Icon(Icons.inbox_outlined),
+                          selectedIcon: Icon(Icons.inbox),
+                          label: '收件箱',
+                        ),
+                        const NavigationDestination(
+                          icon: Icon(Icons.widgets_outlined),
+                          selectedIcon: Icon(Icons.widgets),
+                          label: '数据展示',
+                        ),
+                        const NavigationDestination(
+                          icon: Icon(Icons.settings_outlined),
+                          selectedIcon: Icon(Icons.settings),
+                          label: '设置',
+                        ),
+                      ],
+                    ),
+            ),
     );
   }
 }
