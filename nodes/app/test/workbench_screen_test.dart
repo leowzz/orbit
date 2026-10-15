@@ -372,6 +372,15 @@ void main() {
     testWidgets(
       'Alipay Box shows exactly four rows with navigation at top=$atTop',
       (tester) async {
+        final font = Platform.environment['WORKBENCH_PREVIEW_FONT'];
+        if (font != null && File(font).existsSync()) {
+          await tester.runAsync(() async {
+            final bytes = await File(font).readAsBytes();
+            await (FontLoader(
+              'Preview',
+            )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+          });
+        }
         deviceModel = 'NFCD_AlipayBoxN5DEL';
         tester.view.physicalSize = const Size(1600, 720);
         tester.view.devicePixelRatio = 2;
@@ -380,6 +389,11 @@ void main() {
         controller.navigation['at_top'] = atTop;
         await tester.pumpWidget(
           MaterialApp(
+            theme: orbitTheme(Brightness.light).copyWith(
+              textTheme: orbitTheme(
+                Brightness.light,
+              ).textTheme.apply(fontFamily: font == null ? null : 'Preview'),
+            ),
             builder: (_, child) => AppViewport(child: child!),
             home: OrbitHome(
               widgetsEnabled: false,
@@ -433,6 +447,49 @@ void main() {
       },
     );
   }
+  testWidgets('short non-fullscreen cards tolerate larger system insets', (
+    tester,
+  ) async {
+    deviceModel = 'NFCD_AlipayBoxN5DEL';
+    tester.view.physicalSize = const Size(1600, 720);
+    tester.view.devicePixelRatio = 2;
+    tester.view.padding = const FakeViewPadding(top: 48, bottom: 136);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orbitTheme(Brightness.light),
+        builder: (_, child) => AppViewport(child: child!),
+        home: OrbitHome(
+          widgetsEnabled: false,
+          controller: controller,
+          inbox: const Text('消息'),
+        ),
+      ),
+    );
+    await tester.tap(find.text('工作台'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final first = find.byKey(const ValueKey('session-session-0'));
+    final bounds = tester.getRect(first);
+    for (final text
+        in find.descendant(of: first, matching: find.byType(Text)).evaluate()) {
+      expect(
+        tester.getRect(find.byWidget(text.widget)).bottom,
+        lessThanOrEqualTo(bounds.bottom),
+      );
+    }
+    await tester.drag(
+      find.byKey(const PageStorageKey('workbench-sessions')),
+      const Offset(0, -180),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('session-session-8')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('same resolution on another Android model keeps adaptive cards', (
     tester,
   ) async {

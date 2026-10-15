@@ -464,7 +464,12 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
       builder: (context, bounds) {
         if (fourRows) {
           const gap = 6.0;
-          final height = (bounds.viewportMainAxisExtent - 3 * gap) / 4;
+          // System bars can leave too little room for four complete cards.
+          // Keep both text rows readable and let the grid scroll in that case.
+          final height = math.max(
+            52.0,
+            (bounds.viewportMainAxisExtent - 3 * gap) / 4,
+          );
           return SliverGrid(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -512,7 +517,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     // Keep breathing room without overflowing the four-row layout outside fullscreen.
     final verticalPadding = rowHeight == null
         ? 8.0
-        : ((rowHeight - 42) / 2).clamp(4.0, 10.0);
+        : ((rowHeight - 46) / 2).clamp(2.0, 10.0);
     final titleLines =
         rowHeight == null || rowHeight - verticalPadding * 2 >= 64 ? 2 : 1;
     final running = session['status'] == 'CODEX_SESSION_STATUS_RUNNING';

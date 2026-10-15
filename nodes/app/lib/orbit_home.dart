@@ -35,23 +35,25 @@ class OrbitHome extends StatefulWidget {
 class _OrbitHomeState extends State<OrbitHome> {
   int selected = 0;
   bool reading = false;
+  bool showingMatrix = false;
+  bool restoreMatrixFullscreen = false;
 
   static const channel = MethodChannel('dev.orbit/node');
   @override
   void initState() {
     super.initState();
     selected = widget.initialLocation.tab;
+    showingMatrix =
+        widget.initialLocation == AppLocation.matrix ||
+        widget.initialLocation == AppLocation.matrixFullscreen;
+    restoreMatrixFullscreen =
+        widget.initialLocation == AppLocation.matrixFullscreen;
     syncConnection();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       switch (widget.initialLocation) {
         case AppLocation.workbenchFullscreen:
           openWorkbench();
-        case AppLocation.matrix:
-        case AppLocation.matrixFullscreen:
-          openMatrix(
-            fullscreen: widget.initialLocation == AppLocation.matrixFullscreen,
-          );
         default:
           break;
       }
@@ -69,22 +71,17 @@ class _OrbitHomeState extends State<OrbitHome> {
     if (mounted) widget.onLocationChanged?.call(AppLocation.workbench);
   }
 
-  Future<void> openMatrix({bool fullscreen = false}) async {
-    widget.onLocationChanged?.call(
-      fullscreen ? AppLocation.matrixFullscreen : AppLocation.matrix,
-    );
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => MatrixScreen(
-          controller: widget.controller,
-          initialFullscreen: fullscreen,
-          onFullscreenChanged: (value) => widget.onLocationChanged?.call(
-            value ? AppLocation.matrixFullscreen : AppLocation.matrix,
-          ),
-        ),
-      ),
-    );
-    if (mounted) widget.onLocationChanged?.call(AppLocation.data);
+  void openMatrix() {
+    setState(() {
+      showingMatrix = true;
+      restoreMatrixFullscreen = false;
+    });
+    widget.onLocationChanged?.call(AppLocation.matrix);
+  }
+
+  void closeMatrix() {
+    setState(() => showingMatrix = false);
+    widget.onLocationChanged?.call(AppLocation.data);
   }
 
   @override
@@ -125,11 +122,20 @@ class _OrbitHomeState extends State<OrbitHome> {
           controller: widget.controller,
           onEnterFullscreen: openWorkbench,
         ),
-        _ConnectionStatus(
-          controller: widget.controller,
-          widgetsEnabled: widget.widgetsEnabled,
-          onMatrix: openMatrix,
-        ),
+        showingMatrix
+            ? MatrixScreen(
+                controller: widget.controller,
+                initialFullscreen: restoreMatrixFullscreen,
+                onBack: closeMatrix,
+                onFullscreenChanged: (value) => widget.onLocationChanged?.call(
+                  value ? AppLocation.matrixFullscreen : AppLocation.matrix,
+                ),
+              )
+            : _ConnectionStatus(
+                controller: widget.controller,
+                widgetsEnabled: widget.widgetsEnabled,
+                onMatrix: openMatrix,
+              ),
         _AppSettings(
           controller: widget.controller,
           onSettings: widget.onSettings,
@@ -140,88 +146,95 @@ class _OrbitHomeState extends State<OrbitHome> {
       setState(() {
         selected = value;
         reading = false;
+        showingMatrix = false;
       });
       widget.onLocationChanged?.call(AppLocation.fromTab(value));
     }
 
-    return Scaffold(
-      body: NotificationListener<InboxReadingNotification>(
-        onNotification: (notification) {
-          if (selected == 0 && reading != notification.reading) {
-            setState(() => reading = notification.reading);
-          }
-          return true;
-        },
-        child: Row(
-          children: [
-            if (compact)
-              NavigationRail(
-                minWidth: 80,
-                scrollable: true,
-                labelType: NavigationRailLabelType.all,
-                selectedIndex: selected,
-                onDestinationSelected: select,
-                destinations: const [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.inbox_outlined),
-                    selectedIcon: Icon(Icons.inbox),
-                    label: Text('收件箱'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.dashboard_outlined),
-                    selectedIcon: Icon(Icons.dashboard),
-                    label: Text('工作台'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.widgets_outlined),
-                    selectedIcon: Icon(Icons.widgets),
-                    label: Text('数据展示'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.settings_outlined),
-                    selectedIcon: Icon(Icons.settings),
-                    label: Text('设置'),
-                  ),
-                ],
-              ),
-            Expanded(child: pages),
-          ],
-        ),
-      ),
-      bottomNavigationBar: compact
-          ? null
-          : AnimatedSize(
-              duration: const Duration(milliseconds: 200),
-              alignment: Alignment.bottomCenter,
-              child: reading && selected == 0
-                  ? const SizedBox.shrink()
-                  : NavigationBar(
-                      selectedIndex: selected,
-                      onDestinationSelected: select,
-                      destinations: [
-                        const NavigationDestination(
-                          icon: Icon(Icons.inbox_outlined),
-                          selectedIcon: Icon(Icons.inbox),
-                          label: '收件箱',
-                        ),
-                        const NavigationDestination(
-                          icon: Icon(Icons.dashboard_outlined),
-                          selectedIcon: Icon(Icons.dashboard),
-                          label: '工作台',
-                        ),
-                        const NavigationDestination(
-                          icon: Icon(Icons.widgets_outlined),
-                          selectedIcon: Icon(Icons.widgets),
-                          label: '数据展示',
-                        ),
-                        const NavigationDestination(
-                          icon: Icon(Icons.settings_outlined),
-                          selectedIcon: Icon(Icons.settings),
-                          label: '设置',
-                        ),
-                      ],
+    return PopScope(
+      canPop: !showingMatrix,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && showingMatrix) closeMatrix();
+      },
+      child: Scaffold(
+        body: NotificationListener<InboxReadingNotification>(
+          onNotification: (notification) {
+            if (selected == 0 && reading != notification.reading) {
+              setState(() => reading = notification.reading);
+            }
+            return true;
+          },
+          child: Row(
+            children: [
+              if (compact)
+                NavigationRail(
+                  minWidth: 80,
+                  scrollable: true,
+                  labelType: NavigationRailLabelType.all,
+                  selectedIndex: selected,
+                  onDestinationSelected: select,
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.inbox_outlined),
+                      selectedIcon: Icon(Icons.inbox),
+                      label: Text('收件箱'),
                     ),
-            ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.dashboard_outlined),
+                      selectedIcon: Icon(Icons.dashboard),
+                      label: Text('工作台'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.widgets_outlined),
+                      selectedIcon: Icon(Icons.widgets),
+                      label: Text('数据展示'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: Text('设置'),
+                    ),
+                  ],
+                ),
+              Expanded(child: pages),
+            ],
+          ),
+        ),
+        bottomNavigationBar: compact
+            ? null
+            : AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                alignment: Alignment.bottomCenter,
+                child: reading && selected == 0
+                    ? const SizedBox.shrink()
+                    : NavigationBar(
+                        selectedIndex: selected,
+                        onDestinationSelected: select,
+                        destinations: [
+                          const NavigationDestination(
+                            icon: Icon(Icons.inbox_outlined),
+                            selectedIcon: Icon(Icons.inbox),
+                            label: '收件箱',
+                          ),
+                          const NavigationDestination(
+                            icon: Icon(Icons.dashboard_outlined),
+                            selectedIcon: Icon(Icons.dashboard),
+                            label: '工作台',
+                          ),
+                          const NavigationDestination(
+                            icon: Icon(Icons.widgets_outlined),
+                            selectedIcon: Icon(Icons.widgets),
+                            label: '数据展示',
+                          ),
+                          const NavigationDestination(
+                            icon: Icon(Icons.settings_outlined),
+                            selectedIcon: Icon(Icons.settings),
+                            label: '设置',
+                          ),
+                        ],
+                      ),
+              ),
+      ),
     );
   }
 }

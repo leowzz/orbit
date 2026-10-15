@@ -133,6 +133,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('点阵屏'));
       await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.byType(BackButton), findsOneWidget);
       expect(await AppLocationStore().read(), AppLocation.matrix);
       await tester.pumpWidget(const SizedBox());
       await tester.pumpAndSettle();
@@ -157,9 +159,11 @@ void main() {
       await tester.pumpWidget(const OrbitApp());
       await tester.pumpAndSettle();
       expect(find.byType(MatrixFullscreen), findsOneWidget);
+      expect(find.byType(NavigationBar), findsNothing);
       await tester.tapAt(tester.getCenter(find.byType(MatrixFullscreen)));
       await tester.pumpAndSettle();
       expect(await AppLocationStore().read(), AppLocation.matrix);
+      expect(find.byType(NavigationBar), findsOneWidget);
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(await AppLocationStore().read(), AppLocation.data);
@@ -171,4 +175,50 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('matrix stays inside the landscape navigation rail', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 720);
+    tester.view.devicePixelRatio = 2;
+    tester.view.padding = const FakeViewPadding(top: 48, bottom: 96);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(const OrbitApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('数据展示'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('点阵屏'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationRail).hitTestable(), findsOneWidget);
+    expect(find.byType(MatrixScreen), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(MatrixScreen)).left,
+      tester.getRect(find.byType(NavigationRail)).right,
+    );
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(MatrixScreen), findsNothing);
+    expect(await AppLocationStore().read(), AppLocation.data);
+    await tester.tap(find.text('点阵屏'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const OrbitApp());
+    await tester.pumpAndSettle();
+    expect(find.byType(MatrixScreen), findsOneWidget);
+    expect(find.byType(NavigationRail).hitTestable(), findsOneWidget);
+    await tester.tap(find.text('横向全屏'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationRail), findsNothing);
+    await tester.tapAt(tester.getCenter(find.byType(MatrixFullscreen)));
+    await tester.pumpAndSettle();
+    expect(find.byType(NavigationRail).hitTestable(), findsOneWidget);
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MatrixScreen), findsNothing);
+    expect(find.text('连接设置'), findsOneWidget);
+    expect(await AppLocationStore().read(), AppLocation.settings);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
 }

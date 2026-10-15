@@ -10,11 +10,13 @@ import 'matrix_display.dart';
 class MatrixScreen extends StatefulWidget {
   final InboxController? controller;
   final bool initialFullscreen;
+  final VoidCallback? onBack;
   final ValueChanged<bool>? onFullscreenChanged;
   const MatrixScreen({
     super.key,
     this.controller,
     this.initialFullscreen = false,
+    this.onBack,
     this.onFullscreenChanged,
   });
   @override
@@ -188,6 +190,9 @@ class _MatrixScreenState extends State<MatrixScreen> {
         : '轻触全屏返回设置；展示方式与来源在管理台的转发规则中设置。';
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onBack == null
+            ? null
+            : BackButton(onPressed: widget.onBack),
         title: const Text('点阵屏'),
         toolbarHeight: shortLandscape ? 44 : kToolbarHeight,
       ),
