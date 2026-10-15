@@ -23,8 +23,6 @@ jobs:
         include:
           - os: macos-15
             bundle: app
-          - os: windows-2022
-            bundle: nsis
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     defaults:
