@@ -1,10 +1,13 @@
 package core
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
+
+	"orbit/internal/inbox"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
 
@@ -20,6 +23,10 @@ const (
 func (e *Engine) CommandForIntent(now time.Time, intent *orbitv1.Intent) (*orbitv1.Command, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.commandForIntentLocked(now, intent, false)
+}
+
+func (e *Engine) commandForIntentLocked(now time.Time, intent *orbitv1.Intent, app bool) (*orbitv1.Command, error) {
 	if intent == nil || intent.Metadata == nil || intent.IntentId == "" || len(intent.IntentId) > 128 ||
 		intent.NodeEpoch == "" || intent.ViewRevision == 0 {
 		return nil, errors.New("invalid intent")
@@ -45,27 +52,31 @@ func (e *Engine) CommandForIntent(now time.Time, intent *orbitv1.Intent) (*orbit
 		return nil, fmt.Errorf("normalize intent: %w", err)
 	}
 	fingerprint := sha256.Sum256(normalized)
+	profile := webProfile
+	if app {
+		profile = appProfile
+	}
 	cacheKey := metadata.ProducerId + "\x00" + intent.IntentId
 	if cached, exists := e.intentCommands[cacheKey]; exists {
 		if cached.fingerprint != fingerprint {
 			return nil, errors.New("intent id was reused with different content")
 		}
 		route := e.routeForNode(metadata.ProducerId)
-		if route == nil || route.Profile != webProfile || !routeHasInput(*route, cached.command.TargetAgentId, orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
+		if route == nil || route.Profile != profile || !route.sessionsEnabled() || !routeHasInput(*route, cached.command.TargetAgentId, orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
 			return nil, errors.New("intent route has changed")
 		}
 		return proto.Clone(cached.command).(*orbitv1.Command), nil
 	}
 
 	node, exists := e.nodes[metadata.ProducerId]
-	if !exists || node.epoch != intent.NodeEpoch {
+	if !app && (!exists || node.epoch != intent.NodeEpoch) {
 		return nil, errors.New("intent does not belong to the current node epoch")
 	}
 	if intent.ViewRevision > e.viewRevision[metadata.ProducerId] {
 		return nil, errors.New("intent references an unknown view revision")
 	}
 	route := e.routeForNode(metadata.ProducerId)
-	if route == nil || route.Profile != webProfile {
+	if route == nil || route.Profile != profile || !route.sessionsEnabled() {
 		return nil, errors.New("node is not allowed to open Codex sessions")
 	}
 	action := intent.GetOpenCodexSession()
@@ -126,4 +137,32 @@ func (e *Engine) CommandForIntent(now time.Time, intent *orbitv1.Intent) (*orbit
 		command:     proto.Clone(command).(*orbitv1.Command),
 	}
 	return command, nil
+}
+
+// OpenAppCodexSession accepts only the identity authenticated by the App API.
+// HTTP devices have no MQTT node epoch; bind their view to the current Core epoch.
+func (r *Runner) OpenAppCodexSession(ctx context.Context, node, session, epoch string, revision uint64) (string, error) {
+	r.operations.Lock()
+	defer r.operations.Unlock()
+	now := r.now().UTC()
+	e := r.engine
+	e.mu.Lock()
+	if epoch != e.config.CoreEpoch {
+		e.mu.Unlock()
+		return "", &inbox.Fault{Code: "session_unavailable"}
+	}
+	intent := &orbitv1.Intent{
+		Metadata: &orbitv1.Metadata{MessageId: newID(), ProducerId: node, Revision: 1, ProducedAt: timestamppb.New(now), ExpiresAt: timestamppb.New(now.Add(maxIntentTTL))},
+		IntentId: newID(), NodeEpoch: epoch, ViewRevision: revision,
+		Action: &orbitv1.Intent_OpenCodexSession{OpenCodexSession: &orbitv1.OpenCodexSessionIntent{SessionId: session}},
+	}
+	command, err := e.commandForIntentLocked(now, intent, true)
+	e.mu.Unlock()
+	if err != nil {
+		return "", &inbox.Fault{Code: "session_unavailable"}
+	}
+	if err := r.publishCommand(ctx, node, command); err != nil {
+		return "", err
+	}
+	return intent.IntentId, nil
 }

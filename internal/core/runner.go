@@ -107,6 +107,10 @@ func (r *Runner) handleIntent(ctx context.Context, message mqtt.Message) error {
 	if err != nil {
 		return err
 	}
+	return r.publishCommand(ctx, nodeID, command)
+}
+
+func (r *Runner) publishCommand(ctx context.Context, nodeID string, command *orbitv1.Command) error {
 	payload, err := proto.Marshal(command)
 	if err != nil {
 		return fmt.Errorf("marshal command: %w", err)

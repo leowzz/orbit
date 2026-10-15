@@ -124,7 +124,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	}
 
 	if cfg.App.Listen == "" {
-		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, nil, nil)
+		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, nil, nil, nil)
 	}
 	inboxStore, err := inbox.Open(cfg.App.DataDir)
 	if err != nil {
@@ -151,7 +151,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	go func() { serverErr <- server.Serve(listener) }()
 	go api.Sweep(ctx)
 	go func() {
-		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, api.AdminHandler(), api.Handler()); err != nil && ctx.Err() == nil {
+		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, api.AdminHandler(), api.Handler(), api); err != nil && ctx.Err() == nil {
 			if cfg.MQTT.URL == "" {
 				serverErr <- err
 				return
@@ -174,7 +174,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	return err
 }
 
-func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time, admin, personal http.Handler) error {
+func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time, admin, personal http.Handler, api *appapi.Server) error {
 	if cfg.MQTT.URL == "" {
 		return runInboxConsole(ctx, cfg, engine, store, admin, personal, logger)
 	}
@@ -197,6 +197,10 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 	runner, err := core.NewRunner(engine, client, logger, now)
 	if err != nil {
 		return err
+	}
+	if api != nil {
+		api.SetSessionOpener(runner.OpenAppCodexSession)
+		defer api.SetSessionOpener(nil)
 	}
 	listener, err := net.Listen("tcp", cfg.Console.Listen)
 	if err != nil {

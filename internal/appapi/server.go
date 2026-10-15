@@ -24,13 +24,14 @@ import (
 )
 
 type Server struct {
-	store    *inbox.Store
-	devices  map[string]config.AppDevice
-	activity map[string]*deviceActivity
-	status   func(string) json.RawMessage
-	files    string
-	mu       sync.Mutex
-	wake     chan struct{}
+	store       *inbox.Store
+	devices     map[string]config.AppDevice
+	activity    map[string]*deviceActivity
+	status      func(string) json.RawMessage
+	openSession func(context.Context, string, string, string, uint64) (string, error)
+	files       string
+	mu          sync.Mutex
+	wake        chan struct{}
 }
 
 func New(store *inbox.Store, cfg config.AppConfig, status func(string) json.RawMessage) (*Server, error) {
@@ -84,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 		s.mu.Unlock()
 		write(w, 200, map[string]any{"node_id": node, "label": label, "view": value})
 	}))
+	mux.HandleFunc("POST /api/v1/sessions/{id}/open", s.auth(s.openCodexSession))
 	mux.HandleFunc("POST /api/v1/operations", s.auth(s.operation))
 	mux.HandleFunc("GET /api/v1/sync/snapshot", s.auth(s.snapshot))
 	mux.HandleFunc("GET /api/v1/items", s.auth(s.snapshot))
@@ -273,7 +275,7 @@ func failure(w http.ResponseWriter, err error) {
 		status = 403
 	case "not_found", "attachment_unavailable":
 		status = 404
-	case "conflict", "operation_id_reused", "reset_required":
+	case "conflict", "operation_id_reused", "reset_required", "session_unavailable":
 		status = 409
 	}
 	write(w, status, fault)
@@ -291,4 +293,42 @@ func (s *Server) Sweep(ctx context.Context) {
 		case <-timer.C:
 		}
 	}
+}
+
+// SetSessionOpener connects the authenticated HTTP API to the Core command runner.
+func (s *Server) SetSessionOpener(open func(context.Context, string, string, string, uint64) (string, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.openSession = open
+}
+
+func (s *Server) openCodexSession(w http.ResponseWriter, r *http.Request, node string) {
+	var input struct {
+		CoreEpoch    string `json:"core_epoch"`
+		ViewRevision uint64 `json:"view_revision,string"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&input); err != nil {
+		failure(w, &inbox.Fault{Code: "invalid_fields"})
+		return
+	}
+	var extra any
+	if dec.Decode(&extra) != io.EOF || input.CoreEpoch == "" || input.ViewRevision == 0 {
+		failure(w, &inbox.Fault{Code: "invalid_fields"})
+		return
+	}
+	s.mu.Lock()
+	open := s.openSession
+	s.mu.Unlock()
+	if open == nil {
+		failure(w, errors.New("session actions unavailable"))
+		return
+	}
+	id, err := open(r.Context(), node, r.PathValue("id"), input.CoreEpoch, input.ViewRevision)
+	if err != nil {
+		failure(w, err)
+		return
+	}
+	write(w, http.StatusAccepted, map[string]string{"intent_id": id, "status": "accepted"})
 }

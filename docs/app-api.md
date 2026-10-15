@@ -161,3 +161,13 @@ Android 状态页、点阵屏和桌面组件共享 `/api/v1/status` 的设备授
 `ProjectionRoute.sessions_enabled` 独立控制 Session 信息，与 `display_mode` 无关。开启需要 Codex 数据来源，支持 Web、App 和 Android 会话组件；OLED 仅展示指标。开启时任一指标页均携带会话列表、项目、模型、状态及计数；关闭时不投影会话详情与计数。`DeviceView.sessionsEnabled`（可选 bool）明确标识该开关，即使来源暂无数据也保留。Web / App 按此字段显示或清空列表，切换指标不改变开关，收件箱不受影响。
 
 兼容：未指定开关的旧综合视图沿用会话展示；旧固定/循环指标视图默认关闭。曾保存的 `display_mode=sessions` 按周限指标加会话详情解释，新界面不再提供该指标模式。
+
+## 在 Mac 上打开会话
+
+`POST /api/v1/sessions/{session_id}/open` 使用相同的设备 Bearer 令牌。
+请求体：`{"core_epoch":"当前 view.coreEpoch","view_revision":"当前 view.metadata.revision"}`。
+修订号沿用 Protobuf JSON 的字符串形式。客户端不能指定 node 或 agent；Core 根据认证设备的
+`overview-app` 路由定位来源，要求会话信息开启、会话存在且来源数据未过期。
+成功返回 HTTP 202：`{"intent_id":"…","status":"accepted"}`，仅表示指令已发出，
+不代表 Mac 已完成打开。视图失效或会话不可用返回 409 `session_unavailable`；
+指令通道不可用返回 503 `unavailable`。请求不进入离线收件箱队列。

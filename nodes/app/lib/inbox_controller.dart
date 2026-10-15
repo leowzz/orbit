@@ -71,6 +71,25 @@ class InboxController extends ChangeNotifier {
     return data;
   }
 
+  Future<void> openCodexSession(String sessionId) async {
+    final snapshot = view;
+    if (!online || snapshot == null) throw ApiError('session_unavailable');
+    final response = await client
+        .post(
+          uri('sessions/${Uri.encodeComponent(sessionId)}/open'),
+          headers: {...headers, 'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'core_epoch': snapshot['coreEpoch'],
+            'view_revision': '${snapshot['metadata']?['revision'] ?? 0}',
+          }),
+        )
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode == 404 || response.statusCode == 405) {
+      throw ApiError('session_actions_unsupported');
+    }
+    decode(response);
+  }
+
   Future<void> load() async {
     final revision = ++_loadRevision;
     final all = await local.items(limit: null);

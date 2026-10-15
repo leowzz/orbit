@@ -5,6 +5,7 @@ import 'inbox_controller.dart';
 import 'input_method_tools.dart';
 import 'matrix_screen.dart';
 import 'app_viewport.dart';
+import 'workbench_screen.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -69,6 +70,7 @@ class _OrbitHomeState extends State<OrbitHome> {
       index: selected,
       children: [
         widget.inbox,
+        WorkbenchScreen(controller: widget.controller),
         _ConnectionStatus(
           controller: widget.controller,
           widgetsEnabled: widget.widgetsEnabled,
@@ -108,6 +110,11 @@ class _OrbitHomeState extends State<OrbitHome> {
                     label: Text('收件箱'),
                   ),
                   NavigationRailDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard),
+                    label: Text('工作台'),
+                  ),
+                  NavigationRailDestination(
                     icon: Icon(Icons.widgets_outlined),
                     selectedIcon: Icon(Icons.widgets),
                     label: Text('数据展示'),
@@ -138,6 +145,11 @@ class _OrbitHomeState extends State<OrbitHome> {
                           icon: Icon(Icons.inbox_outlined),
                           selectedIcon: Icon(Icons.inbox),
                           label: '收件箱',
+                        ),
+                        const NavigationDestination(
+                          icon: Icon(Icons.dashboard_outlined),
+                          selectedIcon: Icon(Icons.dashboard),
+                          label: '工作台',
                         ),
                         const NavigationDestination(
                           icon: Icon(Icons.widgets_outlined),

@@ -87,3 +87,22 @@ YAML 路由仅在首次创建管理台数据库时导入；已有部署修改 YA
 按用户澄清，数据展示仅保留 API 用量、账号周限、循环显示。转发规则新增独立的 Session 信息列，通过 `sessions_enabled` 控制会话详情，开启后与任何指标同时转发；关闭后不携带详情并清空接收端缓存。点阵屏继续只显示指标。旧 `display_mode=sessions` 兼容解释为周限指标及开启会话详情，前端不再提供该模式。
 
 已部署 `orbit-core:session-toggle-20261015`、`orbit-web:session-toggle-20261015` 至 tx，发布记录 `/srv/orbit-deploy/releases/session-toggle-20261015`，部署前备份 `/srv/orbit-deploy/backups/session-toggle-20261015T032921Z`；数据库完整性、路由及设备注册保留、二进制摘要和 HTTPS / Protobuf 验证通过。137 覆盖安装 ARM64 profile versionCode 4004，原连接及数据保留。Go 全量、Web 15 项、Flutter 47 项、Flutter analyze、Android JVM 测试和构建通过。实测 Web 用量及周限均可同时显示 20 条会话，关闭开关后会话行归零而指标保留；控制台桌面及 390px 窄屏无横向溢出。
+
+### 2026-10-15 工作台会话打开接口部署
+
+工作台已能同步状态但点击会话失败的原因是 Core 仍运行 `session-toggle-20261015`，
+`POST /api/v1/sessions/{id}/open` 返回 404。更新 Core 为 `orbit-core:workbench-open-20261015`；
+Web 未更新。发布记录 `/srv/orbit-deploy/releases/workbench-open-20261015`，
+停机备份 `/srv/orbit-deploy/backups/workbench-open-20261015T042546Z`。
+两份 SQLite 完整性检查通过，3 条路由（修订 149）、4 个设备授权保持不变；
+运行二进制摘要、HTTPS、原设备鉴权和 Protobuf 状态接口验证通过。
+
+137 使用 `adb install -r` 覆盖安装 ARM64 profile versionCode 4010，
+首次安装时间 `2026-10-15 12:10:41` 不变，连接与本机数据保留。
+App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7 项、Flutter analyze 及
+相关 Go 测试通过。真机点击工作台会话，Core 向 `macos_agent` 发出
+`357316af0b3c83d57e980fb6b9b18d0e` 指令，Agent 返回 `COMMAND_STATUS_SUCCEEDED`，
+执行耗时 79 ms。详情见发布目录中的 `mac-verification.json` 和 `android-verification.json`。
+
+后续覆盖升级至 versionCode 4012：成功打开会话时不再弹提示，仅保留异常提示；
+工作台剩余时间使用 `4d23h` 格式。工作台 7 项测试通过，首次安装时间保持不变。
