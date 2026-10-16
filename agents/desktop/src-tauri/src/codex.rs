@@ -85,19 +85,43 @@ fn database(path: &Path) -> Result<Connection, String> {
 fn text(row: &rusqlite::Row<'_>, i: usize) -> rusqlite::Result<String> {
     Ok(row.get::<_, Option<String>>(i)?.unwrap_or_default())
 }
-fn records(db: &Connection, archived: bool) -> Result<Vec<Record>, String> {
-    let columns: HashSet<String> = db
-        .prepare("PRAGMA table_info(threads)")
+fn thread_columns(db: &Connection) -> Result<HashSet<String>, String> {
+    db.prepare("PRAGMA table_info(threads)")
         .map_err(|_| "会话数据库结构不兼容")?
         .query_map([], |r| r.get(1))
         .map_err(|_| "会话数据库结构不兼容")?
         .collect::<Result<_, _>>()
-        .map_err(|_| "会话数据库结构不兼容")?;
+        .map_err(|_| "会话数据库结构不兼容".into())
+}
+fn session_titles(db: &Connection, sessions: &mut [CodexSession]) -> Result<(), String> {
+    let columns = thread_columns(db)?;
     let name = if columns.contains("name") {
         "name"
     } else {
         "NULL"
     };
+    let mut stmt = db
+        .prepare(&format!(
+            "SELECT {name},title,first_user_message FROM threads WHERE id=?1"
+        ))
+        .map_err(|_| "会话数据库结构不兼容")?;
+    for session in sessions {
+        session.display_name = stmt
+            .query_row([&session.session_id], |row| {
+                for i in 0..3 {
+                    let candidate = clean(text(row, i)?);
+                    if !candidate.is_empty() {
+                        return Ok(bounded(&candidate, 192));
+                    }
+                }
+                Ok("(无标题)".into())
+            })
+            .map_err(|_| "无法读取会话数据")?;
+    }
+    Ok(())
+}
+fn records(db: &Connection, archived: bool) -> Result<Vec<Record>, String> {
+    let columns = thread_columns(db)?;
     let rollout = if columns.contains("rollout_path") {
         "rollout_path"
     } else {
@@ -109,16 +133,13 @@ fn records(db: &Connection, archived: bool) -> Result<Vec<Record>, String> {
     } else {
         ""
     };
-    let query=format!("SELECT id,{name},title,source,cwd,model,updated_at_ms,first_user_message,{rollout} FROM threads WHERE {} {spawned} ORDER BY updated_at_ms DESC,id",if archived{"1"}else{"archived=0"});
+    // Titles and first messages can be very large. Keep them out of the full-table
+    // scan/sort; session_titles reads them only for the final visible sessions.
+    let query=format!("SELECT id,source,cwd,model,updated_at_ms,{rollout} FROM threads WHERE {} {spawned} ORDER BY updated_at_ms DESC,id",if archived{"1"}else{"archived=0"});
     let mut stmt = db.prepare(&query).map_err(|_| "会话数据库结构不兼容")?;
     let result = stmt
         .query_map([], |r| {
-            let title = [text(r, 1)?, text(r, 2)?, text(r, 7)?]
-                .into_iter()
-                .map(clean)
-                .find(|s| !s.is_empty())
-                .unwrap_or_else(|| "(无标题)".into());
-            let cwd = text(r, 4)?;
+            let cwd = text(r, 2)?;
             let project = cwd
                 .trim_end_matches(['/', '\\'])
                 .rsplit(['/', '\\'])
@@ -128,16 +149,16 @@ fn records(db: &Connection, archived: bool) -> Result<Vec<Record>, String> {
             Ok(Record {
                 session: CodexSession {
                     session_id: text(r, 0)?,
-                    display_name: title,
+                    display_name: String::new(),
                     project_name: project,
-                    model: text(r, 5)?,
+                    model: text(r, 3)?,
                     status: 1,
-                    updated_at: ts(r.get::<_, Option<i64>>(6)?.unwrap_or(0) / 1000),
+                    updated_at: ts(r.get::<_, Option<i64>>(4)?.unwrap_or(0) / 1000),
                     process_alive: false,
                 },
                 cwd,
-                source: text(r, 3)?,
-                rollout: text(r, 8)?,
+                source: text(r, 1)?,
+                rollout: text(r, 5)?,
             })
         })
         .map_err(|_| "无法读取会话数据")?
@@ -272,7 +293,9 @@ fn newer(a: &Turn, b: &Turn) -> bool {
 }
 pub fn collect(c: &Codex, now: i64) -> Result<CodexObservation, String> {
     let home = config::codex_home(&c.home);
-    let db = database(&newest(&home, "state_")?)?;
+    let mut db = database(&newest(&home, "state_")?)?;
+    // Keep the lightweight scan and deferred title reads on one read snapshot.
+    let db = db.transaction().map_err(|_| "无法读取 Codex 数据库")?;
     let history = database(&newest(&home, "thread_history_")?)?;
     let turns = turns(&history)?;
     let alive = processes(&home);
@@ -331,17 +354,11 @@ pub fn collect(c: &Codex, now: i64) -> Result<CodexObservation, String> {
     }
     let running = all.iter().filter(|r| r.session.status == 2).count();
     let total = all.len();
-    let sessions = all
+    let mut sessions: Vec<_> = all
         .into_iter()
         .take(c.limit)
         .map(|r| {
             let mut s = r.session;
-            s.session_id = bounded(&s.session_id, 128);
-            s.display_name = if c.include_title {
-                bounded(&s.display_name, 192)
-            } else {
-                String::new()
-            };
             s.project_name = if c.include_project {
                 bounded(&s.project_name, 96)
             } else {
@@ -351,6 +368,12 @@ pub fn collect(c: &Codex, now: i64) -> Result<CodexObservation, String> {
             s
         })
         .collect();
+    if c.include_title {
+        session_titles(&db, &mut sessions)?;
+    }
+    for session in &mut sessions {
+        session.session_id = bounded(&session.session_id, 128);
+    }
     Ok(CodexObservation {
         sessions,
         total_count: total as u32,
@@ -486,5 +509,75 @@ mod tests {
         let result = collect(&c, 101).unwrap();
         assert_eq!(result.sessions[0].display_name, "Name");
         assert_eq!(result.sessions[0].project_name, "orbit");
+    }
+
+    #[test]
+    fn visible_titles_preserve_fallbacks_after_filtering_and_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = Connection::open(dir.path().join("state_1.sqlite")).unwrap();
+        db.execute_batch("CREATE TABLE threads(id TEXT PRIMARY KEY,name TEXT,title TEXT,source TEXT,cwd TEXT,model TEXT,updated_at_ms INTEGER,first_user_message TEXT,archived INTEGER,rollout_path TEXT);
+            INSERT INTO threads VALUES
+            ('hidden','Hidden','','{\"subagent\":{}}','/work','gpt',600000,'',0,NULL),
+            ('a','  Named  session  ','Ignored title','cli','/work','gpt',500000,'Ignored message',0,NULL),
+            ('b',' \n ','  Title  fallback  ','cli','/work','gpt',400000,'Ignored message',0,NULL),
+            ('c',NULL,' \t ','cli','/work','gpt',300000,'  Message  fallback  ',0,NULL),
+            ('d',NULL,NULL,'cli','/work','gpt',200000,NULL,0,NULL);").unwrap();
+        Connection::open(dir.path().join("thread_history_1.sqlite")).unwrap()
+            .execute_batch("CREATE TABLE thread_turns(thread_id TEXT,turn_id TEXT,status TEXT,started_at INTEGER,completed_at INTEGER);
+                INSERT INTO thread_turns VALUES('d','turn','in_progress',200,NULL);").unwrap();
+        let mut c = Codex {
+            home: dir.path().display().to_string(),
+            include_title: true,
+            limit: 2,
+            ..Codex::default()
+        };
+        let result = collect(&c, 201).unwrap();
+        assert_eq!(result.total_count, 4);
+        assert_eq!(result.running_count, 1); // Counts include sessions outside the display limit.
+        assert_eq!(
+            result
+                .sessions
+                .iter()
+                .map(|s| s.display_name.as_str())
+                .collect::<Vec<_>>(),
+            ["Named session", "Title fallback"]
+        );
+        c.limit = 4;
+        let result = collect(&c, 201).unwrap();
+        assert_eq!(result.sessions[2].display_name, "Message fallback");
+        assert_eq!(result.sessions[3].display_name, "(无标题)");
+        db.execute_batch("ALTER TABLE threads DROP COLUMN name;")
+            .unwrap();
+        let result = collect(&c, 201).unwrap();
+        assert_eq!(result.sessions[0].display_name, "Ignored title");
+        c.include_title = false;
+        assert!(collect(&c, 201)
+            .unwrap()
+            .sessions
+            .iter()
+            .all(|s| s.display_name.is_empty()));
+    }
+
+    #[test]
+    #[ignore = "explicit local read-only performance check"]
+    fn live_collection_benchmark() {
+        let home = std::env::var("ORBIT_CODEX_BENCH_HOME").expect("set ORBIT_CODEX_BENCH_HOME");
+        let c = Codex {
+            home,
+            include_title: true,
+            include_project: true,
+            ..Codex::default()
+        };
+        for _ in 0..3 {
+            let start = std::time::Instant::now();
+            let result = collect(&c, chrono::Utc::now().timestamp()).unwrap();
+            eprintln!(
+                "collection_ms={} total={} displayed={} running={}",
+                start.elapsed().as_millis(),
+                result.total_count,
+                result.sessions.len(),
+                result.running_count
+            );
+        }
     }
 }
