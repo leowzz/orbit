@@ -47,7 +47,11 @@ class AppUpdates(private val context: Context) {
         set("phase" to "checking", "error" to "")
         val connection = connect("https://api.github.com/repos/leowzz/orbit/releases/latest")
         val release = try {
-            require(connection.responseCode == 200) { "更新服务暂不可用，请稍后重试" }
+            val responseCode = connection.responseCode
+            if (responseCode != 200) {
+                android.util.Log.w("OrbitUpdates", "Update check failed: HTTP $responseCode; rate limit remaining=${connection.getHeaderField("X-RateLimit-Remaining")}")
+            }
+            require(responseCode == 200) { "更新服务暂不可用，请稍后重试" }
             val bytes = connection.inputStream.use { input ->
                 val output = ByteArrayOutputStream()
                 val buffer = ByteArray(8192)
@@ -170,9 +174,13 @@ class AppUpdates(private val context: Context) {
     }
 
     private fun code(info: PackageInfo): Long = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
-    private fun signatureFlags() = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
+    // Some Android 9 package parsers collect archive certificates only when the
+    // legacy flag is also set; GET_SIGNING_CERTIFICATES alone returns no signers.
+    private fun signatureFlags() = if (Build.VERSION.SDK_INT >= 28)
+        PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES else PackageManager.GET_SIGNATURES
     private fun signatures(info: PackageInfo): Set<String> {
-        val values = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures
+        val values = if (Build.VERSION.SDK_INT >= 28)
+            info.signingInfo?.apkContentsSigners ?: info.signatures else info.signatures
         return values?.map { hex(MessageDigest.getInstance("SHA-256").digest(it.toByteArray())) }?.toSet() ?: emptySet()
     }
     private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }

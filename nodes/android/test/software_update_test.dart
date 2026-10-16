@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,9 +72,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('无法连接更新服务，请重试'), findsOneWidget);
     fail = false;
-    await tester.tap(find.text('检查更新'));
+    await tester.tap(find.text('重试检查'));
     await tester.pumpAndSettle();
     expect(find.text('无法连接更新服务，请重试'), findsNothing);
+    expect(find.text('发现新版本 0.3.2'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('failed check unlocks retry and ignores late busy polls', (
+    tester,
+  ) async {
+    final check = Completer<Map<String, dynamic>>();
+    final latePoll = Completer<Map<String, dynamic>>();
+    var polls = 0;
+    var checks = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'checkUpdate') {
+            checks++;
+            if (checks == 1) return check.future;
+            phase = 'idle';
+            return status();
+          }
+          polls++;
+          if (polls == 1) return status();
+          if (polls == 2) {
+            phase = 'checking';
+            return status();
+          }
+          return latePoll.future;
+        });
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: SoftwareUpdateCard(enabled: true)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('正在检查更新…'), findsOneWidget);
+    expect(
+      tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
+      isNull,
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    check.completeError(
+      PlatformException(code: 'update_failed', message: '更新服务暂不可用，请稍后重试'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('重试检查'), findsOneWidget);
+    expect(find.text('正在检查更新…'), findsNothing);
+    expect(
+      tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
+      isNotNull,
+    );
+    latePoll.complete(status());
+    await tester.pumpAndSettle();
+    expect(find.text('正在检查更新…'), findsNothing);
+    await tester.tap(find.text('重试检查'));
+    await tester.pumpAndSettle();
+    expect(checks, 2);
+    expect(find.text('更新服务暂不可用，请稍后重试'), findsNothing);
     expect(find.text('发现新版本 0.3.2'), findsOneWidget);
     await tester.pumpWidget(const SizedBox());
   });

@@ -19,6 +19,7 @@ class _SoftwareUpdateCardState extends State<SoftwareUpdateCard>
   Map<String, dynamic> status = {};
   String error = '';
   bool pending = false;
+  int statusRevision = 0;
   Timer? poll;
   Timer? automatic;
   bool get enabled => widget.enabled ?? (!kIsWeb && Platform.isAndroid);
@@ -43,23 +44,32 @@ class _SoftwareUpdateCardState extends State<SoftwareUpdateCard>
   }
 
   Future<void> refresh() async {
+    final revision = ++statusRevision;
     try {
       final value = await channel.invokeMapMethod<String, dynamic>(
         'updateStatus',
       );
-      if (mounted && value != null) setState(() => status = value);
+      if (mounted && revision == statusRevision && value != null) {
+        setState(() => status = value);
+      }
     } on MissingPluginException {
-      if (mounted) setState(() => error = '当前安装版本尚不支持更新，请安装新版后重试');
+      if (mounted && revision == statusRevision) {
+        setState(() => error = '当前安装版本尚不支持更新，请安装新版后重试');
+      }
     } on PlatformException catch (e) {
-      if (mounted) setState(() => error = e.message ?? '无法读取更新状态，请重试');
+      if (mounted && revision == statusRevision) {
+        setState(() => error = e.message ?? '无法读取更新状态，请重试');
+      }
     }
   }
 
   Future<void> action(String command) async {
     if (busy) return;
+    ++statusRevision;
     setState(() {
       pending = true;
       error = '';
+      status = {...status, 'error': ''};
     });
     poll?.cancel();
     poll = Timer.periodic(
@@ -68,14 +78,29 @@ class _SoftwareUpdateCardState extends State<SoftwareUpdateCard>
     );
     try {
       final value = await channel.invokeMapMethod<String, dynamic>(command);
-      if (mounted && value != null) setState(() => status = value);
+      if (mounted && value != null) {
+        setState(() {
+          status = value;
+          error = '';
+        });
+      }
     } on MissingPluginException {
       if (mounted) setState(() => error = '当前安装版本尚不支持更新，请安装新版后重试');
     } on PlatformException catch (e) {
       if (mounted) setState(() => error = e.message ?? '更新失败，请重试');
     } finally {
       poll?.cancel();
-      if (mounted) setState(() => pending = false);
+      // The method has finished. Discard in-flight polls and any busy snapshot
+      // they returned before the native operation failed or completed.
+      ++statusRevision;
+      if (mounted) {
+        setState(() {
+          pending = false;
+          if (['checking', 'downloading', 'verifying'].contains(phase)) {
+            status = {...status, 'phase': 'idle'};
+          }
+        });
+      }
     }
   }
 
@@ -86,6 +111,7 @@ class _SoftwareUpdateCardState extends State<SoftwareUpdateCard>
 
   @override
   void dispose() {
+    ++statusRevision;
     WidgetsBinding.instance.removeObserver(this);
     poll?.cancel();
     automatic?.cancel();
@@ -106,10 +132,10 @@ class _SoftwareUpdateCardState extends State<SoftwareUpdateCard>
     final failure = error.isNotEmpty ? error : status['error'] as String? ?? '';
     final message =
         messages[phase] ??
-        (available
+        (failure.isNotEmpty
+            ? '未能完成更新，请重试'
+            : available
             ? '发现新版本 ${status['latestVersion']}'
-            : failure.isNotEmpty
-            ? '未能检查更新，请重试'
             : status['latestVersion'] != null
             ? '已是最新版本'
             : '启动时自动检查，也可手动检查更新');
@@ -150,7 +176,7 @@ class _SoftwareUpdateCardState extends State<SoftwareUpdateCard>
                       ? null
                       : () => unawaited(action('checkUpdate')),
                   icon: const Icon(Icons.refresh),
-                  label: const Text('检查更新'),
+                  label: Text(failure.isNotEmpty ? '重试检查' : '检查更新'),
                 ),
                 if (available)
                   FilledButton.icon(
