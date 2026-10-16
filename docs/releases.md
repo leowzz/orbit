@@ -5,6 +5,11 @@ semantic version tags such as `v1.2.3` or `v1.2.3-rc.1` (no build metadata,
 at most 128 characters). A tag containing a hyphen becomes a prerelease.
 `make release V=v1.2.3` creates a local commit/tag; it does not push them.
 
+Pushing `main` runs `.github/workflows/unit-tests.yml`, covering Go/Web, scripts,
+Android, the desktop Agent, and ESP32-S3 config/native tests without packaging,
+signing, or uploading distributable artifacts. These are the only two workflows:
+`Unit Tests` on `main` pushes and `Release` on `v*` tag pushes.
+
 ## Outputs
 
 - Linux amd64 images: `ghcr.io/leowzz/orbit-agent:TAG`,
