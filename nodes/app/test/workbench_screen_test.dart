@@ -369,7 +369,7 @@ void main() {
     });
   }
   for (final atTop in [false, true]) {
-    testWidgets('Alipay Box fits complete rows with navigation at top=$atTop', (
+    testWidgets('Alipay Box keeps four rows with navigation at top=$atTop', (
       tester,
     ) async {
       final font = Platform.environment['WORKBENCH_PREVIEW_FONT'];
@@ -432,7 +432,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('workbench-fullscreen')));
       tester.view.padding = FakeViewPadding.zero;
       await tester.pumpAndSettle();
-      expectRows(5);
+      expectRows(4);
       await tester.drag(
         find.byKey(const PageStorageKey('workbench-sessions')),
         const Offset(0, -250),
@@ -933,12 +933,14 @@ void main() {
       )..addFont(rootBundle.load('fonts/MaterialIcons-Regular.otf'))).load();
     });
     for (final variant in [
-      (false, Brightness.light),
-      (true, Brightness.light),
-      (false, Brightness.dark),
-      (true, Brightness.dark),
+      (false, Brightness.light, false),
+      (true, Brightness.light, false),
+      (false, Brightness.dark, false),
+      (true, Brightness.dark, false),
+      (false, Brightness.light, true),
     ]) {
-      final (atTop, brightness) = variant;
+      final (atTop, brightness, nfcd) = variant;
+      deviceModel = nfcd ? 'NFCD_AlipayBoxN5DEL' : null;
       controller.navigation = {
         'at_top': atTop,
         'items': [
@@ -957,10 +959,11 @@ void main() {
                 brightness,
               ).textTheme.apply(fontFamily: 'Preview'),
             ),
-            builder: (_, child) => AppViewport(child: child!),
+            builder: (_, child) =>
+                AppViewport(key: ValueKey(nfcd), child: child!),
             home: RepaintBoundary(
               key: const ValueKey('preview'),
-              child: WorkbenchScreen(controller: controller),
+              child: WorkbenchScreen(controller: controller, fullscreen: nfcd),
             ),
           ),
         );
@@ -974,7 +977,7 @@ void main() {
           final output = Directory('build/workbench-preview')
             ..createSync(recursive: true);
           await File(
-            '${output.path}/${size.width.toInt()}x${size.height.toInt()}-${atTop ? 'top' : 'bottom'}-${brightness.name}.png',
+            '${output.path}/${nfcd ? 'nfcd-fullscreen-' : ''}${size.width.toInt()}x${size.height.toInt()}-${atTop ? 'top' : 'bottom'}-${brightness.name}.png',
           ).writeAsBytes(data!.buffer.asUint8List());
           image.dispose();
         });

@@ -7,6 +7,7 @@ import 'inbox_controller.dart';
 import 'navigation_bar.dart';
 import 'app_theme.dart';
 import 'app_appearance.dart';
+import 'app_viewport.dart';
 import 'local_store.dart' show Json;
 
 /// Native counterpart of the Web Node's short landscape dashboard.
@@ -525,10 +526,16 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           minimumHeight,
           bounds.viewportMainAxisExtent - bounds.precedingScrollExtent,
         );
-        final rows = math.max(
+        final fittingRows = math.max(
           1,
           ((available + gap) / (minimumHeight + gap)).floor(),
         );
+        // NFCD keeps its four-row landscape layout, including in fullscreen.
+        final rows =
+            AppViewport.isAlipayBoxOf(context) &&
+                MediaQuery.orientationOf(context) == Orientation.landscape
+            ? math.min(4, fittingRows)
+            : fittingRows;
         final height = (available - (rows - 1) * gap) / rows;
         return SliverGrid(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
