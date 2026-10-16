@@ -203,6 +203,14 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      # main seeds this shared cache so new tags can reuse checked Rust dependencies.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: agents/desktop/src-tauri -> target
+          shared-key: desktop-agent-macos
+          cache-bin: false
+          cache-on-failure: true
       - name: Install locked dependencies
         run: pnpm install --frozen-lockfile
       - name: Check and test Agent
@@ -238,6 +246,7 @@ jobs:
           cp "${packages[0]}" "../../dist/orbit-agent-macos-universal-$TAG.dmg"
       - name: Remove macOS signing material
         if: always()
+        timeout-minutes: 3
         env:
           ORBIT_SIGNING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: python3 ../../scripts/macos-signing.py cleanup

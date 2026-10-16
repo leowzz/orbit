@@ -5,6 +5,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -64,7 +66,7 @@ class MacSigningTest(unittest.TestCase):
                 command.assert_not_called()
                 self.assertFalse(signing.work_directory().exists())
 
-    def test_setup_and_cleanup_restore_keychains_and_remove_trust(self):
+    def test_setup_and_cleanup_remove_private_keychain_before_system_certificate(self):
         with patch.object(signing, "run", side_effect=self.run_command):
             signing.setup()
             work = signing.work_directory()
@@ -75,8 +77,11 @@ class MacSigningTest(unittest.TestCase):
             signing.cleanup()
         self.assertFalse(work.exists())
         self.assertIn(["security", "list-keychains", "-d", "user", "-s", "/original/login.keychain-db"], self.calls)
-        self.assertTrue(any(command[2:4] == ["security", "remove-trusted-cert"] for command in self.calls))
-        self.assertIn(["security", "delete-keychain", str(work / "signing.keychain-db")], self.calls)
+        private_keychain = ["security", "delete-keychain", str(work / "signing.keychain-db")]
+        system_certificate = ["sudo", "-n", "security", "delete-certificate", "-Z", self.identity,
+                              "/Library/Keychains/System.keychain"]
+        self.assertLess(self.calls.index(private_keychain), self.calls.index(system_certificate))
+        self.assertFalse(any("remove-trusted-cert" in command for command in self.calls))
 
     def test_failed_setup_after_trust_runs_cleanup(self):
         def fail_identity(args, **kwargs):
@@ -87,7 +92,40 @@ class MacSigningTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "not a valid"):
                 signing.setup()
         self.assertFalse(signing.work_directory().exists())
-        self.assertTrue(any(command[2:4] == ["security", "remove-trusted-cert"] for command in self.calls))
+        self.assertTrue(any(command[2:4] == ["security", "delete-certificate"] for command in self.calls))
+
+    def test_cleanup_timeout_still_removes_private_material_and_reports_command(self):
+        with patch.object(signing, "run", side_effect=self.run_command):
+            signing.setup()
+        work = signing.work_directory()
+        p12 = work / "certificate.p12"
+        p12.write_bytes(b"unfinished import")
+        self.calls.clear()
+
+        def fail_restore(args, **kwargs):
+            self.assertEqual(kwargs["timeout"], 30)
+            self.calls.append(args)
+            if args[1] == "list-keychains":
+                raise RuntimeError("Signing command timed out after 30s: security list-keychains")
+
+        with patch.object(signing, "run", side_effect=fail_restore):
+            with self.assertRaisesRegex(RuntimeError, "security list-keychains"):
+                signing.cleanup()
+        self.assertFalse(p12.exists())
+        self.assertIn(["security", "delete-keychain", str(work / "signing.keychain-db")], self.calls)
+        self.assertTrue(any("delete-certificate" in command for command in self.calls))
+
+    def test_command_timeout_does_not_expose_passwords(self):
+        args = ["security", "create-keychain", "-p", "secret-password", "keychain"]
+        with patch.object(signing.subprocess, "run", side_effect=subprocess.TimeoutExpired(args, 60)) as command:
+            with self.assertRaisesRegex(RuntimeError, "timed out after 60s: security create-keychain") as error:
+                signing.run(args)
+        self.assertNotIn("secret-password", str(error.exception))
+        self.assertEqual(command.call_args.kwargs["timeout"], 60)
+
+    def test_hung_command_is_terminated(self):
+        with self.assertRaisesRegex(RuntimeError, "timed out"):
+            signing.run([sys.executable, "-c", "import time; time.sleep(30)"], timeout=0.1)
 
     def test_wrong_p12_certificate_is_rejected_before_import(self):
         def wrong_leaf(args, **kwargs):

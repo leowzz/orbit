@@ -19,11 +19,20 @@ CERTIFICATE = ROOT / "agents/desktop/signing/macos-agent.cer"
 SECRET_NAMES = ("APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_SIGNING_IDENTITY")
 
 
-def run(args, **kwargs):
-    result = subprocess.run(args, capture_output=True, check=False, **kwargs)
+def command_name(args):
+    command = args[2:] if args[:2] == ["sudo", "-n"] else args
+    return f"{Path(command[0]).name} {command[1]}"
+
+
+def run(args, timeout=60, **kwargs):
+    try:
+        result = subprocess.run(args, capture_output=True, check=False, timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired:
+        # TimeoutExpired includes the full command, which can contain passwords.
+        raise RuntimeError(f"Signing command timed out after {timeout}s: {command_name(args)}") from None
     if result.returncode:
         # Never echo command arguments, environment or security's key attributes.
-        raise RuntimeError(f"Signing command failed: {Path(args[0]).name} {args[1]}")
+        raise RuntimeError(f"Signing command failed: {command_name(args)}")
     return result.stdout
 
 
@@ -45,19 +54,21 @@ def cleanup():
         return
     state = json.loads(state_file.read_text())
     failures = []
-    commands = []
-    if state.get("trusted"):
-        commands.extend([
-            ["sudo", "-n", "security", "remove-trusted-cert", "-d", str(CERTIFICATE)],
-            ["sudo", "-n", "security", "delete-certificate", "-Z", state["identity"],
-             "/Library/Keychains/System.keychain"],
-        ])
-    commands.append(["security", "list-keychains", "-d", "user", "-s", *state["keychains"]])
+    # Remove private signing material before touching the system certificate store.
+    (work / "certificate.p12").unlink(missing_ok=True)
+    commands = [["security", "list-keychains", "-d", "user", "-s", *state["keychains"]]]
     if state.get("keychain_created"):
         commands.append(["security", "delete-keychain", str(work / "signing.keychain-db")])
+    if state.get("trusted"):
+        # remove-trusted-cert can hang on headless macOS runners (runner-images#12116).
+        # Delete the public certificate directly; any remaining trust database entry
+        # disappears with the disposable VM. Never use this cleanup on a local host.
+        commands.append(["sudo", "-n", "security", "delete-certificate", "-Z", state["identity"],
+                         "/Library/Keychains/System.keychain"])
     for command in commands:
+        print(f"macOS signing cleanup: {command_name(command)}", flush=True)
         try:
-            run(command)
+            run(command, timeout=30)
         except RuntimeError as error:
             failures.append(str(error))
     if failures:
@@ -106,7 +117,7 @@ def setup():
              "-s", "-k", password, keychain])
         run(["security", "list-keychains", "-d", "user", "-s", keychain, *state["keychains"]])
         # Apple codesign needs a trusted identity to sign. This trust change is
-        # restricted to disposable hosted runners and removed in always() cleanup.
+        # restricted to disposable hosted runners; cleanup deletes the certificate.
         state["trusted"] = True
         save_state()
         run(["sudo", "-n", "security", "add-trusted-cert", "-d", "-r", "trustRoot",

@@ -41,6 +41,18 @@ all builds and image signatures to succeed, uploads
 files to a draft, then publishes the Release with GHCR tags and immutable digests.
 A published Release cannot be overwritten by rerunning the final job.
 
+The desktop test and release jobs share a Rust dependency cache. A new tag can
+restore the cache populated on `main`; caches created under one tag are not
+available to other tags. Universal release compilation still builds both CPU
+architectures when their release dependencies are not cached.
+
+macOS signing commands have a 60-second timeout (30 seconds during cleanup).
+Cleanup removes the temporary private keychain before deleting the public system
+certificate by fingerprint. It avoids `security remove-trusted-cert`, which can
+hang on headless runners; any remaining trust entry is discarded with the hosted
+VM. Cleanup is restricted to disposable GitHub-hosted runners and has a three-minute
+step timeout. It never runs on developer machines or self-hosted runners.
+
 ## In-app updates
 
 Mac Agent's **偏好设置 → 软件更新** and Android's **设置 → 软件更新** check the
