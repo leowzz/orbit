@@ -404,7 +404,7 @@ void main() {
       );
       await tester.tap(find.text('工作台'));
       await tester.pumpAndSettle();
-      void expectRows(int rows) {
+      void expectRows(int rows, {double minimumPadding = 3}) {
         final viewport = tester.getRect(
           find.byKey(const PageStorageKey('workbench-sessions')),
         );
@@ -421,6 +421,23 @@ void main() {
           expect(right.bottom, closeTo(left.bottom, 0.01));
           expect(left.right, lessThan(right.left));
         }
+        for (var i = 0; i < cards.length; i++) {
+          final card = find.byKey(ValueKey('session-session-$i'));
+          for (final text
+              in find
+                  .descendant(of: card, matching: find.byType(Text))
+                  .evaluate()) {
+            final rect = tester.getRect(find.byWidget(text.widget));
+            expect(
+              rect.top - cards[i].top,
+              greaterThanOrEqualTo(minimumPadding),
+            );
+            expect(
+              cards[i].bottom - rect.bottom,
+              greaterThanOrEqualTo(minimumPadding),
+            );
+          }
+        }
         final next = find.byKey(ValueKey('session-session-${rows * 2}'));
         if (next.evaluate().isNotEmpty) {
           expect(tester.getRect(next).top, greaterThan(viewport.bottom));
@@ -432,7 +449,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('workbench-fullscreen')));
       tester.view.padding = FakeViewPadding.zero;
       await tester.pumpAndSettle();
-      expectRows(4);
+      expectRows(4, minimumPadding: 8);
       await tester.drag(
         find.byKey(const PageStorageKey('workbench-sessions')),
         const Offset(0, -250),

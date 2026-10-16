@@ -511,14 +511,14 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
           1,
           ((bounds.crossAxisExtent + gap) / (minimumWidth + gap)).floor(),
         );
-        // One title/status line, one detail line, their gap and vertical padding.
+        // One title/status line, one detail line and their gap.
+        final titleHeight = (scaler.scale(18) * 1.2).ceilToDouble();
+        final detailHeight = (scaler.scale(13) * 1.2).ceilToDouble();
+        final contentHeight =
+            math.max(titleHeight, detailHeight + 6) + detailHeight + 4;
         final minimumHeight = math.max(
           52.0,
-          (math.max(scaler.scale(18) * 1.2, scaler.scale(13) * 1.2 + 6) +
-                  scaler.scale(13) * 1.2 +
-                  4 +
-                  8)
-              .ceilToDouble(),
+          (contentHeight + 8).ceilToDouble(),
         );
         // In portrait, the metrics share this scroll view. Reserve their full
         // extent; scrolling must not resize cards.
@@ -537,6 +537,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
             ? math.min(4, fittingRows)
             : fittingRows;
         final height = (available - (rows - 1) * gap) / rows;
+        // Give taller cards breathing room while keeping short cards readable.
+        final verticalPadding = ((height - contentHeight) / 2).clamp(4.0, 12.0);
         return SliverGrid(
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
@@ -545,7 +547,8 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
             crossAxisSpacing: gap,
           ),
           delegate: SliverChildBuilderDelegate(
-            (context, index) => _session(sessions[index]),
+            (context, index) =>
+                _session(sessions[index], verticalPadding: verticalPadding),
             childCount: sessions.length,
           ),
         );
@@ -553,7 +556,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     );
   }
 
-  Widget _session(Map session) {
+  Widget _session(Map session, {required double verticalPadding}) {
     final running = session['status'] == 'CODEX_SESSION_STATUS_RUNNING';
     final status = switch (session['status']) {
       'CODEX_SESSION_STATUS_RUNNING' => '运行中',
@@ -590,7 +593,10 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
               ),
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          padding: EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: verticalPadding,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
