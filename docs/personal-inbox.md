@@ -57,23 +57,24 @@ App 先将内容写入本机持久队列，然后清空输入框；离线新消�
 
 ## 已有 Web Node
 
-现有 Web Node 首页增加「收件箱」入口。在 `web` 下增加一次服务端连接：
+Web Node 首页直接进入收件箱，只提供文字、链接、待办和图片的保存与同步。状态面板、Codex 会话展示及打开会话入口已经停用，进程不再连接 MQTT 或轮询状态投影。
 
 ```yaml
 web:
   listen: 127.0.0.1:8080
   auth:
-    password: <Web Node 访问密码>
+    password: <长且独立的 Web Node 访问密码>
+    session_ttl: 24h
   inbox:
     url: https://orbit.example.com
     token_file: secrets/web-inbox-token
 ```
 
-令牌文件保存为 Web Node 单独创建的设备令牌，限制为运行服务的用户可读。浏览器继续使用 Web Node 自己的访问密码；上游令牌保留在服务端，不写入网页、URL 或日志。
+为 Web Node 单独创建设备令牌，限制配置和令牌文件仅对运行用户可读。浏览器继续使用 Web Node 自己的访问密码；上游令牌保留在服务端，不写入网页、URL 或日志。Web Node 仍使用原来的设备身份和收件箱数据，无需重建授权。
 
-配置 `web.inbox` 后，状态页和收件箱共用令牌对应的同一台 Web 设备，不再连接 MQTT 或登记第二个设备；旧 `mqtt` 和 `node.id` 配置会被忽略，可移除。首页保留状态页，`/inbox/` 保留收件箱；状态和会话操作均通过同一设备的 HTTP 接口获取。在 Core 为该设备设置数据内容，使用 `overview-app` 配置。完整示例见 `configs/web.inbox.example.yaml`。未配置 `web.inbox` 的旧 MQTT 状态节点继续按原方式工作。
+新版本必须配置 `web.inbox`；只有 MQTT 配置的旧 Web 状态节点需要先配置收件箱连接。旧的 `mqtt`、`node.id` 以及 Core 中该 Web 设备的状态转发规则不再用于 Web 页面。完整示例见 `configs/web.inbox.example.yaml`。
 
-升级原先同时使用 MQTT 和收件箱的部署时，将原 MQTT 设备的路由迁移到令牌对应的设备 ID，并把 profile 改为 `overview-app`；保留输入来源、显示模式、会话开关和轮播间隔。停止旧 Web 服务后清理旧设备的 MQTT retained state/view，并重启 Core，使旧发现记录退出。设备令牌、收件箱内容和同步历史无需重建；原设备名称、归档偏好及快捷设置应随迁移保留。不要仅归档旧设备来代替迁移。
+登录在整个 Web 实例内限制为每分钟 5 次，换 IP 或伪造代理头不会增加额度。超限时返回 429 和重试时间。会话使用随机 256 位令牌，保存在 HttpOnly Cookie；退出会撤销该会话，已打开的同步连接也会结束。到期后需要重新登录。会话只保存在服务进程中，服务重启或升级后需要重新登录，浏览器草稿与待同步队列继续保留。
 
 ## 授权与备份
 

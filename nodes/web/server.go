@@ -52,80 +52,11 @@ func DevelopmentHandler(store *Store, intents SessionIntentPublisher, authConfig
 func handlerWithAssets(store *Store, intents SessionIntentPublisher, authConfig AuthConfig, assets fs.FS, assetVersion func() (string, error)) http.Handler {
 	auth := newAuthManager(authConfig)
 	mux := http.NewServeMux()
-	mountInbox(mux, auth, authConfig)
+	mountInbox(mux, auth, authConfig, false)
 	mux.HandleFunc("GET /favicon.ico", func(response http.ResponseWriter, _ *http.Request) {
 		response.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("GET /api/auth/config", func(response http.ResponseWriter, _ *http.Request) {
-		writeJSON(response, map[string]bool{"required": auth.required()})
-	})
-	mux.HandleFunc("POST /api/auth/login", func(response http.ResponseWriter, request *http.Request) {
-		if !auth.required() {
-			http.Error(response, "web authentication is not configured", http.StatusNotFound)
-			return
-		}
-		mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
-		if err != nil || mediaType != "application/json" {
-			http.Error(response, "content type must be application/json", http.StatusUnsupportedMediaType)
-			return
-		}
-		var input struct {
-			Password string `json:"password"`
-		}
-		decoder := json.NewDecoder(http.MaxBytesReader(response, request.Body, 1024))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&input); err != nil {
-			http.Error(response, "invalid credentials", http.StatusUnauthorized)
-			return
-		}
-		if err := decoder.Decode(&struct{}{}); err != io.EOF {
-			http.Error(response, "invalid credentials", http.StatusUnauthorized)
-			return
-		}
-		if !auth.passwordMatches(input.Password) {
-			http.Error(response, "invalid credentials", http.StatusUnauthorized)
-			return
-		}
-		token, expiresAt, err := auth.issue()
-		if err != nil {
-			http.Error(response, "authentication unavailable", http.StatusInternalServerError)
-			return
-		}
-		maxAge := int(auth.ttl / time.Second)
-		if maxAge < 1 {
-			maxAge = 1
-		}
-		http.SetCookie(response, &http.Cookie{
-			Name: authCookieName, Value: token, Path: "/", MaxAge: maxAge,
-			Expires: expiresAt, HttpOnly: true, Secure: request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteLaxMode,
-		})
-		writeJSON(response, map[string]string{"token": token, "expires_at": expiresAt.UTC().Format(time.RFC3339Nano)})
-	})
-	mux.HandleFunc("POST /api/auth/logout", func(response http.ResponseWriter, request *http.Request) {
-		http.SetCookie(response, &http.Cookie{Name: authCookieName, Value: "", Path: "/", MaxAge: -1, Expires: time.Unix(1, 0), HttpOnly: true, Secure: request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteLaxMode})
-		response.WriteHeader(http.StatusNoContent)
-	})
-	mux.Handle("POST /api/auth/session", auth.protect(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if !auth.required() {
-			response.WriteHeader(http.StatusNoContent)
-			return
-		}
-		token := authToken(request)
-		expiresAt, ok := auth.tokenExpires(token)
-		if !ok {
-			http.Error(response, "authentication required", http.StatusUnauthorized)
-			return
-		}
-		maxAge := int(time.Until(expiresAt) / time.Second)
-		if maxAge < 1 {
-			maxAge = 1
-		}
-		http.SetCookie(response, &http.Cookie{
-			Name: authCookieName, Value: token, Path: "/", MaxAge: maxAge,
-			Expires: expiresAt, HttpOnly: true, Secure: request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https"), SameSite: http.SameSiteLaxMode,
-		})
-		response.WriteHeader(http.StatusNoContent)
-	})))
+	mountAuth(mux, auth)
 	mux.Handle("GET /api/state", auth.protect(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		response.Header().Set("Content-Type", "application/json; charset=utf-8")
 		response.Header().Set("Cache-Control", "no-store")
@@ -257,8 +188,20 @@ func staticAssetVersion(assets fs.FS) (string, error) {
 
 func (auth *authManager) protect(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		if auth.valid(authToken(request)) {
+		if !sameOrigin(request) {
+			http.Error(response, "forbidden", http.StatusForbidden)
+			return
+		}
+		if !auth.required() {
 			next.ServeHTTP(response, request)
+			return
+		}
+		if session := auth.session(authToken(request)); session != nil {
+			ctx, cancel := context.WithDeadline(request.Context(), session.expires)
+			stop := context.AfterFunc(session.ctx, cancel)
+			defer stop()
+			defer cancel()
+			next.ServeHTTP(response, request.WithContext(ctx))
 			return
 		}
 		response.Header().Set("WWW-Authenticate", `Bearer realm="orbit-web"`)
@@ -285,7 +228,12 @@ func writeJSON(response http.ResponseWriter, value any) {
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		response.Header().Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'")
+		response.Header().Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' blob:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+		response.Header().Set("X-Frame-Options", "DENY")
+		response.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		if request.TLS != nil || strings.EqualFold(request.Header.Get("X-Forwarded-Proto"), "https") {
+			response.Header().Set("Strict-Transport-Security", "max-age=31536000")
+		}
 		response.Header().Set("Referrer-Policy", "no-referrer")
 		response.Header().Set("X-Content-Type-Options", "nosniff")
 		next.ServeHTTP(response, request)

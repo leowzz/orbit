@@ -6,7 +6,7 @@ RUN pnpm install --frozen-lockfile
 COPY web/core-console ./
 RUN pnpm build
 
-FROM golang:1.27-alpine AS build
+FROM golang:1.27.2-alpine AS build
 
 ARG BINARY
 

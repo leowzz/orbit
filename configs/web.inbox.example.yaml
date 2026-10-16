@@ -1,10 +1,10 @@
-# Web status and inbox share one registered Web device and its token.
-# No MQTT or node.id is needed. Protect remote access with HTTPS.
-# Configure this device's status sources in Core (overview-app profile).
+# Web Node provides only the personal inbox. No MQTT or node.id is needed.
+# Protect remote access with HTTPS; the device token stays on this server.
 web:
   listen: 127.0.0.1:8080
   auth:
-    password: change-me
+    password: replace-with-a-long-unique-password
+    # session_ttl: 24h
   inbox:
     url: https://orbit.example.com
     token_file: secrets/web-inbox-token

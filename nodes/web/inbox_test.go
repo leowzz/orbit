@@ -21,11 +21,7 @@ func TestInboxGatewayKeepsCredentialOnServer(t *testing.T) {
 	defer upstream.Close()
 	cfg := AuthConfig{Password: "browser-password", SessionTTL: time.Hour, InboxURL: upstream.URL, InboxToken: "device-secret"}
 	handler := HandlerWithAuth(NewStore(), nil, cfg)
-	auth := newAuthManager(cfg)
-	token, _, err := auth.issue()
-	if err != nil {
-		t.Fatal(err)
-	}
+	token := loginWeb(t, handler, "browser-password")
 	call := func(path, origin string, loggedIn bool) *httptest.ResponseRecorder {
 		r := httptest.NewRequest("GET", "http://localhost"+path, nil)
 		if loggedIn {

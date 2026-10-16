@@ -62,6 +62,7 @@ function reason(error) {
       storage_unavailable:
         "此浏览器无法安全保存离线内容，请使用支持本地存储的新版浏览器。",
       unauthenticated: "连接已失效，请重新连接。",
+      rate_limited: "尝试次数过多，请稍后再试。",
       device_revoked: "这台设备的访问已被撤销，请在管理台重新授权。",
       conflict: "另一台设备已修改这条消息。你的修改已保留，可复制后重新编辑。",
       invalid_fields: "内容格式不正确，请检查后重试。",
@@ -594,7 +595,7 @@ $("login-form").onsubmit = async (event) => {
         "/api/auth/login",
         json({ password: value }),
       );
-      if (!response.ok) throw { code: "unauthenticated" };
+      if (!response.ok) throw { code: response.status === 429 ? "rate_limited" : "unauthenticated" };
     } else {
       let token = value;
       if (value.startsWith("{")) {
@@ -819,6 +820,11 @@ document.addEventListener("visibilitychange", () => {
 (async () => {
   try {
     mode = (await api("browser")).mode;
+    if (mode === "gateway") {
+      document.documentElement.dataset.theme = "dark";
+      // Discard credentials saved by the retired display page.
+      try { localStorage.removeItem("orbit.web.auth"); } catch {}
+    }
     if (mode === "gateway") {
       $("credential-label").textContent = "Web Node 访问密码";
       $("credential-label").htmlFor = "gateway-password";

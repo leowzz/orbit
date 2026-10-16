@@ -2,6 +2,8 @@ module orbit
 
 go 1.27.0
 
+toolchain go1.27.2
+
 require (
 	github.com/beevik/ntp v1.5.0
 	github.com/eclipse/paho.golang v0.23.0

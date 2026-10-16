@@ -24,7 +24,7 @@ services:
     <<: *orbit-service
     image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-web:${version:?set version in .env}
     ports:
-      - "7621:7621"
+      - "127.0.0.1:7621:7621"
 
 volumes:
   orbit-core-data:

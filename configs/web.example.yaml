@@ -1,45 +1,10 @@
-# Required values remain active. Optional settings are commented; defaults are noted where applicable.
-
-node:
-  # Must match a projection_routes key in the Core configuration.
-  id: desk-web-01
-
-# Optional application-level NTP calibration. Defaults are shown below.
-# ntp:
-#   server: ntp.aliyun.com
-#   sync_interval: 10m
-#   timeout: 2s
-
-mqtt:
-  url: mqtts://broker.example.com:8883
-  # Optional. TLS defaults to enabled and uses the system root CA pool.
-  # Set ca_file for a private CA. Set cert_file and key_file together for mTLS.
-  # tls:
-  #   enabled: true
-  #   ca_file: secrets/mqtt-ca.pem
-  #   cert_file: secrets/web-client.pem
-  #   key_file: secrets/web-client.key
-  # Secret file paths are resolved relative to this configuration file.
-  credentials:
-    username_file: secrets/web-mqtt-username
-    password_file: secrets/web-mqtt-password
-
+# Web Node provides only the personal inbox. No MQTT or node.id is needed.
+# Protect remote access with HTTPS; the device token stays on this server.
 web:
-  # Optional; defaults to 127.0.0.1:8080.
-  # listen: 127.0.0.1:8080
+  listen: 127.0.0.1:8080
   auth:
-    password: replace-with-web-password
-    # Optional; defaults to 24h.
+    password: replace-with-a-long-unique-password
     # session_ttl: 24h
-
-# Optional; defaults to info. Supported values: debug, info, warn, error.
-# logging:
-#   level: info
-
-# Recommended unified status and inbox connection, configured once on the server.
-# Add these fields under the existing web section:
-#   inbox:
-#     url: https://orbit.example.com
-#     token_file: secrets/web-inbox-token
-# When configured, status and inbox both use this token's device identity;
-# legacy mqtt/node settings above are ignored. See web.inbox.example.yaml.
+  inbox:
+    url: https://orbit.example.com
+    token_file: secrets/web-inbox-token

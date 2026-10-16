@@ -66,8 +66,7 @@ func TestHTTPWebSharesInboxIdentityAndSessionAuthority(t *testing.T) {
 	// The existing Web browser API retains its contract, while the runner adds
 	// Core's epoch and string revision to the authenticated upstream request.
 	handler := HandlerWithAuth(store, runner, AuthConfig{Password: "web-password", SessionTTL: time.Hour, InboxURL: upstream.URL, InboxToken: token})
-	auth := newAuthManager(AuthConfig{Password: "web-password", SessionTTL: time.Hour})
-	session, _, _ := auth.issue()
+	session := loginWeb(t, handler, "web-password")
 	call := func(method, path, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")

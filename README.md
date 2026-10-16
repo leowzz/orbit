@@ -11,7 +11,7 @@ Deployment settings remain in YAML.
 | --- | --- |
 | Agent | Collect host usage and Codex state; execute enabled typed capabilities. |
 | Core + console | Validate observations, manage routes, and publish device views. The console defaults to `127.0.0.1:7620`. |
-| Web Node | Display its assigned view over HTTP/SSE; optionally request opening a Codex task. It has its own login and is separate from the Core console. |
+| Web Node | Personal inbox for text, links, todos and images, with its own password and a server-side device token. |
 | OLED / Android Node | Render the view assigned by Core on a physical display or Android widgets. |
 
 The architecture is split into two one-way flows: state projection and typed
@@ -33,7 +33,6 @@ flowchart TB
     NodeState["MQTT NodeState<br/>retained / epoch + product"] -->|"node prerequisite"| Projector
     Projector -->|"QoS 1 / retained"| View["MQTT DeviceView<br/>nodes/{node_id}/view"]
     View -->|"usage-oled-128x32"| OLED["OLED Node<br/>local pixel rendering"]
-    View -->|"overview-web"| Web["Web Node<br/>cached view + HTTP/SSE"]
     View -->|"overview-android"| Android["Android Node<br/>home screen widgets"]
 
     classDef host fill:#eaf2ff,stroke:#2563eb,color:#172033
@@ -43,8 +42,11 @@ flowchart TB
     class Usage,Codex,Agent host
     class Observation,AgentState,NodeState,View topic
     class Ingress,Canonical,Projector,Route core
-    class OLED,Web,Android node
+    class OLED,Android node
 ```
+
+Web Node uses the Core personal API over HTTPS for inbox synchronization,
+independently of this MQTT state flow.
 
 **Command flow: Intent -> CommandResult**
 
@@ -52,7 +54,7 @@ flowchart TB
 flowchart TB
     subgraph Request["1 - Request and route"]
         direction LR
-        Web["Web Node<br/>fresh cached view"] -->|"TTL 20s"| Intent["MQTT Intent<br/>nodes/{node_id}/intents"]
+        Node["MQTT Node<br/>fresh cached view"] -->|"TTL 20s"| Intent["MQTT Intent<br/>nodes/{node_id}/intents"]
         Intent --> Router["Core validation + routing<br/>epoch / revision / session"]
         Context["Current Core context<br/>Route + Codex state"] --> Router
         Router -->|"typed / TTL <= 30s"| Command["MQTT Command<br/>agents/{agent_id}/commands"]
@@ -67,7 +69,7 @@ flowchart TB
     subgraph Observe["3 - Observe result"]
         direction LR
         ResultTopic["MQTT CommandResult<br/>agents/{agent_id}/results"] --> Observer["Test/admin subscriber<br/>current endpoint"]
-        ResultTopic -. "planned" .-> Feedback["Core -> Web feedback<br/>not implemented"]
+        ResultTopic -. "planned" .-> Feedback["Core -> device feedback<br/>not implemented"]
     end
 
     Command --> Agent
@@ -429,12 +431,13 @@ docker compose --env-file .env -f deploy/docker-compose.yml pull
 docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ~~~
 
-The deployment binds the Core console to host `127.0.0.1:7620` and publishes
-Web Node on port 7621. Set these values in the respective YAML files:
+The deployment binds the Core console to host `127.0.0.1:7620` and
+Web Node to `127.0.0.1:7621`. Set these values in the respective YAML files:
 
 - Core: `console.listen: 0.0.0.0:7620`,
   `console.database: /app/data/core.sqlite`, and a `console.password`.
-- Web Node: `web.listen: 0.0.0.0:7621` and `web.auth.password`.
+- Web Node: `web.listen: 0.0.0.0:7621`, `web.auth.password`, and the
+  `web.inbox` server URL and device token file.
 
 Files under `configs/` are mounted read-only and must be readable by UID 65532.
 The `orbit-core-data` volume persists SQLite across container replacements;
@@ -476,7 +479,7 @@ The live host path needs a reachable broker and the configured secret files.
 Start Core first so it is subscribed before observations arrive. Use separate
 terminals when inspecting logs:
 
-Agent, Core, and Web Node also accept an optional top-level `ntp` section with
+Agent and Core also accept an optional top-level `ntp` section with
 `server`, `sync_interval`, and `timeout`. When omitted, it defaults to
 `ntp.aliyun.com`, `10m`, and `2s`. Each process queries NTP once before connecting
 to MQTT and refreshes the offset in the background. A failed query keeps the
@@ -545,34 +548,22 @@ Start the web node in a third terminal:
 make dev-web WEB_CONFIG=configs/web.local.yaml
 ~~~
 
-The startup log prints its local URL (127.0.0.1:8080 in the example). The page
-requires the configured single password, then keeps an expiring browser session
-in local storage and one SSE connection open. It updates whenever a new retained
-DeviceView is accepted. Its MQTT credential needs publish access to its own
-NodeState and Intent topics and subscribe access to its own DeviceView topic.
+The startup log prints its local URL (127.0.0.1:8080 in the example). The root
+opens the personal inbox at `/inbox/`. Configure `web.inbox.url`,
+`web.inbox.token_file`, and a long, unique `web.auth.password`; see
+[personal inbox](docs/personal-inbox.md). Web Node no longer connects to MQTT or
+exposes display status or Codex session actions.
 
-`make dev-web` serves `nodes/web/static` directly from disk. Saving an HTML,
-CSS, or JavaScript file in that directory automatically reloads connected
-browsers; no Web Node restart or manual page refresh is needed. Go code changes
-still require restarting the process. Running the binary without `-static-dir`
-continues to serve the embedded production assets.
+Authentication uses an HttpOnly cookie, random server-side sessions and a shared
+budget of five login attempts per minute. Logout revokes the session; sessions
+also expire when the server restarts. Browser drafts remain saved locally.
 
-### Simulate the target landscape display
+`make dev-web` serves `nodes/web/inboxui/static` directly from disk. Refresh the
+page after editing HTML, CSS or JavaScript. Go changes require restarting the
+process. Without `-static-dir`, the binary serves embedded production assets.
 
-Use the following browser settings to compare the Web node with the current
-device in landscape orientation:
-
-| Setting | Value |
-| --- | --- |
-| Responsive viewport | 1000 x 450 px |
-| Browser zoom | 125% |
-| Android system minimum width | 320 dp |
-
-Compare the layout with the device browser in fullscreen mode so browser chrome
-does not reduce the available page height.
-
-Each service exits non-zero on a configuration, TLS, authentication, ACL, or
-initial MQTT connection error. A successful startup emits an "orbit core
+Agent and MQTT-enabled Core exit non-zero on a configuration, TLS,
+authentication, ACL, or initial MQTT connection error. A successful startup emits an "orbit core
 started" or "orbit agent started" log message after the MQTT connection is
 established. With logging.level: debug, the live acceptance log sequence also
 includes "usage observation published" from Agent, "usage observation
@@ -596,7 +587,7 @@ A successful live chain has these messages in the broker:
 | --- | --- | --- | --- |
 | orbit/v1/agents/{agent_id}/state | Agent | Core | yes |
 | orbit/v1/agents/{agent_id}/observations/usage | Agent | Core | no |
-| orbit/v1/agents/{agent_id}/observations/codex | Agent | Core -> Web projection; OLED ignores | no |
+| orbit/v1/agents/{agent_id}/observations/codex | Agent | Core -> configured projection | no |
 | orbit/v1/nodes/{node_id}/state | Node | Core | yes |
 | orbit/v1/nodes/{node_id}/view | Core | Node | yes |
 | orbit/v1/nodes/{node_id}/intents | Node | Core | no |

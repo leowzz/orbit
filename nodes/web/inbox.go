@@ -1,16 +1,20 @@
 package web
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"orbit/nodes/web/inboxui"
 )
 
-func mountInbox(mux *http.ServeMux, auth *authManager, cfg AuthConfig) {
+func mountInbox(mux *http.ServeMux, auth *authManager, cfg AuthConfig, inboxOnly bool) {
 	mux.Handle("GET /inbox/", inboxui.Handler())
 	mux.HandleFunc("GET /api/v1/browser", func(w http.ResponseWriter, r *http.Request) {
 		mode := "unavailable"
@@ -36,7 +40,30 @@ func mountInbox(mux *http.ServeMux, auth *authManager, cfg AuthConfig) {
 			p.Out.Header.Del("Referer")
 			p.Out.Header.Set("Authorization", "Bearer "+cfg.InboxToken)
 		},
-		Transport:     transport,
+		Transport: transport,
+		ModifyResponse: func(response *http.Response) error {
+			if !inboxOnly || response.Request.URL.Path != "/api/v1/status" || response.StatusCode != http.StatusOK {
+				return nil
+			}
+			// The inbox needs device identity, never a display/session projection.
+			defer response.Body.Close()
+			var identity struct {
+				NodeID string `json:"node_id"`
+				Label  string `json:"label"`
+			}
+			if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&identity); err != nil {
+				return err
+			}
+			data, err := json.Marshal(identity)
+			if err != nil {
+				return err
+			}
+			response.Body = io.NopCloser(bytes.NewReader(data))
+			response.ContentLength = int64(len(data))
+			response.Header.Set("Content-Length", strconv.Itoa(len(data)))
+			response.Header.Set("Content-Type", "application/json")
+			return nil
+		},
 		FlushInterval: -1,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			w.Header().Set("Content-Type", "application/json")
@@ -48,9 +75,7 @@ func mountInbox(mux *http.ServeMux, auth *authManager, cfg AuthConfig) {
 	// administration or exchange browser credentials with the upstream service.
 	for _, pattern := range []string{"GET /api/v1/status", "GET /api/v1/sync/snapshot", "GET /api/v1/changes", "GET /api/v1/events", "POST /api/v1/operations", "POST /api/v1/attachments", "GET /api/v1/attachments/{id}"} {
 		mux.Handle(pattern, auth.protect(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			u, err := url.Parse(origin)
-			if r.Header.Get("Sec-Fetch-Site") == "cross-site" || (origin != "" && (err != nil || u.Host != r.Host || (u.Scheme != "http" && u.Scheme != "https"))) {
+			if !sameOrigin(r) {
 				http.Error(w, "forbidden", http.StatusForbidden)
 				return
 			}
