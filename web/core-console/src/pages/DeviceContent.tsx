@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, RefreshCw } from "lucide-react";
 import {
@@ -11,6 +11,34 @@ import {
 } from "../api";
 import type { InputKind, NetworkState, Route, RouteDocument } from "../api";
 import { Empty } from "../components";
+import useAutoSave from "../useAutoSave";
+import AutoSaveStatus from "../AutoSaveStatus";
+import SettingSwitch from "../SettingSwitch";
+
+class InvalidRoute extends Error {}
+function validateRoute(route: Route) {
+  const mode = displayMode(route);
+  const kinds: InputKind[] = [];
+  if (mode === "usage" || mode === "rotating") kinds.push("usage");
+  if (mode === "codex" || mode === "rotating" || sessionsEnabled(route))
+    kinds.push("codex");
+  if (
+    kinds.some(
+      (kind) =>
+        !route.inputs.some(
+          (input) => input.observation_type === kind && input.agent_id,
+        ),
+    )
+  )
+    throw new InvalidRoute("请选择显示内容所需的电脑，选好后会自动保存。");
+  if (
+    mode === "rotating" &&
+    (!Number.isInteger(route.rotation_seconds) ||
+      route.rotation_seconds! < 1 ||
+      route.rotation_seconds! > 3600)
+  )
+    throw new InvalidRoute("循环间隔需为 1–3600 秒的整数，填写后会自动保存。");
+}
 
 function suggestedInputs(state: NetworkState): Route["inputs"] {
   return (["usage", "codex"] as const).flatMap((kind) => {
@@ -65,34 +93,54 @@ export default function DeviceContent({
   onChange: (d: RouteDocument) => void;
 }) {
   const [base, setBase] = useState(document);
-  const [baseline, setBaseline] = useState(() =>
-    initialRoute(document.routes[nodeId], profile, state),
-  );
-  const [draft, setDraft] = useState(baseline);
+  const baseRef = useRef(document);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [conflict, setConflict] = useState(false);
-  const [message, setMessage] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [pending, setPending] = useState(false);
+  function acceptDocument(next: RouteDocument) {
+    baseRef.current = next;
+    setBase(next);
+    onChange(next);
+  }
+  const auto = useAutoSave<Route>(
+    initialRoute(document.routes[nodeId], profile, state),
+    async (value) => {
+      if (revoked) throw new InvalidRoute("此设备的访问已撤销，设置未保存。");
+      validateRoute(value);
+      const current = baseRef.current;
+      const result = await api<RouteDocument>("/routes", {
+        method: "PUT",
+        body: JSON.stringify({
+          revision: current.revision,
+          routes: { ...current.routes, [nodeId]: value },
+        }),
+      });
+      acceptDocument(result);
+      setPending(!!result.publish_pending);
+      return initialRoute(result.routes[nodeId], profile, state);
+    },
+  );
+  const draft = auto.value!;
   const route = base.routes[nodeId];
-  const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
+  const conflict = auto.error instanceof APIError && auto.error.status === 409;
+  const error =
+    actionError ||
+    (auto.error
+      ? conflict
+        ? "配置已在别处更新。你的修改已保留，请载入最新配置后重新调整。"
+        : auto.error instanceof InvalidRoute
+          ? auto.error.message
+          : "未能自动保存，修改已保留，请检查连接后重试。"
+      : "");
   useEffect(() => {
-    if (!dirty) {
-      setBase(document);
-      const next = initialRoute(document.routes[nodeId], profile, state);
-      setBaseline(next);
-      setDraft(next);
-    }
-  }, [document, nodeId, profile, state, dirty]);
-  useEffect(() => {
-    const leave = (event: BeforeUnloadEvent) => {
-      if (dirty) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", leave);
-    return () => window.removeEventListener("beforeunload", leave);
-  }, [dirty]);
+    const current = auto.queue.getSnapshot();
+    if (current.dirty || current.saving || busy) return;
+    baseRef.current = document;
+    setBase(document);
+    const next = initialRoute(document.routes[nodeId], profile, state);
+    if (JSON.stringify(next) !== JSON.stringify(current.value))
+      auto.queue.reset(next);
+  }, [document, nodeId, profile, state, auto.queue, busy]);
   function update(patch: Partial<Route>) {
     const next = { ...draft, ...patch };
     if (patch.display_mode && patch.display_mode !== "rotating")
@@ -115,9 +163,8 @@ export default function DeviceContent({
         ),
       ];
     }
-    setDraft(next);
-    setMessage("");
-    setError("");
+    auto.queue.set(next, 350, !baseRef.current.routes[nodeId]);
+    setActionError("");
   }
   const mode = displayMode(draft);
   const sessions = sessionsEnabled(draft);
@@ -144,80 +191,44 @@ export default function DeviceContent({
       ],
     });
   }
-  async function save(remove = false) {
-    if (
-      remove &&
-      !window.confirm("停止向此设备同步数据内容？收件箱和快捷操作会保留。")
-    )
+  async function stopSync() {
+    if (!window.confirm("停止向此设备同步数据内容？收件箱和快捷操作会保留。"))
       return;
-    if (!remove) {
-      if (
-        (needsUsage && !source("usage")) ||
-        (needsCodex && !source("codex"))
-      ) {
-        setError("请选择显示内容所需的电脑。");
-        return;
-      }
-      if (
-        mode === "rotating" &&
-        (!Number.isInteger(draft.rotation_seconds) ||
-          draft.rotation_seconds! < 1 ||
-          draft.rotation_seconds! > 3600)
-      ) {
-        setError("循环间隔需为 1–3600 秒的整数。");
-        return;
-      }
-    }
     setBusy(true);
-    setError("");
-    setMessage("");
-    setConflict(false);
-    const routes = { ...base.routes };
-    if (remove) delete routes[nodeId];
-    else routes[nodeId] = draft;
+    setActionError("");
     try {
+      await auto.queue.flush();
+      const current = baseRef.current;
+      const routes = { ...current.routes };
+      delete routes[nodeId];
       const result = await api<RouteDocument>("/routes", {
         method: "PUT",
-        body: JSON.stringify({ revision: base.revision, routes }),
+        body: JSON.stringify({ revision: current.revision, routes }),
       });
-      setBase(result);
-      const next = initialRoute(result.routes[nodeId], profile, state);
-      setBaseline(next);
-      setDraft(next);
-      onChange(result);
-      setMessage(
-        result.publish_pending
-          ? "已保存，连接恢复后同步。"
-          : remove
-            ? "已停止同步数据内容。"
-            : "已保存，设备连接后同步。",
-      );
-    } catch (e) {
-      setConflict(e instanceof APIError && e.status === 409);
-      setError(
-        e instanceof APIError && e.status === 409
-          ? "配置已在别处更新。你的修改已保留，可载入最新配置后重新调整。"
-          : "未能保存，请检查连接后重试。",
-      );
+      acceptDocument(result);
+      auto.queue.reset(initialRoute(undefined, profile, state));
+      setPending(false);
+    } catch {
+      setActionError("未能停止同步，请刷新配置后重试。");
     } finally {
       setBusy(false);
     }
   }
   async function reload() {
-    if (dirty && !window.confirm("载入最新配置会放弃当前修改，继续？")) return;
+    if (
+      auto.dirty &&
+      !window.confirm("载入最新配置会放弃尚未保存的修改，继续？")
+    )
+      return;
     setBusy(true);
     try {
       const result = await api<RouteDocument>("/routes");
-      setBase(result);
-      const next = initialRoute(result.routes[nodeId], profile, state);
-      setBaseline(next);
-      setDraft(next);
-      onChange(result);
-      setError("");
-      setConflict(false);
-      setMessage("");
+      acceptDocument(result);
+      auto.queue.reset(initialRoute(result.routes[nodeId], profile, state));
+      setActionError("");
+      setPending(!!result.publish_pending);
     } catch {
-      setError("未能载入配置，请重试。");
+      setActionError("未能载入配置，请重试。");
     } finally {
       setBusy(false);
     }
@@ -256,152 +267,119 @@ export default function DeviceContent({
     );
   }
   return (
-    <div className="device-content">
-      <section className="device-section panel">
-        <h2>显示内容</h2>
-        <fieldset className="settings-fields" disabled={busy || revoked}>
-          <div className="content-modes" role="group" aria-label="显示内容">
-            {!mode && (
-              <button className="content-mode" aria-pressed onClick={() => {}}>
-                <strong>综合展示</strong>
-                <span>沿用当前内容</span>
-              </button>
-            )}
-            {displayModes.map((item) => (
-              <button
-                key={item.value}
-                className="content-mode"
-                aria-pressed={mode === item.value}
-                onClick={() =>
-                  update({
-                    display_mode: item.value,
-                    ...(item.value === "rotating"
-                      ? { rotation_seconds: draft.rotation_seconds || 3 }
-                      : {}),
-                  })
-                }
-              >
-                <strong>
-                  {item.label}
-                  {mode === item.value && <Check size={17} />}
-                </strong>
-                <span>
-                  {
-                    {
-                      usage: "查看 API 消耗",
-                      codex: "查看 Codex 额度",
-                      rotating: "两种指标轮流显示",
-                    }[item.value]
-                  }
-                </span>
-              </button>
-            ))}
-          </div>
-          {mode === "rotating" && (
-            <label className="setting-row">
-              <span>
-                <strong>切换间隔</strong>
-                <small>两种指标自动轮换</small>
-              </span>
-              <span className="interval-input">
-                <input
-                  aria-label="切换间隔（秒）"
-                  type="number"
-                  min={1}
-                  max={3600}
-                  step={1}
-                  value={draft.rotation_seconds ?? 3}
-                  onChange={(e) =>
-                    update({ rotation_seconds: Number(e.target.value) })
-                  }
-                />
-                秒
-              </span>
-            </label>
+    <div className="device-content device-section panel">
+      <h2>显示内容</h2>
+      <fieldset className="settings-fields" disabled={busy || revoked}>
+        <div className="content-modes" role="group" aria-label="显示内容">
+          {!mode && (
+            <button className="content-mode" aria-pressed onClick={() => {}}>
+              <strong>综合展示</strong>
+            </button>
           )}
-          {!oled && (
-            <label className="setting-row">
-              <span>
-                <strong>显示 Codex 会话</strong>
-                <small>同步会话详情；打开会话仍需电脑允许执行</small>
-              </span>
+          {displayModes.map((item) => (
+            <button
+              key={item.value}
+              className="content-mode"
+              aria-pressed={mode === item.value}
+              onClick={() =>
+                update({
+                  display_mode: item.value,
+                  ...(item.value === "rotating"
+                    ? { rotation_seconds: draft.rotation_seconds || 3 }
+                    : {}),
+                })
+              }
+            >
+              <strong>
+                {item.label}
+                {mode === item.value && <Check size={17} />}
+              </strong>
+            </button>
+          ))}
+        </div>
+        {mode === "rotating" && (
+          <div className="setting-row">
+            <span>
+              <strong>切换间隔</strong>
+              <small>两种指标自动轮换</small>
+            </span>
+            <span className="interval-input">
               <input
-                className="toggle-input"
-                role="switch"
-                type="checkbox"
-                checked={sessions}
-                onChange={(e) => update({ sessions_enabled: e.target.checked })}
+                aria-label="切换间隔（秒）"
+                type="number"
+                min={1}
+                max={3600}
+                step={1}
+                value={draft.rotation_seconds ?? 3}
+                onChange={(e) =>
+                  update({ rotation_seconds: Number(e.target.value) })
+                }
               />
-            </label>
-          )}
-          <div className="content-sources">
-            <h3>数据来自</h3>
-            {needsUsage && sourceSelect("usage", "API 用量来源")}
-            {needsCodex && sourceSelect("codex", "Codex 来源")}
-            {!state.agents.length && !route && (
-              <Empty title="还没有可用电脑">
-                先连接 Orbit Agent，再选择数据来源。
-                <br />
-                <Link className="text-link" to="/agents">
-                  查看电脑与来源
-                </Link>
-              </Empty>
-            )}
+              秒
+            </span>
           </div>
-        </fieldset>
-      </section>
-      {error && (
+        )}
+        {!oled && (
+          <SettingSwitch
+            title="显示 Codex 会话"
+            description="同步会话详情；打开会话仍需电脑允许执行"
+            checked={sessions}
+            onChange={(checked) => update({ sessions_enabled: checked })}
+          />
+        )}
+        <div className="content-sources">
+          <h3>数据来自</h3>
+          {needsUsage && sourceSelect("usage", "API 用量来源")}
+          {needsCodex && sourceSelect("codex", "Codex 来源")}
+          {!state.agents.length && !route && (
+            <Empty title="还没有可用电脑">
+              先连接 Orbit Agent，再选择数据来源。
+              <br />
+              <Link className="text-link" to="/agents">
+                查看电脑与来源
+              </Link>
+            </Empty>
+          )}
+        </div>
+      </fieldset>
+      {error ? (
         <div className="banner error" role="alert">
           {error}
-          {conflict && (
-            <button disabled={busy} onClick={() => void reload()}>
+          {conflict || actionError ? (
+            <button
+              disabled={busy || auto.saving}
+              onClick={() => void reload()}
+            >
               <RefreshCw size={14} />
               载入最新配置
             </button>
+          ) : (
+            !(auto.error instanceof InvalidRoute) && (
+              <button
+                disabled={auto.saving}
+                onClick={() => void auto.queue.retry()}
+              >
+                重试
+              </button>
+            )
           )}
         </div>
+      ) : (
+        <AutoSaveStatus
+          saving={auto.saving}
+          dirty={auto.dirty}
+          changed={auto.changed}
+          pending={pending}
+          empty={!route}
+        />
       )}
-      {message && (
-        <div className="banner success" role="status">
-          {message}
-        </div>
-      )}
-      <div className="device-save">
-        <span>
-          {dirty
-            ? "有未保存的修改"
-            : route
-              ? "已保存"
-              : "选择内容和来源后开始同步"}
-        </span>
-        {dirty && (
-          <button
-            className="button"
-            disabled={busy}
-            onClick={() => {
-              setDraft(baseline);
-              setError("");
-              setConflict(false);
-            }}
-          >
-            撤销修改
-          </button>
-        )}
-        <button
-          className="button primary"
-          disabled={busy || revoked || (!!route && !dirty)}
-          onClick={() => void save()}
-        >
-          {busy ? "保存中…" : route ? "保存显示设置" : "开始同步"}
-        </button>
-      </div>
       {route && (
         <details className="device-more">
           <summary>更多操作</summary>
           <button
             className="button danger"
             disabled={busy || revoked}
-            onClick={() => void save(true)}
+            onClick={() => void stopSync()}
           >
             停止同步数据内容
           </button>

@@ -8,7 +8,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "check": "tsc -b",
-    "test": "node --experimental-strip-types --test src/api.test.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts",
     "preview": "vite preview --host 127.0.0.1",
     "format": "prettier --write src vite.config.ts package.json tsconfig.json",
     "format:check": "prettier --check src vite.config.ts package.json tsconfig.json"

@@ -269,7 +269,13 @@ export default function Nodes({
                     此设备的访问已撤销。可在「连接与访问」中重新授权。
                   </div>
                 )}
-                <div className="device-settings">
+                <div
+                  className={
+                    current.model === "oled-128x32"
+                      ? "device-settings device-metrics-settings"
+                      : "device-settings"
+                  }
+                >
                   <section aria-label="内容与显示">
                     <DeviceContent
                       key={current.id}
@@ -281,27 +287,25 @@ export default function Nodes({
                       onChange={onChange}
                     />
                   </section>
-                  <section aria-label="快捷操作">
-                    {current.model === "oled-128x32" ? (
-                      <div className="panel device-section">
-                        <p>此设备只显示指标，不提供快捷操作。</p>
-                      </div>
-                    ) : enabled ? (
-                      <DeviceShortcuts
-                        key={current.id}
-                        nodeId={current.id}
-                        revoked={!!current.revoked}
-                        displayPadding={current.profile === "overview-app"}
-                      />
-                    ) : (
-                      <div className="panel device-section">
-                        <p>
-                          请先在 Core 部署配置中启用 App
-                          服务，以管理和同步快捷操作。
-                        </p>
-                      </div>
-                    )}
-                  </section>
+                  {current.model !== "oled-128x32" && (
+                    <section aria-label="快捷操作">
+                      {enabled ? (
+                        <DeviceShortcuts
+                          key={current.id}
+                          nodeId={current.id}
+                          revoked={!!current.revoked}
+                          displayPadding={current.profile === "overview-app"}
+                        />
+                      ) : (
+                        <div className="panel device-section">
+                          <p>
+                            请先在 Core 部署配置中启用 App
+                            服务，以管理和同步快捷操作。
+                          </p>
+                        </div>
+                      )}
+                    </section>
+                  )}
                   <section
                     className="device-section panel device-access"
                     aria-label="连接与访问"

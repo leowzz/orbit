@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { api, APIError } from "../api";
 import type {
@@ -7,6 +7,25 @@ import type {
   ShortcutPairing,
 } from "../api";
 import { Empty } from "../components";
+import useAutoSave from "../useAutoSave";
+import AutoSaveStatus from "../AutoSaveStatus";
+import SettingSwitch, { InlineCheckbox } from "../SettingSwitch";
+
+function navigationEqual(
+  a: NavigationSettings | null,
+  b: NavigationSettings | null,
+) {
+  const content = (value: NavigationSettings | null) => {
+    if (!value) return null;
+    const {
+      revision: _revision,
+      publish_pending: _pending,
+      ...settings
+    } = value;
+    return settings;
+  };
+  return JSON.stringify(content(a)) === JSON.stringify(content(b));
+}
 
 const endpointKey = (p: { executor_kind: string; executor_id: string }) =>
   `${p.executor_kind}/${p.executor_id}`;
@@ -24,15 +43,45 @@ export default function DeviceShortcuts({
   revoked: boolean;
   displayPadding: boolean;
 }) {
-  const [saved, setSaved] = useState<NavigationSettings | null>(null);
-  const [draft, setDraft] = useState<NavigationSettings | null>(null);
   const [endpoints, setEndpoints] = useState<ExecutionEndpoint[]>([]);
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [pending, setPending] = useState(false);
+  const loadRequest = useRef(0);
+  const auto = useAutoSave<NavigationSettings>(
+    null,
+    async (value, saved) => {
+      if (revoked) throw new Error("revoked");
+      const result = await api<NavigationSettings>(
+        `/app/navigation/${encodeURIComponent(nodeId)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            ...value,
+            revision: saved?.revision ?? value.revision,
+          }),
+        },
+      );
+      const { publish_pending, ...cfg } = result;
+      setPending(!!publish_pending);
+      return cfg;
+    },
+    navigationEqual,
+  );
+  const draft = auto.value;
+  const setDraft = auto.queue.set;
+  const conflict = auto.error instanceof APIError && auto.error.status === 409;
+  const error =
+    loadError ||
+    (auto.error
+      ? conflict
+        ? "配置或入口已在别处更新。修改已保留，请载入最新配置后调整。"
+        : "未能自动保存，修改已保留，请检查连接后重试。"
+      : "");
   const load = useCallback(async () => {
+    const request = ++loadRequest.current;
     setBusy(true);
-    setError("");
+    setLoadError("");
     try {
       const [cfg, result] = await Promise.all([
         api<NavigationSettings>(
@@ -40,63 +89,32 @@ export default function DeviceShortcuts({
         ),
         api<{ executors: ExecutionEndpoint[] }>("/app/executors"),
       ]);
-      setSaved(cfg);
-      setDraft(cfg);
+      if (request !== loadRequest.current) return;
+      const { publish_pending, ...settings } = cfg;
+      auto.queue.reset(settings);
+      setPending(!!publish_pending);
       setEndpoints(result.executors);
     } catch {
-      setError("未能读取快捷操作配置，请重试。");
+      if (request === loadRequest.current)
+        setLoadError("未能读取快捷操作配置，请重试。");
     } finally {
-      setBusy(false);
+      if (request === loadRequest.current) setBusy(false);
     }
-  }, [nodeId]);
+  }, [nodeId, auto.queue]);
   useEffect(() => {
     void load();
-  }, [load]);
-  const dirty = JSON.stringify(saved) !== JSON.stringify(draft);
-  useEffect(() => {
-    const leave = (event: BeforeUnloadEvent) => {
-      if (dirty) {
-        event.preventDefault();
-        event.returnValue = "";
-      }
+    return () => {
+      loadRequest.current++;
     };
-    window.addEventListener("beforeunload", leave);
-    return () => window.removeEventListener("beforeunload", leave);
-  }, [dirty]);
+  }, [load]);
   function updatePair(index: number, patch: Partial<ShortcutPairing>) {
     if (!draft) return;
     setDraft({
       ...draft,
-      pairs: draft.pairs.map((p, i) => (i === index ? { ...p, ...patch } : p)),
+      pairs: draft.pairs.map((pair, i) =>
+        i === index ? { ...pair, ...patch } : pair,
+      ),
     });
-  }
-  async function save() {
-    if (!draft) return;
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      const result = await api<NavigationSettings>(
-        `/app/navigation/${encodeURIComponent(nodeId)}`,
-        { method: "PUT", body: JSON.stringify(draft) },
-      );
-      const { publish_pending, ...cfg } = result;
-      setDraft(cfg);
-      setSaved(cfg);
-      setMessage(
-        publish_pending
-          ? "配置已保存，连接恢复后更新设备。"
-          : "已保存，设备连接后同步。",
-      );
-    } catch (e) {
-      setError(
-        e instanceof APIError && e.status === 409
-          ? "配置或入口已在别处更新。修改已保留，请载入最新配置后调整。"
-          : "未能保存，请检查连接及执行端状态后重试。",
-      );
-    } finally {
-      setBusy(false);
-    }
   }
   if (!draft)
     return (
@@ -166,17 +184,15 @@ export default function DeviceShortcuts({
                   >
                     <ArrowDown size={16} />
                   </button>
-                  <label className="inline-check">
-                    <input
-                      type="checkbox"
-                      checked={pair.enabled}
-                      disabled={busy || revoked || (!endpoint && !pair.enabled)}
-                      onChange={(e) =>
-                        updatePair(index, { enabled: e.target.checked })
-                      }
-                    />
-                    启用
-                  </label>
+                  <InlineCheckbox
+                    title="启用"
+                    label={`启用 ${endpoint?.host_label || pair.executor_id}`}
+                    checked={pair.enabled}
+                    disabled={busy || revoked || (!endpoint && !pair.enabled)}
+                    onChange={(checked) =>
+                      updatePair(index, { enabled: checked })
+                    }
+                  />
                   <button
                     className="icon-button"
                     disabled={busy || revoked}
@@ -198,21 +214,16 @@ export default function DeviceShortcuts({
                     ? "全部入口 · 自定义"
                     : `已选择 ${order.length} 个入口 · 调整`}
                 </summary>
-                <label className="inline-check">
-                  <input
-                    type="checkbox"
-                    disabled={busy || revoked}
-                    checked={pair.items === null}
-                    onChange={(e) =>
-                      updatePair(index, {
-                        items: e.target.checked
-                          ? null
-                          : entries.map((i) => i.id),
-                      })
-                    }
-                  />
-                  跟随来源的全部入口与排序
-                </label>
+                <InlineCheckbox
+                  title="跟随来源的全部入口与排序"
+                  checked={pair.items === null}
+                  disabled={busy || revoked}
+                  onChange={(checked) =>
+                    updatePair(index, {
+                      items: checked ? null : entries.map((item) => item.id),
+                    })
+                  }
+                />
                 {pair.items !== null && (
                   <div className="pair-entries">
                     {order.map((id, position) => (
@@ -323,64 +334,77 @@ export default function DeviceShortcuts({
             的「本机快捷操作」中添加入口，再载入此页。
           </Empty>
         )}
+        {error ? (
+          <div className="banner error" role="alert">
+            {error}
+            {conflict ? (
+              <button
+                disabled={auto.saving || busy}
+                onClick={() => {
+                  if (
+                    !auto.dirty ||
+                    window.confirm("载入最新配置会放弃尚未保存的修改，继续？")
+                  )
+                    void load();
+                }}
+              >
+                载入最新配置
+              </button>
+            ) : (
+              <button
+                disabled={auto.saving || busy}
+                onClick={() =>
+                  loadError ? void load() : void auto.queue.retry()
+                }
+              >
+                重试
+              </button>
+            )}
+          </div>
+        ) : (
+          <AutoSaveStatus
+            saving={auto.saving}
+            dirty={auto.dirty}
+            changed={auto.changed}
+            pending={pending}
+          />
+        )}
       </div>
       <div className="device-layout-options">
         <div className="device-section panel">
           <h2>快捷栏</h2>
-          <label className="setting-row">
-            <span>
-              <strong>显示入口名称</strong>
-              <small>在图标旁显示文字</small>
-            </span>
-            <input
-              className="toggle-input"
-              role="switch"
-              type="checkbox"
-              checked={draft.show_titles}
-              disabled={busy || revoked}
-              onChange={(e) =>
-                setDraft({ ...draft, show_titles: e.target.checked })
-              }
-            />
-          </label>
-          <label className="setting-row">
-            <span>
-              <strong>置于顶部</strong>
-              <small>在内容上方显示快捷栏</small>
-            </span>
-            <input
-              className="toggle-input"
-              role="switch"
-              type="checkbox"
-              checked={draft.at_top}
-              disabled={busy || revoked}
-              onChange={(e) => setDraft({ ...draft, at_top: e.target.checked })}
-            />
-          </label>
+          <SettingSwitch
+            title="显示入口名称"
+            description="在图标旁显示文字"
+            checked={draft.show_titles}
+            disabled={busy || revoked}
+            onChange={(checked) => setDraft({ ...draft, show_titles: checked })}
+          />
+          <SettingSwitch
+            title="置于顶部"
+            description="在内容上方显示快捷栏"
+            checked={draft.at_top}
+            disabled={busy || revoked}
+            onChange={(checked) => setDraft({ ...draft, at_top: checked })}
+          />
         </div>
         {displayPadding && (
           <div className="device-section panel">
             <h2>工作台布局</h2>
-            <label className="setting-row">
-              <span>
-                <strong>显示用量区</strong>
-                <small>关闭后，会话列表使用全部内容区域</small>
-              </span>
-              <input
-                className="toggle-input"
-                role="switch"
-                type="checkbox"
-                checked={draft.metrics_visible !== false}
-                disabled={busy || revoked}
-                onChange={(e) =>
-                  setDraft({ ...draft, metrics_visible: e.target.checked })
-                }
-              />
-            </label>
-            <label className="device-padding">
+            <SettingSwitch
+              title="显示用量区"
+              description="关闭后，会话列表使用全部内容区域"
+              checked={draft.metrics_visible !== false}
+              disabled={busy || revoked}
+              onChange={(checked) =>
+                setDraft({ ...draft, metrics_visible: checked })
+              }
+            />
+            <div className="device-padding">
               用量区宽度 · {draft.metrics_width ?? 150}
               <input
                 type="range"
+                aria-label="用量区宽度"
                 min={96}
                 max={320}
                 step={1}
@@ -391,11 +415,12 @@ export default function DeviceShortcuts({
                 }
               />
               <small>横屏时生效，会话列数随剩余宽度自动调整。</small>
-            </label>
-            <label className="device-padding">
+            </div>
+            <div className="device-padding">
               全面屏适配-左侧空隙宽度 · {draft.nfcd_metrics_left_padding}
               <input
                 type="range"
+                aria-label="全面屏适配左侧空隙宽度"
                 min={0}
                 max={64}
                 step={1}
@@ -408,51 +433,9 @@ export default function DeviceShortcuts({
                   })
                 }
               />
-            </label>
+            </div>
           </div>
         )}
-      </div>
-      {error && (
-        <div className="banner error" role="alert">
-          {error}
-        </div>
-      )}
-      {message && !dirty && (
-        <div className="banner success" role="status">
-          {message}
-        </div>
-      )}
-      <div className="device-save">
-        <span>{dirty ? "有未保存的修改" : "已保存"}</span>
-        {dirty && (
-          <button
-            className="button"
-            disabled={busy}
-            onClick={() => {
-              setDraft(saved);
-              setError("");
-            }}
-          >
-            撤销修改
-          </button>
-        )}
-        <button
-          className="button secondary"
-          disabled={busy}
-          onClick={() => {
-            if (!dirty || window.confirm("载入最新配置会放弃当前修改，继续？"))
-              void load();
-          }}
-        >
-          载入最新配置
-        </button>
-        <button
-          className="button primary"
-          disabled={busy || !dirty || revoked}
-          onClick={() => void save()}
-        >
-          {busy ? "保存中…" : "保存快捷与布局"}
-        </button>
       </div>
     </div>
   );
