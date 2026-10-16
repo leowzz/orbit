@@ -66,6 +66,9 @@ jobs:
         run: flutter pub get --enforce-lockfile
       - name: Analyze and test App
         run: make test-app
+      - name: Generate Android build configuration
+        working-directory: nodes/app
+        run: flutter build apk --debug --config-only --no-pub
       - name: Test widget service
         working-directory: nodes/app/android
         run: ./gradlew --init-script ../../../scripts/gradle-plugin-repositories.init.gradle :app:testDebugUnitTest
