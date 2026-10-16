@@ -102,22 +102,25 @@ flutter pub get
 flutter analyze
 flutter test
 flutter run -d <device-id>
-flutter build apk --debug
+flutter build apk --debug --split-per-abi
 ```
 
-调试 APK：`build/app/outputs/flutter-apk/app-debug.apk`。这不是正式签名发行版。
+调试 APK 按架构生成：`build/app/outputs/flutter-apk/app-<abi>-debug.apk`，
+`<abi>` 为 `arm64-v8a`、`armeabi-v7a` 或 `x86_64`。这不是正式签名发行版。
 macOS 使用 `flutter build macos`，需要在 Xcode 配置开发团队/签名，Keychain entitlement
 用于安全令牌存储。Windows 在 Windows 主机运行 `flutter build windows`。
 三端均保留共享代码，但桌面系统插件与发布打包不能由 Android 构建替代验证。
 
 ## CI 构建
 
-[Build App](../../.github/workflows/build-app.yml) 在 App、Makefile 或该工作流变更的
-PR/main 推送时运行，也支持 `v*` 标签推送和手动触发。固定使用 Flutter 3.44.8、
-Java 17，安装锁定依赖后执行 `make test-app` 和 `make build-app`。
+[Unit Tests](../../.github/workflows/unit-tests.yml) 在 main 推送时检查 Android App
+和组件服务；[Release](../../.github/workflows/release.yml) 在 `v*` 标签推送时构建
+正式签名 APK。两者固定使用 Flutter 3.44.8 和 Java 17。
 
-构建成功后，从 Actions 对应运行的 Artifacts 下载 `orbit-android-debug`，包含可安装的
-调试 APK，保留 14 天。当前 CI 覆盖 Android；macOS/Windows 打包和正式签名发布仍待补充。
+发布包按 `arm64-v8a`、`armeabi-v7a`、`x86_64` 分架构提供，普通手机通常选择
+`arm64-v8a`；新版 App 内更新会自动选择设备支持的架构。另保留通用包兼容旧版更新器。
+构建完成后可从 Actions 的 `release-android` Artifact 下载，完整发布成功后也可从
+GitHub Release 下载。正式签名配置和文件名见[发布文档](../../docs/releases.md)。
 
 ## 连接服务
 

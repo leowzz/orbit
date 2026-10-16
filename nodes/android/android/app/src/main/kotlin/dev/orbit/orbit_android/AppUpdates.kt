@@ -68,13 +68,16 @@ class AppUpdates(private val context: Context) {
         set("available" to false, "latestVersion" to tag.removePrefix("v"))
         if (version > UpdatePolicy.version(installed.versionName ?: "")) {
             val assets = release.getJSONArray("assets")
-            val asset = (0 until assets.length()).map { assets.getJSONObject(it) }
-                .firstOrNull { it.optString("name") == "orbit-android-$tag.apk" }
+            val byName = (0 until assets.length()).map { assets.getJSONObject(it) }
+                .associateBy { it.optString("name") }
+            val supportedAbis = Build.SUPPORTED_ABIS.toList()
+            val name = UpdatePolicy.selectAssetName(tag, byName.keys, supportedAbis)
                 ?: throw IllegalArgumentException("此版本尚未提供 Android 更新包，请稍后重试")
+            val asset = byName.getValue(name)
             val url = asset.getString("browser_download_url")
             val digest = asset.optString("digest")
             val size = asset.getLong("size")
-            UpdatePolicy.validateAsset(tag, asset.getString("name"), url, digest, size)
+            UpdatePolicy.validateAsset(tag, name, url, digest, size, supportedAbis)
             selected = Asset(tag.removePrefix("v"), url, digest, size)
             set("available" to (context.packageName == "dev.orbit.orbit_android"))
         }

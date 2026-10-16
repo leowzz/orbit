@@ -415,8 +415,8 @@ Without `V`, `make release` increments the last component (for example,
 other settings, comments and blank lines are preserved.
 
 Pushing a `v*` tag triggers the [release workflow](docs/releases.md): signed GHCR
-images, a release-signed Android APK, a macOS Agent Universal DMG, and an ESP32-S3
-firmware archive. Downloads include SHA-256 checksums and Cosign signatures; the
+images, release-signed Android APKs for each CPU architecture, a macOS Agent
+Universal DMG, and an ESP32-S3 firmware archive. Downloads include SHA-256 checksums and Cosign signatures; the
 macOS app does not yet have Apple Developer ID signing or notarization.
 The GitHub Release includes image addresses/digests and downloadable artifacts.
 Configure the Android signing secrets before the first tag push. Public ESP32-S3
@@ -761,8 +761,10 @@ operator-configured `overview-app` route. App tokens are independent per device.
 
 Enable the optional `app` section in `configs/core.example.yaml`, then run
 `make dev-core` and `make dev-app`. `make test-app` runs Flutter checks;
-`make build-app` creates a debug Android APK. The App API starts even when the
-MQTT broker is unreachable. Existing Agent/OLED/Web MQTT contracts are unchanged.
+`make build-app` creates debug Android APKs for `arm64-v8a`, `armeabi-v7a`, and
+`x86_64` in `nodes/app/build/app/outputs/flutter-apk/app-<abi>-debug.apk`.
+The App API starts even when the MQTT broker is unreachable. Existing
+Agent/OLED/Web MQTT contracts are unchanged.
 
 See [API v1](docs/app-api.md), [HTTPS/deployment/backup](docs/app-operations.md),
 and the [implementation handoff](docs/app-node-handoff.md) for verified scope and

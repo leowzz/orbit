@@ -152,7 +152,7 @@ test-app:
 	cd nodes/app && $(FLUTTER) analyze && $(FLUTTER) test test ../android/test
 
 build-app:
-	cd nodes/app && $(FLUTTER) build apk --debug
+	cd nodes/app && $(FLUTTER) build apk --debug --split-per-abi
 
 .PHONY: dev-console build-console build-core
 

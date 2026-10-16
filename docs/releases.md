@@ -17,9 +17,15 @@ signing, or uploading distributable artifacts. These are the only two workflows:
   The workflow derives the lowercase owner from the repository. Each image is
   signed by digest using GitHub OIDC and Cosign. Existing Aliyun mirror publishing
   and signing runs when both Aliyun registry secrets are present.
-- `orbit-android-TAG.apk`: a release APK signed with the persistent Android key.
-  The version name is the tag without `v`; the version code is the workflow run
-  number. Keep the workflow and key stable for upgrades.
+- `orbit-android-arm64-v8a-TAG.apk`, `orbit-android-armeabi-v7a-TAG.apk`, and
+  `orbit-android-x86_64-TAG.apk`: release APKs containing only one CPU architecture,
+  signed with the persistent Android key. Most current phones use `arm64-v8a`;
+  `armeabi-v7a` supports 32-bit ARM devices and `x86_64` supports Intel/AMD devices
+  and emulators. The updater chooses the device's preferred supported architecture.
+  `orbit-android-TAG.apk` remains available for older updaters that only recognize
+  the universal package name. The version name is the tag without `v`; the base
+  version code is the workflow run number, with Flutter's ABI offsets on split
+  APKs. Keep the workflow and key stable for upgrades.
 - `orbit-agent-macos-universal-TAG.dmg`: the Tauri desktop Agent for Apple Silicon
   and Intel, requiring macOS 12 or later. The app version is injected from the tag
   without `v`. CI verifies both binary architectures, the app version and the DMG.
@@ -80,6 +86,8 @@ in Android. Cancelling permits retry without downloading again. Debug-key builds
 cannot be upgraded with the differently signed release APK; benchmark builds
 never offer installation of the production package. Keep the release keystore
 and increasing workflow run numbers stable to preserve upgrade compatibility.
+New clients prefer an APK matching `Build.SUPPORTED_ABIS`, in device preference
+order, and fall back to the universal APK for older releases.
 
 ## Repository secrets
 
@@ -105,7 +113,8 @@ is required. Repository/package policy must allow the workflow to write packages
 
 For a local signed APK, export `ANDROID_KEYSTORE_PATH` (absolute path),
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`, then
-run `flutter build apk --release` from `nodes/app`. Release builds fail without
+run `flutter build apk --release --split-per-abi` from `nodes/app`. Outputs are
+`build/app/outputs/flutter-apk/app-<abi>-release.apk`. Release builds fail without
 these values; debug builds need no release credentials.
 
 ### Mac signing identity

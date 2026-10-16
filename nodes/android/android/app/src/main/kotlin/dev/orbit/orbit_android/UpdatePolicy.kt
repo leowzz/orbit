@@ -11,9 +11,17 @@ object UpdatePolicy {
             .matchEntire(raw) ?: throw IllegalArgumentException("无法识别正式版本号")
         return Version(match.groupValues[1].toLong(), match.groupValues[2].toLong(), match.groupValues[3].toLong())
     }
-    fun validateAsset(tag: String, name: String, url: String, digest: String, size: Long) {
+    private fun assetNames(tag: String, supportedAbis: List<String>): List<String> {
         version(tag)
-        require(name == "orbit-android-$tag.apk" &&
+        val releaseAbis = setOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        return supportedAbis.filter { it in releaseAbis }.distinct()
+            .map { "orbit-android-$it-$tag.apk" } + "orbit-android-$tag.apk"
+    }
+    fun selectAssetName(tag: String, available: Set<String>, supportedAbis: List<String>): String? =
+        assetNames(tag, supportedAbis).firstOrNull { it in available }
+
+    fun validateAsset(tag: String, name: String, url: String, digest: String, size: Long, supportedAbis: List<String> = emptyList()) {
+        require(name in assetNames(tag, supportedAbis) &&
             url == "https://github.com/leowzz/orbit/releases/download/$tag/$name" &&
             Regex("^sha256:[0-9a-f]{64}$").matches(digest) && size in 1..MAX_PACKAGE) {
             "更新包信息无效，请稍后重试"

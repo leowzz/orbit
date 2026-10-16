@@ -165,17 +165,25 @@ jobs:
           gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
           mkdir -p "$gradle_user_home/init.d"
           cp scripts/gradle-plugin-repositories.init.gradle "$gradle_user_home/init.d/orbit-plugin-repositories.gradle"
-      - name: Check and build signed APK
+      - name: Check and build signed APKs
         working-directory: nodes/app
         run: |
           flutter pub get --enforce-lockfile
           flutter analyze
           flutter test test ../android/test
-          flutter build apk --release --build-name "${TAG#v}" --build-number "$GITHUB_RUN_NUMBER"
           apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)"
-          "$apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk
+          build_args=(--release --build-name "${TAG#v}" --build-number "$GITHUB_RUN_NUMBER")
           mkdir -p ../../dist
+          # Older installed updaters only recognize this universal asset name.
+          flutter build apk "${build_args[@]}"
+          "$apksigner" verify --verbose build/app/outputs/flutter-apk/app-release.apk
           cp build/app/outputs/flutter-apk/app-release.apk "../../dist/orbit-android-$TAG.apk"
+          flutter build apk "${build_args[@]}" --split-per-abi
+          for abi in armeabi-v7a arm64-v8a x86_64; do
+            apk="build/app/outputs/flutter-apk/app-$abi-release.apk"
+            "$apksigner" verify --verbose "$apk"
+            cp "$apk" "../../dist/orbit-android-$abi-$TAG.apk"
+          done
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/orbit-release.jks"
@@ -335,7 +343,7 @@ jobs:
             cat image-notes/*.md
             printf '\nImages are signed with Cosign using GitHub Actions OIDC.\n'
             printf '\n## Downloads\n\n'
-            printf -- '- Android: release-key-signed APK.\n'
+            printf -- '- Android: release-key-signed APKs for arm64-v8a (most phones), armeabi-v7a (32-bit ARM) and x86_64. The universal APK is retained for older in-app updaters.\n'
             printf -- '- macOS Agent: Universal DMG for Apple Silicon and Intel (macOS 12+). No Apple Developer ID signing or notarization; Gatekeeper may require manual approval.\n'
             printf -- '- ESP32-S3: YD-ESP32-S3 / OLED 128x32 firmware archive, including a factory image and flash instructions. Uses placeholder Wi-Fi/MQTT configuration; rebuild with private configuration for a connected device.\n'
             printf -- '- SHA256SUMS and Cosign bundles for download verification (not ESP Secure Boot).\n'

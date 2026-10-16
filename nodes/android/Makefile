@@ -55,7 +55,7 @@ build:
 	cd "$(APP_DIR)" && $(FLUTTER) build apk --debug
 
 build-release:
-	cd "$(APP_DIR)" && $(FLUTTER) build apk --release
+	cd "$(APP_DIR)" && $(FLUTTER) build apk --release --split-per-abi
 
 install: check-device
 	$(MAKE) build

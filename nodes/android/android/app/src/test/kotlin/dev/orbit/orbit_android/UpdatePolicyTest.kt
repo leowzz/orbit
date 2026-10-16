@@ -27,4 +27,35 @@ class UpdatePolicyTest {
         assertThrows(IllegalArgumentException::class.java) { UpdatePolicy.verifyDownload(42, "sha256:$hash", 41, hash) }
         assertThrows(IllegalArgumentException::class.java) { UpdatePolicy.verifyDownload(42, "sha256:$hash", 42, "b".repeat(64)) }
     }
+    @Test fun selectsThePreferredDeviceAbiBeforeTheUniversalAsset() {
+        val tag = "v0.3.4"
+        val universal = "orbit-android-$tag.apk"
+        val arm64 = "orbit-android-arm64-v8a-$tag.apk"
+        val arm = "orbit-android-armeabi-v7a-$tag.apk"
+        val x64 = "orbit-android-x86_64-$tag.apk"
+        val assets = setOf(universal, arm, x64, arm64)
+        assertEquals(arm64, UpdatePolicy.selectAssetName(tag, assets, listOf("arm64-v8a", "armeabi-v7a")))
+        assertEquals(arm, UpdatePolicy.selectAssetName(tag, assets, listOf("armeabi-v7a")))
+        assertEquals(x64, UpdatePolicy.selectAssetName(tag, assets, listOf("x86_64", "x86")))
+        assertEquals(arm, UpdatePolicy.selectAssetName(tag, setOf(arm, universal), listOf("arm64-v8a", "armeabi-v7a")))
+        assertEquals(universal, UpdatePolicy.selectAssetName(tag, setOf(universal), listOf("arm64-v8a")))
+        assertNull(UpdatePolicy.selectAssetName(tag, setOf(x64), listOf("arm64-v8a")))
+        assertNull(UpdatePolicy.selectAssetName(tag, setOf("orbit-android-mips-$tag.apk"), listOf("mips")))
+    }
+    @Test fun splitAssetsMustMatchADeviceAbiAndTheExactReleaseUrl() {
+        val tag = "v0.3.4"
+        val name = "orbit-android-arm64-v8a-$tag.apk"
+        val url = "https://github.com/leowzz/orbit/releases/download/$tag/$name"
+        val digest = "sha256:" + "a".repeat(64)
+        UpdatePolicy.validateAsset(tag, name, url, digest, 42, listOf("arm64-v8a"))
+        assertThrows(IllegalArgumentException::class.java) {
+            UpdatePolicy.validateAsset(tag, name, url, digest, 42, listOf("x86_64"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            UpdatePolicy.validateAsset(tag, name, "https://example.com/$name", digest, 42, listOf("arm64-v8a"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            UpdatePolicy.validateAsset(tag, name, url, "", 42, listOf("arm64-v8a"))
+        }
+    }
 }
