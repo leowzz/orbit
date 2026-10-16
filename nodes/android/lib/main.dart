@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'quick_config_server.dart';
+import 'software_update.dart';
 
 void main() => runApp(const OrbitApp());
 
@@ -375,6 +376,7 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
       const SizedBox(height: 28),
     ];
     final settings = <Widget>[
+      const SoftwareUpdateCard(),
       const Text(
         'MQTT 连接',
         style: TextStyle(fontSize: 21, fontWeight: FontWeight.w600),

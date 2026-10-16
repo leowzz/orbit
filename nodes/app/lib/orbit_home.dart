@@ -9,6 +9,7 @@ import 'app_viewport.dart';
 import 'workbench_screen.dart';
 import 'app_location.dart';
 import 'app_appearance.dart';
+import 'package:orbit_android/software_update.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -287,6 +288,7 @@ class _AppSettings extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: onSettings,
             ),
+            const SoftwareUpdateCard(),
           ],
         ),
       ),

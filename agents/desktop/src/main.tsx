@@ -18,6 +18,7 @@ import { call, preview } from "./bridge";
 import type { Settings, Status, Source } from "./types";
 import "./style.css";
 import { Shortcuts } from "./Shortcuts";
+import { SoftwareUpdate, useSoftwareUpdate } from "./SoftwareUpdate";
 const pages = [
   { id: "status", name: "运行状态", icon: Activity },
   { id: "connection", name: "连接", icon: Cable },
@@ -86,6 +87,13 @@ function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [autostart, setAutostart] = useState(false);
+  const update = useSoftwareUpdate();
+  const [installing, setInstalling] = useState(false);
+  const updating =
+    installing ||
+    ["downloading", "installing", "restarting"].includes(
+      update.status?.phase ?? "",
+    );
   const dirty = !!settings && JSON.stringify(settings) !== saved;
   async function action(fn: () => Promise<void>) {
     setBusy(true);
@@ -286,8 +294,18 @@ function App() {
         <div className="aside-bottom">
           <span className={`dot ${status?.connected ? "online" : ""}`} />
           {status?.connected ? "已连接" : status?.running ? "连接中" : "未运行"}
-          <small>v0.1.0</small>
+          <small>
+            {update.status ? `v${update.status.currentVersion}` : ""}
+          </small>
         </div>
+        {update.status?.available && (
+          <button
+            className="update-notice"
+            onClick={() => setPage("preferences")}
+          >
+            有新版本可用
+          </button>
+        )}
       </aside>
       <main>
         <header>
@@ -321,6 +339,15 @@ function App() {
           )}
         </div>
         <div className="scroll">
+          {page === "preferences" && (
+            <SoftwareUpdate
+              status={update.status}
+              onStatus={update.setStatus}
+              unsaved={dirty}
+              working={busy}
+              onInstallingChange={setInstalling}
+            />
+          )}
           {!settings ? (
             <div className="empty">
               <p>{busy ? "正在读取设置…" : "未能读取设置"}</p>
@@ -334,7 +361,7 @@ function App() {
               )}
             </div>
           ) : (
-            <fieldset disabled={busy}>
+            <fieldset disabled={busy || updating}>
               {page === "status" && (
                 <>
                   <section className="connection-state">
@@ -786,12 +813,15 @@ function App() {
         <footer>
           <span>{busy ? "正在处理…" : dirty ? "有未保存的修改" : ""}</span>
           <div>
-            <button disabled={busy || !dirty} onClick={() => void action(load)}>
+            <button
+              disabled={busy || updating || !dirty}
+              onClick={() => void action(load)}
+            >
               还原修改
             </button>
             <button
               className="primary"
-              disabled={busy || !dirty}
+              disabled={busy || updating || !dirty}
               onClick={() => void action(save)}
             >
               保存并应用

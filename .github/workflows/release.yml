@@ -26,6 +26,9 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
           number='(0|[1-9][0-9]*)'
           prerelease='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
@@ -33,7 +36,7 @@ jobs:
             echo "::error::Expected a Docker-compatible semantic version tag, e.g. v1.2.3 or v1.2.3-rc.1"
             exit 1
           }
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY; do
             [[ -n "${!name}" ]] || { echo "::error::Missing repository secret: $name"; exit 1; }
           done
 
@@ -206,14 +209,23 @@ jobs:
         run: |
           pnpm check
           pnpm test:ui
+          python3 -B -m unittest discover -s ../../scripts -p test_macos_signing.py
           cargo fmt --manifest-path src-tauri/Cargo.toml --check
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
           cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - name: Build universal macOS DMG
+      - name: Import self-signed Orbit identity
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          ORBIT_SIGNING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 ../../scripts/macos-signing.py setup
+      - name: Build signed universal macOS DMG
         run: |
           pnpm tauri build --target universal-apple-darwin --bundles app,dmg \
             --config "$(jq -cn --arg version "${TAG#v}" '{version: $version}')" -- --locked
           app='src-tauri/target/universal-apple-darwin/release/bundle/macos/Orbit Agent.app'
+          python3 ../../scripts/macos-signing.py verify "$app"
           executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
           lipo "$app/Contents/MacOS/$executable" -verify_arch arm64 x86_64
           [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")" == "${TAG#v}" ]]
@@ -221,8 +233,14 @@ jobs:
           packages=(src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg)
           [[ ${#packages[@]} -eq 1 ]] || { echo '::error::Expected exactly one macOS DMG'; exit 1; }
           hdiutil verify "${packages[0]}"
+          python3 ../../scripts/macos-signing.py verify "${packages[0]}"
           mkdir -p ../../dist
           cp "${packages[0]}" "../../dist/orbit-agent-macos-universal-$TAG.dmg"
+      - name: Remove macOS signing material
+        if: always()
+        env:
+          ORBIT_SIGNING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 ../../scripts/macos-signing.py cleanup
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-macos-agent

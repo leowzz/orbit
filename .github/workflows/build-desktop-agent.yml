@@ -2,10 +2,10 @@ name: Build Desktop Agent
 
 on:
   pull_request:
-    paths: ['agents/desktop/**', 'proto/**', '.github/workflows/build-desktop-agent.yml']
+    paths: ['agents/desktop/**', 'proto/**', 'scripts/macos-signing.py', 'scripts/test_macos_signing.py', '.github/workflows/build-desktop-agent.yml']
   push:
     branches: [main]
-    paths: ['agents/desktop/**', 'proto/**', '.github/workflows/build-desktop-agent.yml']
+    paths: ['agents/desktop/**', 'proto/**', 'scripts/macos-signing.py', 'scripts/test_macos_signing.py', '.github/workflows/build-desktop-agent.yml']
   workflow_dispatch:
 
 permissions:
@@ -49,9 +49,29 @@ jobs:
           cargo fmt --manifest-path src-tauri/Cargo.toml --check
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
           cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - name: Build unsigned test package
+          python3 -B -m unittest discover -s ../../scripts -p test_macos_signing.py
+      # Pull requests run checks above without exposing the signing key to PR code.
+      - name: Import self-signed Orbit identity
+        if: github.event_name != 'pull_request'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          ORBIT_SIGNING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 ../../scripts/macos-signing.py setup
+      - name: Build signed test package
+        if: github.event_name != 'pull_request'
         run: pnpm tauri build --debug --bundles ${{ matrix.bundle }} -- --locked
+      - name: Verify Orbit signing certificate
+        if: github.event_name != 'pull_request'
+        run: python3 ../../scripts/macos-signing.py verify 'src-tauri/target/debug/bundle/macos/Orbit Agent.app'
+      - name: Remove macOS signing material
+        if: always() && github.event_name != 'pull_request'
+        env:
+          ORBIT_SIGNING_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: python3 ../../scripts/macos-signing.py cleanup
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name != 'pull_request'
         with:
           name: orbit-agent-${{ matrix.os }}-debug
           path: agents/desktop/src-tauri/target/debug/bundle/

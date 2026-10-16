@@ -5,6 +5,7 @@ pub mod config;
 pub mod recent_apps;
 pub mod runtime;
 pub mod shortcuts;
+pub mod update;
 pub mod usage;
 pub mod website_icon;
 pub mod wire {
@@ -178,6 +179,23 @@ fn show(app: &tauri::AppHandle) {
         let _ = window.set_focus();
     }
 }
+#[tauri::command]
+fn update_status(updater: tauri::State<'_, update::Updater>) -> update::Status {
+    updater.snapshot()
+}
+#[tauri::command]
+async fn update_check(
+    updater: tauri::State<'_, update::Updater>,
+) -> Result<update::Status, String> {
+    updater.check().await
+}
+#[tauri::command]
+async fn update_install(
+    app: tauri::AppHandle,
+    updater: tauri::State<'_, update::Updater>,
+) -> Result<update::Status, String> {
+    updater.install(app).await
+}
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| show(app)))
@@ -200,9 +218,20 @@ pub fn run() {
             agent_set_running,
             connection_test,
             autostart_get,
-            autostart_set
+            autostart_set,
+            update_status,
+            update_check,
+            update_install
         ])
         .setup(|app| {
+            app.manage(update::Updater::new(app.package_info().version.to_string()));
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    let _ = handle.state::<update::Updater>().check().await;
+                    tokio::time::sleep(std::time::Duration::from_secs(6 * 60 * 60)).await;
+                }
+            });
             let recent =
                 recent_apps::RecentApps::new(app.path().app_config_dir()?.join("recent-apps.json"));
             app.manage(recent.clone());

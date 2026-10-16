@@ -12,6 +12,7 @@ import android.view.WindowManager
 import android.os.Build
 import android.net.Uri
 import android.provider.Settings
+import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -23,6 +24,31 @@ class MainActivity : FlutterActivity() {
     }
 
     private val io = Executors.newSingleThreadExecutor()
+    private val updates by lazy { AppUpdates(applicationContext) }
+    private var pendingUpdatePermission = false
+
+    private fun openUpdateInstaller() {
+        val apk = updates.readyFile()
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            updates.phase("permission")
+            pendingUpdatePermission = true
+            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.updates", apk)
+        startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        updates.phase("installer")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (pendingUpdatePermission && packageManager.canRequestPackageInstalls()) {
+            pendingUpdatePermission = false
+            try { openUpdateInstaller() }
+            catch (_: Exception) { updates.failed("无法打开安装器，请重新点击更新") }
+        }
+    }
     private var matrixFullscreen = false
     private var previousOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var previousSystemUi = 0
@@ -64,6 +90,31 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.orbit/node").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "updateStatus" -> result.success(updates.status())
+                    "checkUpdate" -> io.execute {
+                        try {
+                            val status = updates.check()
+                            runOnUiThread { result.success(status) }
+                        } catch (error: Exception) {
+                            runOnUiThread { result.error("update_failed", error.message, null) }
+                        }
+                    }
+                    "installUpdate" -> io.execute {
+                        try {
+                            updates.download()
+                            runOnUiThread {
+                                try {
+                                    openUpdateInstaller()
+                                    result.success(updates.status())
+                                } catch (_: Exception) {
+                                    updates.failed("无法打开安装器，请检查设备是否允许安装应用")
+                                    result.error("install_failed", "无法打开安装器，请检查设备是否允许安装应用", null)
+                                }
+                            }
+                        } catch (error: Exception) {
+                            runOnUiThread { result.error("update_failed", error.message, null) }
+                        }
+                    }
                     "getDarkMode" -> result.success(OrbitAppearance.isDark(this))
                     "setDarkMode" -> {
                         OrbitAppearance.save(this, call.arguments == true)

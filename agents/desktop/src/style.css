@@ -728,3 +728,30 @@ button.recommendation {
   color: #68736c;
   line-height: 1.5;
 }
+
+.update-heading,
+.update-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.update-heading {
+  justify-content: space-between;
+}
+.update-heading p {
+  color: #68796f;
+  font-size: 13px;
+  margin: 8px 0;
+}
+.software-update progress {
+  display: block;
+  width: 100%;
+  margin: 12px 0;
+  accent-color: var(--green);
+}
+.update-notice {
+  margin-top: 10px;
+  color: var(--green);
+  font-size: 12px;
+}

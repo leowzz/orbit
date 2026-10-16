@@ -73,6 +73,17 @@ export async function call<T>(
     if (command === "settings_get") return structuredClone(settings) as T;
     if (command === "agent_status") return structuredClone(status) as T;
     if (command === "autostart_get") return false as T;
+    if (command === "update_status" || command === "update_check")
+      return {
+        currentVersion: "0.3.1",
+        latestVersion: "0.3.2",
+        available: true,
+        supported: true,
+        phase: "idle",
+        downloaded: 0,
+        total: 0,
+        error: "",
+      } as T;
     if (command === "shortcut_recommendations")
       return {
         supported: true,
