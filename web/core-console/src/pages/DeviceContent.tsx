@@ -392,7 +392,7 @@ export default function DeviceContent({
           disabled={busy || revoked || (!!route && !dirty)}
           onClick={() => void save()}
         >
-          {busy ? "保存中…" : route ? "保存修改" : "开始同步"}
+          {busy ? "保存中…" : route ? "保存显示设置" : "开始同步"}
         </button>
       </div>
       {route && (

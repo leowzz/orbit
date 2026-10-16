@@ -2088,6 +2088,43 @@ dt,
   }
 }
 
+main.device-page {
+  max-width: none;
+}
+.device-settings {
+  display: grid;
+  gap: 32px;
+}
+.device-settings > section {
+  min-width: 0;
+}
+.device-settings .device-content,
+.device-settings .device-shortcuts {
+  display: grid;
+  gap: 16px;
+}
+.device-settings .device-section,
+.device-settings .device-save {
+  margin: 0;
+}
+.device-layout-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 16px;
+}
+.device-layout-options .device-padding {
+  max-width: none;
+}
+.device-diagnostics {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.device-diagnostics summary {
+  cursor: pointer;
+  color: var(--muted);
+  width: fit-content;
+}
 .device-section {
   padding: 24px;
   margin: 18px 0;

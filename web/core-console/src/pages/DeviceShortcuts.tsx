@@ -324,92 +324,94 @@ export default function DeviceShortcuts({
           </Empty>
         )}
       </div>
-      <div className="device-section panel">
-        <h2>快捷栏</h2>
-        <label className="setting-row">
-          <span>
-            <strong>显示入口名称</strong>
-            <small>在图标旁显示文字</small>
-          </span>
-          <input
-            className="toggle-input"
-            role="switch"
-            type="checkbox"
-            checked={draft.show_titles}
-            disabled={busy || revoked}
-            onChange={(e) =>
-              setDraft({ ...draft, show_titles: e.target.checked })
-            }
-          />
-        </label>
-        <label className="setting-row">
-          <span>
-            <strong>置于顶部</strong>
-            <small>在内容上方显示快捷栏</small>
-          </span>
-          <input
-            className="toggle-input"
-            role="switch"
-            type="checkbox"
-            checked={draft.at_top}
-            disabled={busy || revoked}
-            onChange={(e) => setDraft({ ...draft, at_top: e.target.checked })}
-          />
-        </label>
-      </div>
-      {displayPadding && (
+      <div className="device-layout-options">
         <div className="device-section panel">
-          <h2>工作台布局</h2>
+          <h2>快捷栏</h2>
           <label className="setting-row">
             <span>
-              <strong>显示用量区</strong>
-              <small>关闭后，会话列表使用全部内容区域</small>
+              <strong>显示入口名称</strong>
+              <small>在图标旁显示文字</small>
             </span>
             <input
               className="toggle-input"
               role="switch"
               type="checkbox"
-              checked={draft.metrics_visible !== false}
+              checked={draft.show_titles}
               disabled={busy || revoked}
               onChange={(e) =>
-                setDraft({ ...draft, metrics_visible: e.target.checked })
+                setDraft({ ...draft, show_titles: e.target.checked })
               }
             />
           </label>
-          <label className="device-padding">
-            用量区宽度 · {draft.metrics_width ?? 150}
+          <label className="setting-row">
+            <span>
+              <strong>置于顶部</strong>
+              <small>在内容上方显示快捷栏</small>
+            </span>
             <input
-              type="range"
-              min={96}
-              max={320}
-              step={1}
-              value={draft.metrics_width ?? 150}
-              disabled={busy || revoked || draft.metrics_visible === false}
-              onChange={(e) =>
-                setDraft({ ...draft, metrics_width: Number(e.target.value) })
-              }
-            />
-            <small>横屏时生效，会话列数随剩余宽度自动调整。</small>
-          </label>
-          <label className="device-padding">
-            全面屏适配-左侧空隙宽度 · {draft.nfcd_metrics_left_padding}
-            <input
-              type="range"
-              min={0}
-              max={64}
-              step={1}
-              value={draft.nfcd_metrics_left_padding}
+              className="toggle-input"
+              role="switch"
+              type="checkbox"
+              checked={draft.at_top}
               disabled={busy || revoked}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  nfcd_metrics_left_padding: Number(e.target.value),
-                })
-              }
+              onChange={(e) => setDraft({ ...draft, at_top: e.target.checked })}
             />
           </label>
         </div>
-      )}
+        {displayPadding && (
+          <div className="device-section panel">
+            <h2>工作台布局</h2>
+            <label className="setting-row">
+              <span>
+                <strong>显示用量区</strong>
+                <small>关闭后，会话列表使用全部内容区域</small>
+              </span>
+              <input
+                className="toggle-input"
+                role="switch"
+                type="checkbox"
+                checked={draft.metrics_visible !== false}
+                disabled={busy || revoked}
+                onChange={(e) =>
+                  setDraft({ ...draft, metrics_visible: e.target.checked })
+                }
+              />
+            </label>
+            <label className="device-padding">
+              用量区宽度 · {draft.metrics_width ?? 150}
+              <input
+                type="range"
+                min={96}
+                max={320}
+                step={1}
+                value={draft.metrics_width ?? 150}
+                disabled={busy || revoked || draft.metrics_visible === false}
+                onChange={(e) =>
+                  setDraft({ ...draft, metrics_width: Number(e.target.value) })
+                }
+              />
+              <small>横屏时生效，会话列数随剩余宽度自动调整。</small>
+            </label>
+            <label className="device-padding">
+              全面屏适配-左侧空隙宽度 · {draft.nfcd_metrics_left_padding}
+              <input
+                type="range"
+                min={0}
+                max={64}
+                step={1}
+                value={draft.nfcd_metrics_left_padding}
+                disabled={busy || revoked}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    nfcd_metrics_left_padding: Number(e.target.value),
+                  })
+                }
+              />
+            </label>
+          </div>
+        )}
+      </div>
       {error && (
         <div className="banner error" role="alert">
           {error}
@@ -449,7 +451,7 @@ export default function DeviceShortcuts({
           disabled={busy || !dirty || revoked}
           onClick={() => void save()}
         >
-          {busy ? "保存中…" : "保存修改"}
+          {busy ? "保存中…" : "保存快捷与布局"}
         </button>
       </div>
     </div>

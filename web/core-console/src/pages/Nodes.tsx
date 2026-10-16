@@ -72,8 +72,7 @@ export default function Nodes({
     [enabled, setEnabled] = useState(false);
   const [error, setError] = useState(""),
     [query, setQuery] = useState("");
-  const [tab, setTab] = useState("content"),
-    [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<{ id: string; token: string } | null>(
     null,
   );
@@ -103,7 +102,6 @@ export default function Nodes({
     };
   }, [load]);
   useEffect(() => {
-    setTab("content");
     setArchiveError("");
   }, [nodeId]);
   const devices = new Map<string, Device>();
@@ -271,68 +269,54 @@ export default function Nodes({
                     此设备的访问已撤销。可在「连接与访问」中重新授权。
                   </div>
                 )}
-                <div className="toolbar">
-                  <div className="tabs" role="tablist" aria-label="设备设置">
-                    {[
-                      ["content", "内容与显示"],
-                      ["shortcuts", "快捷操作"],
-                      ["access", "连接与访问"],
-                    ].map(([id, label]) => (
-                      <button
-                        key={id}
-                        role="tab"
-                        aria-selected={tab === id}
-                        className={tab === id ? "selected" : ""}
-                        onClick={() => setTab(id)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div hidden={tab !== "content"}>
-                  <DeviceContent
-                    key={current.id}
-                    nodeId={current.id}
-                    profile={current.profile}
-                    revoked={!!current.revoked || appDevices === null}
-                    state={state}
-                    document={document}
-                    onChange={onChange}
-                  />
-                </div>
-                <div hidden={tab !== "shortcuts"}>
-                  {current.model === "oled-128x32" ? (
-                    <div className="panel device-section">
-                      <p>此设备只显示指标，不提供快捷操作。</p>
-                    </div>
-                  ) : enabled ? (
-                    <DeviceShortcuts
+                <div className="device-settings">
+                  <section aria-label="内容与显示">
+                    <DeviceContent
                       key={current.id}
                       nodeId={current.id}
-                      revoked={!!current.revoked}
-                      displayPadding={current.profile === "overview-app"}
+                      profile={current.profile}
+                      revoked={!!current.revoked || appDevices === null}
+                      state={state}
+                      document={document}
+                      onChange={onChange}
                     />
-                  ) : (
-                    <div className="panel device-section">
-                      <p>
-                        请先在 Core 部署配置中启用 App
-                        服务，以管理和同步快捷操作。
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {tab === "access" && (
-                  <>
+                  </section>
+                  <section aria-label="快捷操作">
+                    {current.model === "oled-128x32" ? (
+                      <div className="panel device-section">
+                        <p>此设备只显示指标，不提供快捷操作。</p>
+                      </div>
+                    ) : enabled ? (
+                      <DeviceShortcuts
+                        key={current.id}
+                        nodeId={current.id}
+                        revoked={!!current.revoked}
+                        displayPadding={current.profile === "overview-app"}
+                      />
+                    ) : (
+                      <div className="panel device-section">
+                        <p>
+                          请先在 Core 部署配置中启用 App
+                          服务，以管理和同步快捷操作。
+                        </p>
+                      </div>
+                    )}
+                  </section>
+                  <section
+                    className="device-section panel device-access"
+                    aria-label="连接与访问"
+                  >
+                    <h2>连接与访问</h2>
                     {current.app && (
                       <Apps
+                        key={current.id}
                         deviceId={current.id}
                         onChanged={() => void load()}
                         onRoutesChange={onChange}
                       />
                     )}
-                    <div className="device-section panel">
-                      <h2>状态与诊断</h2>
+                    <details className="device-diagnostics" open={!current.app}>
+                      <summary>设备信息与诊断</summary>
                       <dl className="device-facts">
                         <div>
                           <dt>设备 ID</dt>
@@ -367,9 +351,9 @@ export default function Nodes({
                           配置。已发现自描述不代表此刻在线。
                         </p>
                       )}
-                    </div>
-                  </>
-                )}
+                    </details>
+                  </section>
+                </div>
               </>
             )}
           </>

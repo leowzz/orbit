@@ -259,7 +259,11 @@ export default function App() {
             </button>
           </div>
         </header>
-        <main>
+        <main
+          className={
+            location.pathname.startsWith("/nodes/") ? "device-page" : undefined
+          }
+        >
           {error && (
             <div className="banner error" role="alert">
               {error}
