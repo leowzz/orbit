@@ -625,6 +625,95 @@ void main() {
     });
   }
 
+  for (final width in [320.0, 360.0, 411.0]) {
+    for (final config in [(3, false), (3, true), (4, false), (4, true)]) {
+      final (count, fullscreen) = config;
+      testWidgets(
+        'portrait metrics stay in one compact row: $count at $width fullscreen=$fullscreen',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 914);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          if (count == 4) controller.view!.remove('displayKind');
+          controller.view!['usage'] = {
+            'actualCostMicros': '12340000',
+            'tokenCount': '1234567',
+            'tpm': '18400',
+          };
+          await tester.pumpWidget(
+            MaterialApp(
+              home: WorkbenchScreen(
+                controller: controller,
+                fullscreen: fullscreen,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final row = tester.getRect(
+            find.byKey(const ValueKey('workbench-inline-metrics')),
+          );
+          expect(row.height, 64);
+          expect(find.text('API 用量'), findsNothing);
+          expect(find.text('账号周限'), findsNothing);
+          final labels = count == 3
+              ? ['剩余额度', '重置时间', '剩余时间']
+              : ['实际成本', 'Token', 'TPM', '运行任务'];
+          final cells = labels
+              .map((label) => tester.getRect(find.text(label)))
+              .toList();
+          for (var i = 0; i < cells.length; i++) {
+            expect(cells[i].top, closeTo(cells.first.top, .01));
+            expect(cells[i].left, greaterThanOrEqualTo(row.left));
+            expect(cells[i].right, lessThanOrEqualTo(row.right + .01));
+            if (i > 0) expect(cells[i].left, greaterThan(cells[i - 1].right));
+          }
+          final first = tester.getRect(
+            find.byKey(const ValueKey('session-session-0')),
+          );
+          expect(first.top - row.bottom, lessThan(48));
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  testWidgets('portrait four metrics stay in one row with enlarged text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 914);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    controller.view!.remove('displayKind');
+    controller.navigation['nfcd_metrics_left_padding'] = 64;
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.5)),
+          child: child!,
+        ),
+        home: WorkbenchScreen(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final row = tester.getRect(
+      find.byKey(const ValueKey('workbench-inline-metrics')),
+    );
+    expect(row.height, 75);
+    final labels = ['实际成本', 'Token', 'TPM', '运行任务'];
+    final top = tester.getTopLeft(find.text(labels.first)).dy;
+    for (final label in labels) {
+      final text = find.text(label);
+      expect(tester.widget<Text>(text).maxLines, 1);
+      expect(tester.getTopLeft(text).dy, closeTo(top, .01));
+      expect(tester.getRect(text).right, lessThanOrEqualTo(row.right + .01));
+    }
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('metrics width and visibility reflow session columns live', (
     tester,
   ) async {

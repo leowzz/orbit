@@ -62,7 +62,8 @@ class MainActivity : FlutterActivity() {
             previousSystemUi = window.decorView.systemUiVisibility
             previousKeepScreenOn = window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0
             matrixFullscreen = true
-            if (landscape) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            requestedOrientation = if (landscape) ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                else ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             applyMatrixSystemUi()
         } else {

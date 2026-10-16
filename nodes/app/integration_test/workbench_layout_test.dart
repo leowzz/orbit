@@ -58,20 +58,75 @@ void main() {
         ),
       },
     };
+    Widget app(bool fullscreen) => MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: orbitTheme(Brightness.light),
+      builder: (_, child) => AppViewport(child: child!),
+      home: WorkbenchScreen(
+        key: ValueKey(fullscreen),
+        controller: controller,
+        fullscreen: fullscreen,
+      ),
+    );
     try {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+      controller.view!.remove('displayKind');
+      controller.view!['usage'] = {
+        'actualCostMicros': '1340000',
+        'tokenCount': '1234567',
+        'tpm': '18400',
+      };
+      await tester.pumpWidget(app(false));
+      await tester.pumpAndSettle();
+      await binding.convertFlutterSurfaceToImage();
+      await tester.pumpAndSettle();
+      expect(find.text('API 用量'), findsNothing);
+      final inline = tester.getRect(
+        find.byKey(const ValueKey('workbench-inline-metrics')),
+      );
+      expect(inline.height, 64);
+      final labels = [
+        '实际成本',
+        'Token',
+        'TPM',
+        '运行任务',
+      ].map((label) => tester.getRect(find.text(label))).toList();
+      for (final label in labels) {
+        expect(label.top, closeTo(labels.first.top, .01));
+        expect(label.right, lessThanOrEqualTo(inline.right));
+      }
+      await binding.takeScreenshot('portrait-inline-four-metrics');
+      await tester.pumpWidget(app(true));
+      await tester.pumpAndSettle();
+      // Pin each test orientation after fullscreen enables sensor rotation.
+      // Real sensor rotation is left enabled in the production application.
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+      await tester.pumpAndSettle();
+      final fullscreenInline = tester.getRect(
+        find.byKey(const ValueKey('workbench-inline-metrics')),
+      );
+      expect(fullscreenInline.height, 64);
+      expect(find.text('API 用量'), findsNothing);
+      final fullscreenLabels = [
+        '实际成本',
+        'Token',
+        'TPM',
+        '运行任务',
+      ].map((label) => tester.getRect(find.text(label))).toList();
+      for (final label in fullscreenLabels) {
+        expect(label.top, closeTo(fullscreenLabels.first.top, .01));
+        expect(label.right, lessThanOrEqualTo(fullscreenInline.right));
+      }
+      await binding.takeScreenshot('portrait-fullscreen-inline-four-metrics');
+      controller.view!['displayKind'] = 'codex';
+      controller.notifyListeners();
       await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
       ]);
-      await tester.pumpWidget(
-        MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: orbitTheme(Brightness.light),
-          builder: (_, child) => AppViewport(child: child!),
-          home: WorkbenchScreen(controller: controller, fullscreen: true),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await binding.convertFlutterSurfaceToImage();
       await tester.pumpAndSettle();
       final metrics = find.byKey(const ValueKey('workbench-metrics'));
       expect(tester.getSize(metrics).width, closeTo(150, .01));

@@ -237,7 +237,13 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                                 ],
                               ),
                             )
-                          : _regular(view, metrics, enabled),
+                          : _regular(
+                              view,
+                              metrics,
+                              enabled,
+                              inlineMetrics:
+                                  bounds.maxWidth <= bounds.maxHeight,
+                            ),
                     ),
                     navigationAtTop ? statusBar : navigation,
                   ],
@@ -340,51 +346,65 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   Widget _regular(
     Json view,
     List<_Metric> metrics,
-    bool enabled,
-  ) => CustomScrollView(
+    bool enabled, {
+    required bool inlineMetrics,
+  }) => CustomScrollView(
     key: const PageStorageKey('workbench-page'),
     slivers: [
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+        padding: inlineMetrics
+            ? const EdgeInsets.fromLTRB(16, 8, 16, 12)
+            : const EdgeInsets.fromLTRB(24, 24, 24, 20),
         sliver: SliverToBoxAdapter(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                view['displayKind'] == 'codex' ? '账号周限' : 'API 用量',
-                style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 24),
-              LayoutBuilder(
-                builder: (context, bounds) => Wrap(
-                  children: [
-                    for (final metric in metrics)
-                      SizedBox(
-                        width:
-                            bounds.maxWidth /
-                            (bounds.maxWidth < 240
-                                ? 1
-                                : bounds.maxWidth < 600
-                                ? 2
-                                : metrics.length),
-                        height: math.max(
-                          112,
-                          MediaQuery.textScalerOf(context).scale(72) + 24,
+              if (inlineMetrics)
+                Padding(
+                  padding: EdgeInsets.only(left: _metricsLeftPadding),
+                  child: SizedBox(
+                    key: const ValueKey('workbench-inline-metrics'),
+                    height: math.max(
+                      64,
+                      MediaQuery.textScalerOf(context).scale(42) + 12,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final metric in metrics)
+                          Expanded(child: _metric(metric, inline: true)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                LayoutBuilder(
+                  builder: (context, bounds) => Wrap(
+                    children: [
+                      for (final metric in metrics)
+                        SizedBox(
+                          width:
+                              bounds.maxWidth /
+                              (bounds.maxWidth < 240
+                                  ? 1
+                                  : bounds.maxWidth < 600
+                                  ? 2
+                                  : metrics.length),
+                          height: math.max(
+                            112,
+                            MediaQuery.textScalerOf(context).scale(72) + 24,
+                          ),
+                          child: _metric(metric),
                         ),
-                        child: _metric(metric),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
               if (enabled) ...[
-                const SizedBox(height: 24),
+                SizedBox(height: inlineMetrics ? 12 : 24),
                 Text(
                   '${view['codex']?['runningCount'] ?? 0} 个运行中 · 共 ${view['codex']?['totalCount'] ?? 0} 个会话',
-                  style: const TextStyle(
-                    fontSize: 18,
+                  style: TextStyle(
+                    fontSize: inlineMetrics ? 14 : 18,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -405,23 +425,37 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     _Metric metric, {
     bool compact = false,
     bool divider = false,
+    bool inline = false,
   }) => Container(
     width: double.infinity,
     decoration: BoxDecoration(
       border: Border(
         top: BorderSide(
-          color: divider || !compact ? _line : Colors.transparent,
+          color: divider || (!compact && !inline) ? _line : Colors.transparent,
         ),
       ),
     ),
-    padding: EdgeInsets.fromLTRB(_metricsLeftPadding, 4, 14, 4),
+    padding: EdgeInsets.fromLTRB(
+      inline ? 0 : _metricsLeftPadding,
+      4,
+      inline ? 6 : 14,
+      4,
+    ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: inline
+          ? MainAxisAlignment.start
+          : MainAxisAlignment.center,
       children: [
         Text(
           metric.label,
-          style: TextStyle(fontSize: 13, color: _muted, height: 1.15),
+          maxLines: inline ? 1 : null,
+          overflow: inline ? TextOverflow.ellipsis : TextOverflow.clip,
+          style: TextStyle(
+            fontSize: inline ? 12 : 13,
+            color: _muted,
+            height: 1.15,
+          ),
         ),
         const SizedBox(height: 3),
         Flexible(
@@ -431,7 +465,11 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
             child: Text(
               metric.value,
               style: TextStyle(
-                fontSize: metric.prominent ? 44 : (compact ? 25 : 29),
+                fontSize: inline
+                    ? 22
+                    : metric.prominent
+                    ? 44
+                    : (compact ? 25 : 29),
                 height: 1.15,
                 fontWeight: FontWeight.w700,
                 color: metric.accent ? _colors.info : _colors.ink,
