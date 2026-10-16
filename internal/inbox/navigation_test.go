@@ -147,6 +147,66 @@ func TestNavigationSettingsCASSelectionAndPersistence(t *testing.T) {
 		t.Fatal(again, e)
 	}
 }
+
+func TestMetricsDisplaySettingsDefaultsPersistenceAndLegacyWrites(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	// Settings saved by an older Core have no metrics display fields.
+	if _, err = s.db.Exec(`INSERT INTO navigation_settings VALUES(?,?,?)`, "screen", 1, `{"revision":1,"pairs":[]}`); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := s.NavigationSettings(ctx, "screen")
+	if err != nil || cfg.MetricsVisible == nil || !*cfg.MetricsVisible || cfg.MetricsWidth == nil || *cfg.MetricsWidth != 150 {
+		t.Fatal(cfg, err)
+	}
+	for _, width := range []uint32{0, 95, 321} {
+		invalid := cfg
+		invalid.MetricsWidth = proto.Uint32(width)
+		if _, err = s.SaveNavigationSettings(ctx, "screen", invalid); err == nil {
+			t.Fatalf("accepted width %d", width)
+		}
+	}
+	cfg.MetricsVisible, cfg.MetricsWidth = proto.Bool(false), proto.Uint32(96)
+	cfg, err = s.SaveNavigationSettings(ctx, "screen", cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An older console changing another setting must not restore the metrics.
+	cfg.MetricsVisible, cfg.MetricsWidth = nil, nil
+	cfg.ShowTitles = true
+	if _, err = s.SaveNavigationSettings(ctx, "screen", cfg); err != nil {
+		t.Fatal(err)
+	}
+	second, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	nav, err := second.ProjectNavigation(ctx, "screen")
+	if err != nil || nav.MetricsVisible == nil || *nav.MetricsVisible || nav.MetricsWidth == nil || *nav.MetricsWidth != 96 {
+		t.Fatal(nav, err)
+	}
+	wire := nav.Proto("screen")
+	if wire.MetricsVisible == nil || wire.GetMetricsVisible() || wire.GetMetricsWidth() != 96 {
+		t.Fatal(wire)
+	}
+	raw, err := json.Marshal(nav)
+	var payload map[string]any
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["metrics_visible"] != false || payload["metrics_width"] != float64(96) {
+		t.Fatal(payload)
+	}
+}
 func TestNodeCatalogKeepsTargetsLocalAndRejectsStaleRevision(t *testing.T) {
 	s := navigationStore(t)
 	ctx := context.Background()

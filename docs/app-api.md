@@ -181,7 +181,11 @@ Android 状态页、点阵屏和桌面组件共享 `/api/v1/status` 的设备授
 执行端配对和显示设置，与状态摘要的数据来源完全独立。多个执行端按配对顺序合并，各配对可跟随
 全部目录或使用指定入口顺序。旧导航快照首次迁移后固化，后续不再继承 Agent 的外观设置。
 
-- `GET /api/v1/navigation`：`{revision,show_titles,at_top,nfcd_metrics_left_padding,items}`。
+- `GET /api/v1/navigation`：`{revision,show_titles,at_top,nfcd_metrics_left_padding,metrics_visible,metrics_width,items}`。
+  `nfcd_metrics_left_padding` 保留原字段名以兼容已有配置，现对应「全面屏适配-左侧空隙宽度」，
+  范围 0–64，适用于所有 App 设备的横竖屏工作台指标区。
+  `metrics_visible` 默认 true，关闭后工作台只显示会话；`metrics_width` 为横屏用量区的逻辑宽度，
+  范围 96–320，默认 150。旧客户端保存时省略这两个字段会保留现有设置。
   条目包含 `id,title,kind,executor_kind,executor_id,executor_label,shortcut_id,icon_url,icon_name`，
   `kind` 为 `agent` 或 `node`；Agent 条目保留兼容的 `agent_id`。目标路径和网址不在快照中。
 - `GET /api/v1/navigation/icons/{sha256}`：使用原设备授权下载 PNG；外部图标不携带设备令牌。
@@ -202,7 +206,7 @@ Core 管理接口继续由控制台会话及 Origin 检查保护，设备令牌�
 
 - `GET /api/app/executors`：返回 `{executors}`，每个目录标明 `executor_kind,executor_id,host_label,revision,items`。
 - `GET /api/app/navigation/{node}`：读取设备配置。
-- `PUT /api/app/navigation/{node}`：提交 `{revision,show_titles,at_top,nfcd_metrics_left_padding,pairs}`。
+- `PUT /api/app/navigation/{node}`：提交 `{revision,show_titles,at_top,nfcd_metrics_left_padding,metrics_visible,metrics_width,pairs}`。
   `pairs` 每项为 `{executor_kind,executor_id,enabled,items}`；`items:null` 跟随全部入口，`[]` 不显示入口，
   非空数组按指定顺序选择。使用配置 revision 防止并发覆盖；冲突返回 409。返回新配置及
   `publish_pending`，表示已持久化但 MQTT 投递仍需重试。

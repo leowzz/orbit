@@ -1,12 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orbit_app/app_viewport.dart';
 import 'package:orbit_app/orbit_home.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  String? deviceModel;
+  setUp(() {
+    deviceModel = null;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('dev.orbit/node'),
+          (call) async => call.method == 'deviceModel' ? deviceModel : null,
+        );
+  });
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('dev.orbit/node'), null);
+  });
   testWidgets('scaled routes, dialogs and keyboard use matching coordinates', (
     tester,
   ) async {
+    deviceModel = 'NFCD_AlipayBoxN5DEL';
     tester.view.physicalSize = const Size(1600, 624);
     tester.view.devicePixelRatio = 2;
     tester.view.padding = const FakeViewPadding(top: 48);
@@ -61,6 +77,7 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
     expect(media.size.width, closeTo(800 / .85, .01));
     expect(media.devicePixelRatio, 1.7);
     expect(media.padding.top, closeTo(24 / .85, .01));
@@ -84,6 +101,38 @@ void main() {
     expect(media.size.width, closeTo(800 / .85, .01));
     expect(tester.takeException(), isNull);
   });
+
+  for (final model in ['24031PN0DC', null]) {
+    testWidgets('ordinary and unknown devices keep native scale on $model', (
+      tester,
+    ) async {
+      deviceModel = model;
+      tester.view.physicalSize = const Size(1600, 720);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      late MediaQueryData media;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (_, child) => AppViewport(child: child!),
+          home: Builder(
+            builder: (context) {
+              media = MediaQuery.of(context);
+              expect(AppViewport.isAlipayBoxOf(context), isFalse);
+              return const Scaffold();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(media.size, const Size(800, 360));
+      expect(media.devicePixelRatio, 2);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 240);
+      await tester.pumpAndSettle();
+      expect(media.size, const Size(800, 360));
+      expect(media.viewInsets.bottom, 120);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('rail switches pages and rotation preserves the inbox draft', (
     tester,

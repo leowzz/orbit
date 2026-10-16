@@ -311,10 +311,7 @@ export default function Nodes({
                       key={current.id}
                       nodeId={current.id}
                       revoked={!!current.revoked}
-                      nfcd={
-                        current.profile === "overview-app" &&
-                        current.app?.platform === "android"
-                      }
+                      displayPadding={current.profile === "overview-app"}
                     />
                   ) : (
                     <div className="panel device-section">

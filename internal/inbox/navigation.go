@@ -31,6 +31,8 @@ type NavigationItem struct {
 	IconName      string `json:"icon_name,omitempty"`
 }
 type Navigation struct {
+	MetricsVisible         *bool            `json:"metrics_visible,omitempty"`
+	MetricsWidth           *uint32          `json:"metrics_width,omitempty"`
 	NFCDMetricsLeftPadding *uint32          `json:"nfcd_metrics_left_padding,omitempty"`
 	Revision               int64            `json:"revision"`
 	ShowTitles             bool             `json:"show_titles"`
@@ -88,6 +90,8 @@ type Pairing struct {
 	Items        []string `json:"items"`
 }
 type NavigationSettings struct {
+	MetricsVisible         *bool     `json:"metrics_visible,omitempty"`
+	MetricsWidth           *uint32   `json:"metrics_width,omitempty"`
 	Revision               int64     `json:"revision"`
 	ShowTitles             bool      `json:"show_titles"`
 	AtTop                  bool      `json:"at_top"`
@@ -101,7 +105,8 @@ func (s *Store) NavigationSettings(ctx context.Context, node string) (Navigation
 	return s.navigationSettings(ctx, node, nil)
 }
 func (s *Store) navigationSettings(ctx context.Context, node string, padding *uint32) (NavigationSettings, error) {
-	d := NavigationSettings{Revision: 1, NFCDMetricsLeftPadding: 16, Pairs: []Pairing{}}
+	visible, width := true, uint32(150)
+	d := NavigationSettings{Revision: 1, NFCDMetricsLeftPadding: 16, MetricsVisible: &visible, MetricsWidth: &width, Pairs: []Pairing{}}
 	var raw string
 	err := s.db.QueryRowContext(ctx, `SELECT payload FROM navigation_settings WHERE node_id=?`, node).Scan(&raw)
 	if err == nil {
@@ -160,7 +165,7 @@ func (s *Store) MigrateNavigationSettings(ctx context.Context, paddings map[stri
 	return nil
 }
 func (s *Store) SaveNavigationSettings(ctx context.Context, node string, d NavigationSettings) (NavigationSettings, error) {
-	if !navID.MatchString(node) || d.NFCDMetricsLeftPadding > 64 || len(d.Pairs) > 32 {
+	if !navID.MatchString(node) || d.NFCDMetricsLeftPadding > 64 || (d.MetricsWidth != nil && (*d.MetricsWidth < 96 || *d.MetricsWidth > 320)) || len(d.Pairs) > 32 {
 		return d, navigationFault()
 	}
 	catalogs, err := s.ShortcutCatalogs(ctx)
@@ -201,8 +206,16 @@ func (s *Store) SaveNavigationSettings(ctx context.Context, node string, d Navig
 		d.Pairs = []Pairing{}
 	}
 	// Ensure the empty configuration exists before the compare-and-swap.
-	if _, err = s.NavigationSettings(ctx, node); err != nil {
+	current, err := s.NavigationSettings(ctx, node)
+	if err != nil {
 		return d, err
+	}
+	// Older consoles omit these optional display fields. Preserve saved choices.
+	if d.MetricsVisible == nil {
+		d.MetricsVisible = current.MetricsVisible
+	}
+	if d.MetricsWidth == nil {
+		d.MetricsWidth = current.MetricsWidth
 	}
 	previous := d.Revision
 	d.Revision++
@@ -227,7 +240,7 @@ func (s *Store) ProjectNavigation(ctx context.Context, node string) (Navigation,
 	if err != nil {
 		return Navigation{}, err
 	}
-	d := Navigation{Items: []NavigationItem{}, ShowTitles: cfg.ShowTitles, AtTop: cfg.AtTop, NFCDMetricsLeftPadding: &cfg.NFCDMetricsLeftPadding}
+	d := Navigation{Items: []NavigationItem{}, ShowTitles: cfg.ShowTitles, AtTop: cfg.AtTop, NFCDMetricsLeftPadding: &cfg.NFCDMetricsLeftPadding, MetricsVisible: cfg.MetricsVisible, MetricsWidth: cfg.MetricsWidth}
 	for _, pair := range cfg.Pairs {
 		if !pair.Enabled {
 			continue
@@ -472,7 +485,7 @@ func (s *Store) DeleteNodeNavigation(ctx context.Context, node string, registry 
 	return tx.Commit()
 }
 func (d Navigation) Proto(node string) *v.Navigation {
-	out := &v.Navigation{NodeId: node, Revision: uint64(d.Revision), ShowTitles: d.ShowTitles, AtTop: d.AtTop, NfcdMetricsLeftPadding: d.NFCDMetricsLeftPadding}
+	out := &v.Navigation{NodeId: node, Revision: uint64(d.Revision), ShowTitles: d.ShowTitles, AtTop: d.AtTop, NfcdMetricsLeftPadding: d.NFCDMetricsLeftPadding, MetricsVisible: d.MetricsVisible, MetricsWidth: d.MetricsWidth}
 	for _, i := range d.Items {
 		out.Items = append(out.Items, &v.NavigationItem{Id: i.ID, Title: i.Title, Kind: i.Kind, Target: i.Target, AgentId: i.AgentID, ShortcutId: i.ShortcutID, IconUrl: i.IconURL, IconName: i.IconName, ExecutorKind: i.ExecutorKind, ExecutorId: i.ExecutorID, ExecutorLabel: i.ExecutorLabel})
 	}

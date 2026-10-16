@@ -2,7 +2,7 @@
 
 在「设置 → 暗色模式」手动切换外观，也可点击工作台顶栏的日/月图标。选择会保存在本机，重启后保留，Android 桌面组件使用同一外观，不跟随系统变化；首次使用默认为浅色。矩阵显示保留独立的深色配色。
 
-Android 统一显示为 **Orbit**。「收件箱」管理文本、待办和图片；第二个入口「工作台」展示指标与可点击的 Codex 会话；「数据展示」提供状态摘要、点阵屏和桌面组件，共用收件箱的设备连接与转发规则；「设置」提供连接和本机快捷操作设置。普通屏幕使用底部导航；低高度横屏自动改用左侧竖排导航，并以 85% 比例显示页面、菜单和弹窗。横屏收件箱用于查看，采用紧凑顶栏并隐藏整个发送区，保留消息浏览、筛选和搜索。
+Android 统一显示为 **Orbit**。「收件箱」管理文本、待办和图片；第二个入口「工作台」展示指标与可点击的 Codex 会话；「数据展示」提供状态摘要、点阵屏和桌面组件，共用收件箱的设备连接与转发规则；「设置」提供连接和本机快捷操作设置。普通屏幕使用底部导航，低高度横屏自动改用左侧竖排导航。仅 `NFCD_AlipayBoxN5DEL` 的低高度横屏以 85% 比例显示页面、菜单和弹窗；普通手机保持系统字号与比例，按可用宽高重排。横屏收件箱用于查看，采用紧凑顶栏并隐藏整个发送区，保留消息浏览、筛选和搜索。
 
 沿用 `dev.orbit.orbit_android` 应用身份，覆盖升级保留已放置的小组件。连接 Orbit 后，桌面组件自动使用同一个设备令牌，不需要再填写 MQTT。组件沿用亮屏同步、息屏暂停策略。`nodes/android` 保留旧 MQTT 客户端兼容入口，正式 APK 从本目录构建。
 
@@ -27,7 +27,7 @@ Note（收件箱）与 Web Node 沿用同一套浅绿背景、白色卡片与绿
 
 ## 工作台
 
-低高度横屏沿用 Web Node 的左侧指标、右侧双列会话布局；窄屏使用纵向布局。`NFCD_AlipayBoxN5DEL` 型号在标准字号的横屏工作台中固定展示 4 行 2 列，行高随可用区域调整，其余会话可滚动查看；其他型号保持内容自适应高度。点击 Orbit 图标或标题进入全屏，再次点击退出，系统返回键与 Escape 同样可退出。全屏中的会话仍可点击，不会退出全屏。剩余时间使用 `4d23h` 格式。
+低高度横屏沿用 Web Node 的左侧指标、右侧会话布局；窄屏使用纵向布局，会话按可用宽度自动调整列数。所有型号按扣除顶栏、底栏及指标区后的可用高度计算完整行数，再均分卡片高度填满该区域；系统字号变大时相应增加最小卡片高度，其余会话可滚动查看。标题保持单行，超出可用宽度显示省略号，长按可查看完整标题。点击 Orbit 图标或标题进入全屏，再次点击退出，系统返回键与 Escape 同样可退出。NFCD 工作台全屏保持横向，普通手机遵循系统方向设置；点阵屏全屏仍固定横向。全屏中的会话仍可点击，不会退出全屏。剩余时间使用 `4d23h` 格式。
 
 工作台共用当前设备连接和转发规则，支持 API 用量、账号周限与循环显示。Session 信息关闭时不展示会话；开启后点击会话，由 Core 向对应 Mac agent 发送打开指令，成功时不弹出提示，仅在异常时提示。需要同时更新支持会话打开接口的 Core；离线请求不会排队后补发。
 
@@ -35,7 +35,7 @@ Note（收件箱）与 Web Node 沿用同一套浅绿背景、白色卡片与绿
 
 在 Core「设备 → 选择设备 → 快捷操作」中添加接收设备与执行端的配对，可配对多个 Agent
 和具备执行能力的 App Node。可跟随执行端全部入口或选择部分入口并排序，与状态摘要的数据来源独立。
-快捷栏标题、位置和 NFCD 留白在 Core 按设备设置。入口提示标明执行设备；点击只发送入口 ID。
+快捷栏标题、位置和工作台布局在 Core 按设备设置。「显示用量区」关闭后，会话占用整个内容区域；「用量区宽度」调整横屏左侧指标区，范围 96–320，默认 150。会话根据剩余宽度自动排成单列、双列、三列或更多列，放大系统字号时保留相应的可读宽度。「全面屏适配-左侧空隙宽度」适用于所有 App 设备的工作台指标区，范围 0–64，横竖屏均生效。入口提示标明执行设备；点击只发送入口 ID。
 
 此 App 也可作为执行端：在「设置 → 本机快捷操作」添加 URL，Android 还可选择已安装应用，
 再开启本机执行许可并保存。应用包名和 URL 目标仅保存在本机；Core 只接收入口名称、类型和标识。
@@ -59,6 +59,17 @@ adb -s <device-id> uninstall dev.orbit.orbit_android.benchmark
 ```
 
 测试截图写入 `build/matrix-smoke/`。完成后只清理独立测试包，正常应用保持安装。
+
+用量区显隐、宽度和三列会话的真机回归同样使用独立包名 `.benchmark`，示例数据不连接 Core：
+
+```sh
+flutter build apk --profile --target-platform android-arm64 --target integration_test/workbench_layout_test.dart
+# 先确认 APK application ID 为 dev.orbit.orbit_android.benchmark。
+flutter drive --profile --no-pub --no-dds --keep-app-running --target integration_test/workbench_layout_test.dart --driver test_driver/workbench_driver.dart --use-application-binary build/app/outputs/flutter-apk/app-profile.apk -d <device-id>
+adb -s <device-id> uninstall dev.orbit.orbit_android.benchmark
+```
+
+截图写入 `build/workbench-layout/`。
 
 滑块性能回归使用独立包名 `dev.orbit.orbit_android.benchmark`，Gradle 根据下方测试入口自动添加后缀。
 测试使用临时数据库和模拟显示设置，不连接服务器。先构建，再确认 APK 的 application ID

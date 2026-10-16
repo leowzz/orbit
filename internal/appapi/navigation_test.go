@@ -209,6 +209,7 @@ func TestNodeExecutionUsesIndependentPairingAndClaimsOnce(t *testing.T) {
 	}
 	cfg, _ := store.NavigationSettings(context.Background(), "a")
 	cfg.Pairs = []inbox.Pairing{{ExecutorKind: "node", ExecutorID: "b", Enabled: true}, {ExecutorKind: "node", ExecutorID: "c", Enabled: true}}
+	cfg.MetricsVisible, cfg.MetricsWidth = proto.Bool(false), proto.Uint32(320)
 	if w := request("PUT", "/api/app/navigation/a", "", cfg, true); w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
@@ -216,6 +217,9 @@ func TestNodeExecutionUsesIndependentPairingAndClaimsOnce(t *testing.T) {
 	w := request("GET", "/api/v1/navigation", "a", nil, false)
 	var nav inbox.Navigation
 	_ = json.Unmarshal(w.Body.Bytes(), &nav)
+	if nav.MetricsVisible == nil || *nav.MetricsVisible || nav.MetricsWidth == nil || *nav.MetricsWidth != 320 {
+		t.Fatal("display settings did not reach the device", w.Body.String())
+	}
 	if len(nav.Items) != 2 || nav.Items[0].ExecutorID != "b" || nav.Items[1].ExecutorID != "c" {
 		t.Fatal(nav)
 	}

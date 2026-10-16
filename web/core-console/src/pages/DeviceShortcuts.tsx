@@ -18,11 +18,11 @@ function move<T>(items: T[], index: number, delta: number): T[] {
 export default function DeviceShortcuts({
   nodeId,
   revoked,
-  nfcd,
+  displayPadding,
 }: {
   nodeId: string;
   revoked: boolean;
-  nfcd: boolean;
+  displayPadding: boolean;
 }) {
   const [saved, setSaved] = useState<NavigationSettings | null>(null);
   const [draft, setDraft] = useState<NavigationSettings | null>(null);
@@ -356,9 +356,43 @@ export default function DeviceShortcuts({
             onChange={(e) => setDraft({ ...draft, at_top: e.target.checked })}
           />
         </label>
-        {nfcd && (
+      </div>
+      {displayPadding && (
+        <div className="device-section panel">
+          <h2>工作台布局</h2>
+          <label className="setting-row">
+            <span>
+              <strong>显示用量区</strong>
+              <small>关闭后，会话列表使用全部内容区域</small>
+            </span>
+            <input
+              className="toggle-input"
+              role="switch"
+              type="checkbox"
+              checked={draft.metrics_visible !== false}
+              disabled={busy || revoked}
+              onChange={(e) =>
+                setDraft({ ...draft, metrics_visible: e.target.checked })
+              }
+            />
+          </label>
           <label className="device-padding">
-            NFCD 指标左侧留白 · {draft.nfcd_metrics_left_padding}
+            用量区宽度 · {draft.metrics_width ?? 150}
+            <input
+              type="range"
+              min={96}
+              max={320}
+              step={1}
+              value={draft.metrics_width ?? 150}
+              disabled={busy || revoked || draft.metrics_visible === false}
+              onChange={(e) =>
+                setDraft({ ...draft, metrics_width: Number(e.target.value) })
+              }
+            />
+            <small>横屏时生效，会话列数随剩余宽度自动调整。</small>
+          </label>
+          <label className="device-padding">
+            全面屏适配-左侧空隙宽度 · {draft.nfcd_metrics_left_padding}
             <input
               type="range"
               min={0}
@@ -374,8 +408,8 @@ export default function DeviceShortcuts({
               }
             />
           </label>
-        )}
-      </div>
+        </div>
+      )}
       {error && (
         <div className="banner error" role="alert">
           {error}

@@ -38,4 +38,6 @@ message Navigation {
   repeated NavigationItem items = 4;
   bool at_top = 5;
   optional uint32 nfcd_metrics_left_padding = 6;
+  optional bool metrics_visible = 7;
+  optional uint32 metrics_width = 8;
 }

@@ -181,7 +181,7 @@ void main() {
       expect(find.text('发送'), findsNothing);
       expect(find.text('添加图片'), findsNothing);
       final list = find.byKey(const PageStorageKey('inbox'));
-      expect(tester.getSize(list).height, greaterThan(300));
+      expect(tester.getSize(list).height, greaterThan(250));
       await tester.drag(list, const Offset(0, -120));
       await tester.pumpAndSettle();
       expect(find.byType(NavigationRail), findsOneWidget);

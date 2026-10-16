@@ -13,7 +13,8 @@ val releaseStore = providers.environmentVariable("ANDROID_KEYSTORE_PATH").orNull
 val matrixBenchmark = providers.gradleProperty("target").orNull
     ?.replace('\\', '/')?.let {
         it.endsWith("integration_test/matrix_performance_test.dart") ||
-            it.endsWith("integration_test/matrix_smoke_test.dart")
+            it.endsWith("integration_test/matrix_smoke_test.dart") ||
+            it.endsWith("integration_test/workbench_layout_test.dart")
     } == true
 fun signingSecret(name: String): String = providers.environmentVariable(name).orNull
     ?.takeIf { it.isNotBlank() } ?: error("Missing Android release signing variable: $name")

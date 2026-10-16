@@ -193,6 +193,8 @@ export interface ShortcutPairing {
   items: string[] | null;
 }
 export interface NavigationSettings {
+  metrics_visible?: boolean;
+  metrics_width?: number;
   revision: number;
   show_titles: boolean;
   at_top: boolean;

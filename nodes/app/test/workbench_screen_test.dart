@@ -31,9 +31,9 @@ Json fixture() => {
   'footer': {'text': '3 12:30'},
   'codex': {
     'runningCount': 2,
-    'totalCount': 20,
+    'totalCount': 40,
     'sessions': List.generate(
-      20,
+      40,
       (i) => {
         'sessionId': 'session-$i',
         'displayName': [
@@ -94,7 +94,7 @@ void main() {
           call,
         ) async {
           if (call.method == 'deviceModel') return deviceModel;
-          if (call.method == 'matrixFullscreen') {
+          if (call.method == 'workbenchFullscreen') {
             calls.add(call.arguments as bool);
           }
           return null;
@@ -369,83 +369,82 @@ void main() {
     });
   }
   for (final atTop in [false, true]) {
-    testWidgets(
-      'Alipay Box shows exactly four rows with navigation at top=$atTop',
-      (tester) async {
-        final font = Platform.environment['WORKBENCH_PREVIEW_FONT'];
-        if (font != null && File(font).existsSync()) {
-          await tester.runAsync(() async {
-            final bytes = await File(font).readAsBytes();
-            await (FontLoader(
-              'Preview',
-            )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
-          });
-        }
-        deviceModel = 'NFCD_AlipayBoxN5DEL';
-        tester.view.physicalSize = const Size(1600, 720);
-        tester.view.devicePixelRatio = 2;
-        tester.view.padding = const FakeViewPadding(top: 48, bottom: 96);
-        addTearDown(tester.view.reset);
-        controller.navigation['at_top'] = atTop;
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: orbitTheme(Brightness.light).copyWith(
-              textTheme: orbitTheme(
-                Brightness.light,
-              ).textTheme.apply(fontFamily: font == null ? null : 'Preview'),
-            ),
-            builder: (_, child) => AppViewport(child: child!),
-            home: OrbitHome(
-              widgetsEnabled: false,
-              controller: controller,
-              inbox: const Text('消息'),
-            ),
+    testWidgets('Alipay Box fits complete rows with navigation at top=$atTop', (
+      tester,
+    ) async {
+      final font = Platform.environment['WORKBENCH_PREVIEW_FONT'];
+      if (font != null && File(font).existsSync()) {
+        await tester.runAsync(() async {
+          final bytes = await File(font).readAsBytes();
+          await (FontLoader(
+            'Preview',
+          )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+        });
+      }
+      deviceModel = 'NFCD_AlipayBoxN5DEL';
+      tester.view.physicalSize = const Size(1600, 720);
+      tester.view.devicePixelRatio = 2;
+      tester.view.padding = const FakeViewPadding(top: 48, bottom: 96);
+      addTearDown(tester.view.reset);
+      controller.navigation['at_top'] = atTop;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orbitTheme(Brightness.light).copyWith(
+            textTheme: orbitTheme(
+              Brightness.light,
+            ).textTheme.apply(fontFamily: font == null ? null : 'Preview'),
           ),
-        );
-        await tester.tap(find.text('工作台'));
-        await tester.pumpAndSettle();
-        void expectFourRows() {
-          final viewport = tester.getRect(
-            find.byKey(const PageStorageKey('workbench-sessions')),
-          );
-          final cards = List.generate(
-            8,
-            (i) => tester.getRect(find.byKey(ValueKey('session-session-$i'))),
-          );
-          expect(cards.first.top, closeTo(viewport.top, 0.01));
-          expect(cards.last.bottom, closeTo(viewport.bottom, 0.01));
-          for (var row = 0; row < 4; row++) {
-            final left = cards[row * 2], right = cards[row * 2 + 1];
-            expect(left.top, right.top);
-            expect(left.height, closeTo(cards.first.height, 0.01));
-            expect(right.bottom, closeTo(left.bottom, 0.01));
-            expect(left.right, lessThan(right.left));
-          }
-          final ninth = find.byKey(const ValueKey('session-session-8'));
-          if (ninth.evaluate().isNotEmpty) {
-            expect(tester.getRect(ninth).top, greaterThan(viewport.bottom));
-          }
-          expect(tester.takeException(), isNull);
-        }
-
-        expectFourRows();
-        await tester.tap(find.byKey(const ValueKey('workbench-fullscreen')));
-        tester.view.padding = FakeViewPadding.zero;
-        await tester.pumpAndSettle();
-        expectFourRows();
-        await tester.drag(
+          builder: (_, child) => AppViewport(child: child!),
+          home: OrbitHome(
+            widgetsEnabled: false,
+            controller: controller,
+            inbox: const Text('消息'),
+          ),
+        ),
+      );
+      await tester.tap(find.text('工作台'));
+      await tester.pumpAndSettle();
+      void expectRows(int rows) {
+        final viewport = tester.getRect(
           find.byKey(const PageStorageKey('workbench-sessions')),
-          const Offset(0, -250),
         );
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(const ValueKey('session-session-8')).hitTestable(),
-          findsOneWidget,
+        final cards = List.generate(
+          rows * 2,
+          (i) => tester.getRect(find.byKey(ValueKey('session-session-$i'))),
         );
+        expect(cards.first.top, closeTo(viewport.top, 0.01));
+        expect(cards.last.bottom, closeTo(viewport.bottom, 0.01));
+        for (var row = 0; row < rows; row++) {
+          final left = cards[row * 2], right = cards[row * 2 + 1];
+          expect(left.top, right.top);
+          expect(left.height, closeTo(cards.first.height, 0.01));
+          expect(right.bottom, closeTo(left.bottom, 0.01));
+          expect(left.right, lessThan(right.left));
+        }
+        final next = find.byKey(ValueKey('session-session-${rows * 2}'));
+        if (next.evaluate().isNotEmpty) {
+          expect(tester.getRect(next).top, greaterThan(viewport.bottom));
+        }
         expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox());
-      },
-    );
+      }
+
+      expectRows(4);
+      await tester.tap(find.byKey(const ValueKey('workbench-fullscreen')));
+      tester.view.padding = FakeViewPadding.zero;
+      await tester.pumpAndSettle();
+      expectRows(5);
+      await tester.drag(
+        find.byKey(const PageStorageKey('workbench-sessions')),
+        const Offset(0, -250),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('session-session-12')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
   }
   testWidgets('short non-fullscreen cards tolerate larger system insets', (
     tester,
@@ -504,11 +503,226 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(SliverGrid), findsNothing);
-    expect(find.byType(IntrinsicHeight), findsWidgets);
+    expect(find.byType(SliverGrid), findsOneWidget);
+    final viewport = tester.getRect(
+      find.byKey(const PageStorageKey('workbench-sessions')),
+    );
+    final last = tester.getRect(
+      find.byKey(const ValueKey('session-session-7')),
+    );
+    expect(last.bottom, closeTo(viewport.bottom, .01));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
+  testWidgets('five and a half minimum rows become five complete rows', (
+    tester,
+  ) async {
+    deviceModel = '24031PN0DC';
+    tester.view.physicalSize = const Size(800, 423);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final sessions = controller.view!['codex']['sessions'] as List;
+    sessions[0]['displayName'] = '一个超过卡片标题可用宽度并且应该被缩略显示的非常长的会话标题';
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (_, child) => AppViewport(child: child!),
+        home: WorkbenchScreen(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final viewport = tester.getRect(
+      find.byKey(const PageStorageKey('workbench-sessions')),
+    );
+    expect(viewport.height, 313);
+    final first = tester.getRect(
+      find.byKey(const ValueKey('session-session-0')),
+    );
+    expect(first.height, closeTo((313 - 4 * 6) / 5, .01));
+    for (var row = 0; row < 5; row++) {
+      final left = tester.getRect(
+        find.byKey(ValueKey('session-session-${row * 2}')),
+      );
+      final right = tester.getRect(
+        find.byKey(ValueKey('session-session-${row * 2 + 1}')),
+      );
+      expect(left.height, closeTo(first.height, .01));
+      expect(left.top, closeTo(right.top, .01));
+      expect(left.bottom, lessThanOrEqualTo(viewport.bottom + .01));
+    }
+    expect(
+      tester.getRect(find.byKey(const ValueKey('session-session-9'))).bottom,
+      closeTo(viewport.bottom, .01),
+    );
+    final title = find.text(sessions[0]['displayName'] as String);
+    final text = tester.widget<Text>(title);
+    final paragraph = tester.renderObject<RenderParagraph>(title);
+    expect(text.maxLines, 1);
+    expect(text.overflow, TextOverflow.ellipsis);
+    expect(paragraph.didExceedMaxLines, isTrue);
+    await tester.drag(
+      find.byKey(const PageStorageKey('workbench-sessions')),
+      const Offset(0, -250),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('session-session-10')).hitTestable(),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+  for (final size in [
+    const Size(360, 800),
+    const Size(411, 914),
+    const Size(1200, 800),
+  ]) {
+    testWidgets('regular cards fill the area below metrics at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(home: WorkbenchScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(
+        find.byKey(const PageStorageKey('workbench-page')),
+      );
+      final first = tester.getRect(
+        find.byKey(const ValueKey('session-session-0')),
+      );
+      final visible = <Rect>[];
+      for (var i = 0; i < 40; i++) {
+        final card = find.byKey(ValueKey('session-session-$i'));
+        if (card.evaluate().isEmpty) continue;
+        final rect = tester.getRect(card);
+        if (rect.top >= viewport.bottom - .01) continue;
+        visible.add(rect);
+        expect(rect.height, closeTo(first.height, .01));
+        expect(rect.bottom, lessThanOrEqualTo(viewport.bottom + .01));
+      }
+      expect(first.height, greaterThanOrEqualTo(52));
+      expect(visible.last.bottom, closeTo(viewport.bottom, .01));
+      final rows = visible.map((rect) => rect.top).toSet().length;
+      expect(
+        (rows + 1) * 52 + rows * 12,
+        greaterThan(viewport.bottom - first.top),
+      );
+      final target = find.byKey(const ValueKey('session-session-15'));
+      await tester.scrollUntilVisible(
+        target,
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const PageStorageKey('workbench-page')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.getRect(target).height, closeTo(first.height, .01));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  testWidgets('metrics width and visibility reflow session columns live', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(940, 423);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (_, child) => AppViewport(child: child!),
+        home: WorkbenchScreen(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+    int columns() =>
+        (tester.widget<SliverGrid>(find.byType(SliverGrid)).gridDelegate
+                as SliverGridDelegateWithFixedCrossAxisCount)
+            .crossAxisCount;
+    double width() =>
+        tester.getSize(find.byKey(const ValueKey('workbench-metrics'))).width;
+    expect(width(), 150);
+    expect(columns(), 2);
+    controller.navigation['metrics_width'] = 96;
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(width(), 96);
+    expect(columns(), 3);
+    controller.navigation['metrics_width'] = 320;
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(width(), 320);
+    expect(columns(), 2);
+    controller.navigation['metrics_visible'] = false;
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('workbench-metrics')), findsNothing);
+    expect(find.text('剩余额度'), findsNothing);
+    expect(columns(), 3);
+    final cards = List.generate(
+      3,
+      (i) => tester.getRect(find.byKey(ValueKey('session-session-$i'))),
+    );
+    expect(cards[0].top, cards[1].top);
+    expect(cards[1].top, cards[2].top);
+    expect(cards[0].width, greaterThanOrEqualTo(260));
+    await tester.tap(find.byKey(const ValueKey('workbench-fullscreen')));
+    await tester.pumpAndSettle();
+    expect(columns(), 3);
+    expect(find.text('剩余额度'), findsNothing);
+    controller.navigation['metrics_visible'] = true;
+    controller.navigation['metrics_width'] = 1000;
+    controller.notifyListeners();
+    await tester.pumpAndSettle();
+    expect(width(), 150);
+    expect(columns(), 2);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+  for (final size in [
+    const Size(411, 914),
+    const Size(800, 423),
+    const Size(940, 423),
+    const Size(1200, 423),
+  ]) {
+    testWidgets('hidden metrics use the full session region at $size', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      controller.navigation['metrics_visible'] = false;
+      await tester.pumpWidget(
+        MaterialApp(home: WorkbenchScreen(controller: controller)),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('剩余额度'), findsNothing);
+      expect(find.text('账号周限'), findsNothing);
+      final grid =
+          tester.widget<SliverGrid>(find.byType(SliverGrid)).gridDelegate
+              as SliverGridDelegateWithFixedCrossAxisCount;
+      expect(grid.crossAxisCount, switch (size.width) {
+        411 => 1,
+        800 => 2,
+        940 => 3,
+        _ => 4,
+      });
+      final viewport = tester.getRect(
+        find.byKey(const PageStorageKey('workbench-sessions')),
+      );
+      final first = tester.getRect(
+        find.byKey(const ValueKey('session-session-0')),
+      );
+      expect(first.top, closeTo(viewport.top, .01));
+      expect(first.width, greaterThanOrEqualTo(260));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets('session switch clears cards and offline open is not queued', (
     tester,
   ) async {
@@ -557,49 +771,60 @@ void main() {
       oldCore.client.close();
     },
   );
-  for (final model in ['NFCD_AlipayBoxN5DEL', 'other-device']) {
-    testWidgets(
-      'NFCD padding follows device navigation with legacy view fallback on $model',
-      (tester) async {
-        deviceModel = model;
-        tester.view.physicalSize = const Size(800, 360);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        controller.view = fixture();
-        controller.navigation = {'items': []};
-        await tester.pumpWidget(
-          MaterialApp(home: WorkbenchScreen(controller: controller)),
-        );
-        await tester.pumpAndSettle();
-        double left() => tester.getTopLeft(find.text('剩余额度')).dx;
-        final initial = left();
-        final nfcd = model == 'NFCD_AlipayBoxN5DEL';
-        controller.navigation['nfcd_metrics_left_padding'] = 0;
-        controller.notifyListeners();
-        await tester.pumpAndSettle();
-        expect(left(), initial - (nfcd ? 16 : 0));
-        controller.view!['nfcdMetricsLeftPadding'] = 64;
-        controller.notifyListeners();
-        await tester.pumpAndSettle();
-        expect(left(), initial - (nfcd ? 16 : 0));
-        controller.view!['nfcdMetricsLeftPadding'] = 0;
-        controller.navigation['nfcd_metrics_left_padding'] = 32;
-        controller.notifyListeners();
-        await tester.pumpAndSettle();
-        expect(left(), initial + (nfcd ? 16 : 0));
-        controller.view!.remove('nfcdMetricsLeftPadding');
-        controller.notifyListeners();
-        await tester.pumpAndSettle();
-        expect(left(), initial + (nfcd ? 16 : 0));
-        controller.navigation['nfcd_metrics_left_padding'] = 100;
-        controller.notifyListeners();
-        await tester.pumpAndSettle();
-        expect(left(), initial);
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox());
-      },
-    );
+  for (final size in [const Size(800, 360), const Size(411, 914)]) {
+    for (final model in ['NFCD_AlipayBoxN5DEL', 'other-device']) {
+      testWidgets(
+        'display padding follows device navigation with legacy view fallback on $model at $size',
+        (tester) async {
+          deviceModel = model;
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          controller.view = fixture();
+          controller.navigation = {'items': []};
+          await tester.pumpWidget(
+            MaterialApp(
+              builder: (_, child) => AppViewport(child: child!),
+              home: WorkbenchScreen(controller: controller),
+            ),
+          );
+          await tester.pumpAndSettle();
+          double left() => tester.getTopLeft(find.text('剩余额度')).dx;
+          final initial = left();
+          final nfcd = model == 'NFCD_AlipayBoxN5DEL';
+          final step = 16 * (nfcd && size.width > size.height ? .85 : 1);
+          controller.navigation['nfcd_metrics_left_padding'] = 0;
+          controller.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(left(), closeTo(initial - step, .01));
+          controller.view!['nfcdMetricsLeftPadding'] = 64;
+          controller.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(left(), closeTo(initial - step, .01));
+          controller.view!['nfcdMetricsLeftPadding'] = 0;
+          controller.navigation['nfcd_metrics_left_padding'] = 32;
+          controller.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(left(), closeTo(initial + step, .01));
+          controller.view!.remove('nfcdMetricsLeftPadding');
+          controller.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(left(), closeTo(initial + step, .01));
+          controller.navigation['nfcd_metrics_left_padding'] = 100;
+          controller.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(left(), closeTo(initial, .01));
+          controller.navigation.remove('nfcd_metrics_left_padding');
+          controller.view!['nfcdMetricsLeftPadding'] = 64;
+          controller.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(left(), closeTo(initial + 3 * step, .01));
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
   }
 
   testWidgets('render short landscape and portrait previews', (tester) async {

@@ -55,14 +55,14 @@ class MainActivity : FlutterActivity() {
     private var previousKeepScreenOn = false
 
     @Suppress("DEPRECATION")
-    private fun setMatrixFullscreen(enabled: Boolean) {
+    private fun setMatrixFullscreen(enabled: Boolean, landscape: Boolean = true) {
         if (enabled == matrixFullscreen) return
         if (enabled) {
             previousOrientation = requestedOrientation
             previousSystemUi = window.decorView.systemUiVisibility
             previousKeepScreenOn = window.attributes.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0
             matrixFullscreen = true
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            if (landscape) requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             applyMatrixSystemUi()
         } else {
@@ -158,6 +158,10 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "matrixFullscreen" -> { setMatrixFullscreen(call.arguments == true); result.success(null) }
+                    "workbenchFullscreen" -> {
+                        setMatrixFullscreen(call.arguments == true, landscape = Build.MODEL == "NFCD_AlipayBoxN5DEL")
+                        result.success(null)
+                    }
                     "showInputMethodPicker" -> {
                         startActivity(InputMethodTools.pickerIntent(this))
                         result.success(null)

@@ -17,7 +17,8 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('dev.orbit/node'), (
           call,
         ) async {
-          if (call.method == 'matrixFullscreen') {
+          if (call.method == 'matrixFullscreen' ||
+              call.method == 'workbenchFullscreen') {
             fullscreenCalls.add(call.arguments as bool);
           }
           return null;

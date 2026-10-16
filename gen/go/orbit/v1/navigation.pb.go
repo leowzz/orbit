@@ -314,6 +314,8 @@ type Navigation struct {
 	Items                  []*NavigationItem      `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
 	AtTop                  bool                   `protobuf:"varint,5,opt,name=at_top,json=atTop,proto3" json:"at_top,omitempty"`
 	NfcdMetricsLeftPadding *uint32                `protobuf:"varint,6,opt,name=nfcd_metrics_left_padding,json=nfcdMetricsLeftPadding,proto3,oneof" json:"nfcd_metrics_left_padding,omitempty"`
+	MetricsVisible         *bool                  `protobuf:"varint,7,opt,name=metrics_visible,json=metricsVisible,proto3,oneof" json:"metrics_visible,omitempty"`
+	MetricsWidth           *uint32                `protobuf:"varint,8,opt,name=metrics_width,json=metricsWidth,proto3,oneof" json:"metrics_width,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -390,6 +392,20 @@ func (x *Navigation) GetNfcdMetricsLeftPadding() uint32 {
 	return 0
 }
 
+func (x *Navigation) GetMetricsVisible() bool {
+	if x != nil && x.MetricsVisible != nil {
+		return *x.MetricsVisible
+	}
+	return false
+}
+
+func (x *Navigation) GetMetricsWidth() uint32 {
+	if x != nil && x.MetricsWidth != nil {
+		return *x.MetricsWidth
+	}
+	return 0
+}
+
 var File_orbit_v1_navigation_proto protoreflect.FileDescriptor
 
 const file_orbit_v1_navigation_proto_rawDesc = "" +
@@ -425,7 +441,7 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"\vexecutor_id\x18\n" +
 	" \x01(\tR\n" +
 	"executorId\x12%\n" +
-	"\x0eexecutor_label\x18\v \x01(\tR\rexecutorLabel\"\x87\x02\n" +
+	"\x0eexecutor_label\x18\v \x01(\tR\rexecutorLabel\"\x85\x03\n" +
 	"\n" +
 	"Navigation\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1a\n" +
@@ -434,8 +450,12 @@ const file_orbit_v1_navigation_proto_rawDesc = "" +
 	"showTitles\x12.\n" +
 	"\x05items\x18\x04 \x03(\v2\x18.orbit.v1.NavigationItemR\x05items\x12\x15\n" +
 	"\x06at_top\x18\x05 \x01(\bR\x05atTop\x12>\n" +
-	"\x19nfcd_metrics_left_padding\x18\x06 \x01(\rH\x00R\x16nfcdMetricsLeftPadding\x88\x01\x01B\x1c\n" +
-	"\x1a_nfcd_metrics_left_paddingB\x1fZ\x1dorbit/gen/go/orbit/v1;orbitv1b\x06proto3"
+	"\x19nfcd_metrics_left_padding\x18\x06 \x01(\rH\x00R\x16nfcdMetricsLeftPadding\x88\x01\x01\x12,\n" +
+	"\x0fmetrics_visible\x18\a \x01(\bH\x01R\x0emetricsVisible\x88\x01\x01\x12(\n" +
+	"\rmetrics_width\x18\b \x01(\rH\x02R\fmetricsWidth\x88\x01\x01B\x1c\n" +
+	"\x1a_nfcd_metrics_left_paddingB\x12\n" +
+	"\x10_metrics_visibleB\x10\n" +
+	"\x0e_metrics_widthB\x1fZ\x1dorbit/gen/go/orbit/v1;orbitv1b\x06proto3"
 
 var (
 	file_orbit_v1_navigation_proto_rawDescOnce sync.Once

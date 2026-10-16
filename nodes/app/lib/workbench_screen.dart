@@ -33,11 +33,23 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   static const _channel = MethodChannel('dev.orbit/node');
   final _opening = <String>{};
   bool _leaving = false;
-  bool _isAlipayBox = false;
   bool get _android => defaultTargetPlatform == TargetPlatform.android;
 
+  bool get _metricsVisible =>
+      widget.controller?.navigation['metrics_visible'] != false;
+
+  double get _metricsWidth {
+    final value = widget.controller?.navigation['metrics_width'];
+    return value is num &&
+            value.isFinite &&
+            value >= 96 &&
+            value <= 320 &&
+            value == value.roundToDouble()
+        ? value.toDouble()
+        : 150;
+  }
+
   double get _metricsLeftPadding {
-    if (!_isAlipayBox) return 16;
     // Core owns device display preferences; older Core views remain a fallback.
     for (final value in [
       widget.controller?.navigation['nfcd_metrics_left_padding'],
@@ -57,26 +69,12 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
   @override
   void initState() {
     super.initState();
-    if (_android) unawaited(_readDeviceModel());
     if (widget.fullscreen && _android) unawaited(_enter());
-  }
-
-  Future<void> _readDeviceModel() async {
-    try {
-      final model = await _channel.invokeMethod<String>('deviceModel');
-      if (mounted && model == 'NFCD_AlipayBoxN5DEL') {
-        setState(() => _isAlipayBox = true);
-      }
-    } on PlatformException {
-      // An unavailable device identity keeps the general layout.
-    } on MissingPluginException {
-      // Desktop and older Android hosts keep the general layout.
-    }
   }
 
   Future<void> _enter() async {
     try {
-      await _channel.invokeMethod<void>('matrixFullscreen', true);
+      await _channel.invokeMethod<void>('workbenchFullscreen', true);
     } catch (_) {
       if (mounted) _feedback('未能进入系统全屏，请返回后重试');
     }
@@ -92,7 +90,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
 
   Future<void> _restoreSystemUi() async {
     try {
-      await _channel.invokeMethod<void>('matrixFullscreen', false);
+      await _channel.invokeMethod<void>('workbenchFullscreen', false);
     } catch (_) {
       // The route may be disposed while the native activity is shutting down.
     }
@@ -197,35 +195,38 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                                 ),
                               ),
                             )
-                          : compact
+                          : compact || !_metricsVisible
                           ? Padding(
                               padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  SizedBox(
-                                    width: 150,
-                                    child: Column(
-                                      children: [
-                                        for (var i = 0; i < metrics.length; i++)
-                                          Expanded(
-                                            child: _metric(
-                                              metrics[i],
-                                              compact: true,
-                                              divider: i > 0,
+                                  if (_metricsVisible) ...[
+                                    SizedBox(
+                                      key: const ValueKey('workbench-metrics'),
+                                      width: _metricsWidth,
+                                      child: Column(
+                                        children: [
+                                          for (
+                                            var i = 0;
+                                            i < metrics.length;
+                                            i++
+                                          )
+                                            Expanded(
+                                              child: _metric(
+                                                metrics[i],
+                                                compact: true,
+                                                divider: i > 0,
+                                              ),
                                             ),
-                                          ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 6),
+                                    const SizedBox(width: 6),
+                                  ],
                                   Expanded(
                                     child: enabled
-                                        ? _sessions(
-                                            view,
-                                            compact: true,
-                                            fourRows: _isAlipayBox,
-                                          )
+                                        ? _sessions(view, compact: compact)
                                         : Center(
                                             child: Text(
                                               '未开启会话信息',
@@ -364,8 +365,15 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                       SizedBox(
                         width:
                             bounds.maxWidth /
-                            (bounds.maxWidth < 600 ? 2 : metrics.length),
-                        height: 112,
+                            (bounds.maxWidth < 240
+                                ? 1
+                                : bounds.maxWidth < 600
+                                ? 2
+                                : metrics.length),
+                        height: math.max(
+                          112,
+                          MediaQuery.textScalerOf(context).scale(72) + 24,
+                        ),
                         child: _metric(metric),
                       ),
                   ],
@@ -406,7 +414,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
         ),
       ),
     ),
-    padding: EdgeInsets.fromLTRB(compact ? _metricsLeftPadding : 0, 4, 14, 4),
+    padding: EdgeInsets.fromLTRB(_metricsLeftPadding, 4, 14, 4),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.center,
@@ -435,17 +443,12 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     ),
   );
 
-  Widget _sessions(Json view, {required bool compact, bool fourRows = false}) =>
-      CustomScrollView(
-        key: const PageStorageKey('workbench-sessions'),
-        slivers: [_sessionSliver(view, compact: compact, fourRows: fourRows)],
-      );
+  Widget _sessions(Json view, {required bool compact}) => CustomScrollView(
+    key: const PageStorageKey('workbench-sessions'),
+    slivers: [_sessionSliver(view, compact: compact)],
+  );
 
-  Widget _sessionSliver(
-    Json view, {
-    required bool compact,
-    bool fourRows = false,
-  }) {
+  Widget _sessionSliver(Json view, {required bool compact}) {
     final sessions = (view['codex']?['sessions'] as List? ?? [])
         .whereType<Map>()
         .toList();
@@ -462,64 +465,50 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
     }
     return SliverLayoutBuilder(
       builder: (context, bounds) {
-        if (fourRows) {
-          const gap = 6.0;
-          // System bars can leave too little room for four complete cards.
-          // Keep both text rows readable and let the grid scroll in that case.
-          final height = math.max(
-            52.0,
-            (bounds.viewportMainAxisExtent - 3 * gap) / 4,
-          );
-          return SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisExtent: height,
-              mainAxisSpacing: gap,
-              crossAxisSpacing: gap,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, index) => _session(sessions[index], rowHeight: height),
-              childCount: sessions.length,
-            ),
-          );
-        }
-        final columns = bounds.crossAxisExtent >= 560 ? 2 : 1;
-        final rows = (sessions.length / columns).ceil();
         final gap = compact ? 6.0 : 12.0;
-        return SliverList(
+        final scaler = MediaQuery.textScalerOf(context);
+        final minimumWidth = 260 * math.max(1, scaler.scale(18) / 18);
+        final columns = math.max(
+          1,
+          ((bounds.crossAxisExtent + gap) / (minimumWidth + gap)).floor(),
+        );
+        // One title/status line, one detail line, their gap and vertical padding.
+        final minimumHeight = math.max(
+          52.0,
+          (math.max(scaler.scale(18) * 1.2, scaler.scale(13) * 1.2 + 6) +
+                  scaler.scale(13) * 1.2 +
+                  4 +
+                  8)
+              .ceilToDouble(),
+        );
+        // In portrait, the metrics share this scroll view. Reserve their full
+        // extent; scrolling must not resize cards.
+        final available = math.max(
+          minimumHeight,
+          bounds.viewportMainAxisExtent - bounds.precedingScrollExtent,
+        );
+        final rows = math.max(
+          1,
+          ((available + gap) / (minimumHeight + gap)).floor(),
+        );
+        final height = (available - (rows - 1) * gap) / rows;
+        return SliverGrid(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisExtent: height,
+            mainAxisSpacing: gap,
+            crossAxisSpacing: gap,
+          ),
           delegate: SliverChildBuilderDelegate(
-            (context, row) => Padding(
-              padding: EdgeInsets.only(bottom: row + 1 < rows ? gap : 0),
-              child: IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var column = 0; column < columns; column++) ...[
-                      if (column > 0) SizedBox(width: gap),
-                      Expanded(
-                        child: row * columns + column < sessions.length
-                            ? _session(sessions[row * columns + column])
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            childCount: rows,
+            (context, index) => _session(sessions[index]),
+            childCount: sessions.length,
           ),
         );
       },
     );
   }
 
-  Widget _session(Map session, {double? rowHeight}) {
-    // Keep breathing room without overflowing the four-row layout outside fullscreen.
-    final verticalPadding = rowHeight == null
-        ? 8.0
-        : ((rowHeight - 46) / 2).clamp(2.0, 10.0);
-    final titleLines =
-        rowHeight == null || rowHeight - verticalPadding * 2 >= 64 ? 2 : 1;
+  Widget _session(Map session) {
     final running = session['status'] == 'CODEX_SESSION_STATUS_RUNNING';
     final status = switch (session['status']) {
       'CODEX_SESSION_STATUS_RUNNING' => '运行中',
@@ -556,10 +545,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
               ),
             ),
           ),
-          padding: EdgeInsets.symmetric(
-            horizontal: rowHeight == null ? 10 : 14,
-            vertical: verticalPadding,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -573,7 +559,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                       message: title,
                       child: Text(
                         title,
-                        maxLines: titleLines,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 18,
@@ -606,7 +592,7 @@ class _WorkbenchScreenState extends State<WorkbenchScreen> {
                   ),
                 ],
               ),
-              SizedBox(height: rowHeight == null ? 6 : 4),
+              const SizedBox(height: 4),
               Row(
                 children: [
                   Expanded(
