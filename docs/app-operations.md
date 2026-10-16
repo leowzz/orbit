@@ -188,3 +188,9 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - tx 仅更新 Web 为 `orbit-web:web-inbox-20261016T072232Z`；Core 容器 ID 未变。构建源码与校验记录：`/srv/orbit-deploy/releases/web-inbox-20261016T072232Z`；Compose 和 Web 配置备份：`/srv/orbit-deploy/backups/web-inbox-20261016T072232Z`。原镜像保留，可还原备份 Compose 后仅重建 Web。
 - Go 全量测试、Web/App API race 检查、Go vet、15 项 JS 测试通过。真实浏览器验证 1440px 与 390px 布局、发送后刷新保留及搜索；公网确认 401/403/429、退出后旧 Cookie 失效、旧接口 404、HTTPS Cookie 与运行二进制 SHA-256。Go 1.27.2 下 `govulncheck ./cmd/orbit-web` 为 0 个可达漏洞；仍有 15 项仅位于所需模块中的未调用公告。线上旧二进制本来已是 Go 1.27.2；本次显式固定本地与 Docker 工具链，未将本地旧工具链扫描结果当作线上漏洞。
 - 安全判断：原实现存在不限次猜密码、密码签名可被用于离线猜测，以及退出只清 Cookie 的问题，现已修复。当前适合个人部署的基础防护，但保留短密码与 20 天会话，未提供 MFA 或抗 DDoS 保证；全局限流也可能被攻击者占用，影响新登录。撤销或到期不会擦除已下载的浏览器缓存。
+
+### 2026-10-16 — Web 收件箱恢复明暗切换
+
+- 删除 Web 网关初始化时强制深色的逻辑；登录页和收件箱顶部均提供明暗切换按钮。首次使用跟随系统，手动选择复用 `orbit.web.theme` 并在刷新后保留；主题脚本在首屏绘制前应用，避免先显示错误主题。
+- tx 仅更新 Web 为 `orbit-web:web-theme-20261016T073758Z`，Core 容器与原连接配置保持不变。发布源码、构建清单及验证记录位于 `/srv/orbit-deploy/releases/web-theme-20261016T073758Z`；Compose 回退备份位于 `/srv/orbit-deploy/backups/web-theme-20261016T073758Z`。
+- 15 项 JS 回归与 Web Go 测试通过。真实浏览器验证系统主题变化、手动偏好、刷新及登录后保持，以及 1440px、390px、320px 和搜索状态无横向溢出。线上复核主题按钮及刷新记忆；前端资源、运行二进制摘要与本地构建一致，原登录及快照接口正常。

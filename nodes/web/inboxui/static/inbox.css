@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   font-family:
     Inter,
     -apple-system,
@@ -165,6 +166,19 @@ h1 {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+.theme-toggle .theme-sun,
+:root[data-theme="dark"] .theme-toggle .theme-moon {
+  display: none;
+}
+:root[data-theme="dark"] .theme-toggle .theme-sun {
+  display: block;
+}
+.login-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
 }
 #toggle-search .close-icon,
 header.searching #toggle-search .search-icon {
@@ -453,7 +467,7 @@ main {
   display: block;
   margin: 24px 0 8px;
 }
-.login-card button {
+.login-card > button {
   width: 100%;
   margin-top: 12px;
 }
@@ -563,4 +577,17 @@ dialog h2 {
 
 .login-card input {
   width: 100%;
+}
+@media (max-width: 360px) {
+  header {
+    height: auto;
+    min-height: 66px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    row-gap: 6px;
+  }
+  .header-actions {
+    margin-left: auto;
+  }
 }

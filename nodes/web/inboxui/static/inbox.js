@@ -821,7 +821,6 @@ document.addEventListener("visibilitychange", () => {
   try {
     mode = (await api("browser")).mode;
     if (mode === "gateway") {
-      document.documentElement.dataset.theme = "dark";
       // Discard credentials saved by the retired display page.
       try { localStorage.removeItem("orbit.web.auth"); } catch {}
     }
