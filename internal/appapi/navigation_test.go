@@ -92,7 +92,7 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil || len(d.Items) != 1 || !d.AtTop {
+	if err := json.Unmarshal(w.Body.Bytes(), &d); err != nil || d.Revision == 0 || len(d.Items) != 1 || !d.AtTop {
 		t.Fatal(d, err)
 	}
 	entry := d.Items[0].ID
@@ -115,7 +115,9 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 			retained = retained || (m.Retain && len(m.Payload) > 0)
 			var nav v.Navigation
 			_ = proto.Unmarshal(m.Payload, &nav)
-			if nav.ShowTitles || (len(nav.Items) > 0 && (nav.Revision != 1 || !nav.AtTop)) {
+			// The startup publisher may persist an empty snapshot before pairing.
+			// Compare with the observed revision, independent of goroutine scheduling.
+			if nav.ShowTitles || (len(nav.Items) > 0 && (nav.Revision != uint64(d.Revision) || !nav.AtTop)) {
 				t.Error("wrong snapshot", &nav)
 			}
 		}
@@ -147,7 +149,7 @@ func TestNavigationIsolationPersistenceAndAllowedCommands(t *testing.T) {
 	}
 	defer second.Close()
 	saved, err := second.Navigation(ctx, "a")
-	if err != nil || saved.Revision != 2 || len(saved.Items) != 0 || !saved.AtTop {
+	if err != nil || saved.Revision != d.Revision+1 || len(saved.Items) != 0 || !saved.AtTop {
 		t.Fatal("not durable", saved, err)
 	}
 }

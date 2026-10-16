@@ -68,7 +68,7 @@ jobs:
         run: make test-app
       - name: Test widget service
         working-directory: nodes/app/android
-        run: ./gradlew :app:testDebugUnitTest
+        run: ./gradlew --init-script ../../../scripts/gradle-plugin-repositories.init.gradle :app:testDebugUnitTest
 
   desktop:
     name: Desktop Agent

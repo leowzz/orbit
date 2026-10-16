@@ -160,6 +160,11 @@ jobs:
           umask 077
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/orbit-release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/orbit-release.jks" >> "$GITHUB_ENV"
+      - name: Configure Gradle plugin repositories
+        run: |
+          gradle_user_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$gradle_user_home/init.d"
+          cp scripts/gradle-plugin-repositories.init.gradle "$gradle_user_home/init.d/orbit-plugin-repositories.gradle"
       - name: Check and build signed APK
         working-directory: nodes/app
         run: |

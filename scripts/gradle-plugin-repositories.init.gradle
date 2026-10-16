@@ -1,0 +1,10 @@
+// Flutter's included Gradle build has its own plugin repositories. Configure
+// them before its settings are evaluated so Kotlin dependencies can be fetched
+// directly from Maven Central rather than through the Plugin Portal redirect.
+beforeSettings { settings ->
+    settings.pluginManagement.repositories {
+        mavenCentral()
+        google()
+        gradlePluginPortal()
+    }
+}
