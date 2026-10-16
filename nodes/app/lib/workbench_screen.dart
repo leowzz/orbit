@@ -703,7 +703,7 @@ List<_Metric> _metrics(Json? view) {
     ).firstMatch(view?['footer']?['text'] ?? '');
     return [
       _Metric('剩余额度', view?['primary']?['text'] ?? '--%', prominent: true),
-      _Metric('重置时间', '${days?[2] ?? '--/--'} ${hours?[2] ?? '--:--'}'),
+      _Metric('重置时间', '${days?[2] ?? '--/--'}\n${hours?[2] ?? '--:--'}'),
       _Metric(
         '剩余时间',
         days != null && hours != null ? '${days[1]}d${hours[1]}h' : '--',

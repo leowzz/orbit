@@ -655,6 +655,9 @@ void main() {
           expect(row.height, 64);
           expect(find.text('API 用量'), findsNothing);
           expect(find.text('账号周限'), findsNothing);
+          if (count == 3) {
+            expect(find.text('10/19\n12:30'), findsOneWidget);
+          }
           final labels = count == 3
               ? ['剩余额度', '重置时间', '剩余时间']
               : ['实际成本', 'Token', 'TPM', '运行任务'];
