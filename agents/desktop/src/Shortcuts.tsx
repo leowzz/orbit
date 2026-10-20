@@ -15,6 +15,12 @@ import {
 } from "lucide-react";
 import { call } from "./bridge";
 import type { Shortcut } from "./types";
+import { useVisiblePolling } from "./ui-polling";
+import {
+  knownIcons,
+  mergeRecommendations,
+  type Recommendations,
+} from "./recommendation-model";
 import {
   mergeShortcuts,
   moveShortcut,
@@ -24,10 +30,6 @@ import {
   type WebsiteInfo,
 } from "./shortcut-model";
 
-type Recommendations = {
-  supported: boolean;
-  items: { app: Shortcut; lastUsed: number }[];
-};
 function AppIcon({ item }: { item: Shortcut }) {
   return item.icon ? (
     <img src={`data:image/png;base64,${item.icon}`} alt="" draggable={false} />
@@ -40,9 +42,11 @@ function AppIcon({ item }: { item: Shortcut }) {
 export function Shortcuts({
   items,
   onChange,
+  visible,
 }: {
   items: Shortcut[];
   onChange: (items: Shortcut[]) => void;
+  visible: boolean;
 }) {
   const current = useRef(items);
   current.current = items;
@@ -75,22 +79,27 @@ export function Shortcuts({
   const catalog = useRef<HTMLDivElement>(null);
   const alive = useRef(true);
   const refreshBusy = useRef(false);
+  const shown = useRef(visible);
+  shown.current = visible;
+  const previous = useRef<Recommendations | null>(null);
 
   async function refresh() {
-    if (refreshBusy.current) return;
+    if (refreshBusy.current || !shown.current) return;
     refreshBusy.current = true;
     try {
       const result = await call<Recommendations>("shortcut_recommendations", {
         excluded: current.current
           .filter((i) => i.kind === "app")
           .map((i) => i.target),
+        knownIcons: knownIcons(previous.current),
       });
-      if (alive.current) {
-        setRecommendations(result);
+      if (alive.current && shown.current) {
+        previous.current = mergeRecommendations(previous.current, result);
+        setRecommendations(previous.current);
         setRecommendationError("");
       }
     } catch (e) {
-      if (alive.current) setRecommendationError(String(e));
+      if (alive.current && shown.current) setRecommendationError(String(e));
     } finally {
       refreshBusy.current = false;
       if (alive.current) setLoading(false);
@@ -98,13 +107,11 @@ export function Shortcuts({
   }
   useEffect(() => {
     alive.current = true;
-    void refresh();
-    const timer = setInterval(() => void refresh(), 5000);
     return () => {
       alive.current = false;
-      clearInterval(timer);
     };
   }, []);
+  useVisiblePolling(visible, refresh, () => {}, 5000);
   useEffect(() => {
     void refresh();
   }, [items]);

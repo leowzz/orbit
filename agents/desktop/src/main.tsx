@@ -19,6 +19,7 @@ import type { Settings, Status, Source } from "./types";
 import "./style.css";
 import { Shortcuts } from "./Shortcuts";
 import { SoftwareUpdate, useSoftwareUpdate } from "./SoftwareUpdate";
+import { useVisiblePolling, useWindowVisible } from "./ui-polling";
 const pages = [
   { id: "status", name: "运行状态", icon: Activity },
   { id: "connection", name: "连接", icon: Cable },
@@ -87,7 +88,8 @@ function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [autostart, setAutostart] = useState(false);
-  const update = useSoftwareUpdate();
+  const visible = useWindowVisible();
+  const update = useSoftwareUpdate(visible);
   const [installing, setInstalling] = useState(false);
   const updating =
     installing ||
@@ -116,19 +118,13 @@ function App() {
   }
   useEffect(() => {
     void action(load);
-    let alive = true;
-    const timer = setInterval(() => {
-      call<Status>("agent_status")
-        .then((s) => {
-          if (alive) setStatus(s);
-        })
-        .catch(() => {});
-    }, 2000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
   }, []);
+  useVisiblePolling(
+    visible,
+    () => call<Status>("agent_status"),
+    setStatus,
+    2000,
+  );
   useEffect(() => {
     document.querySelector(".scroll")?.scrollTo({ top: 0 });
   }, [page]);
@@ -758,6 +754,7 @@ function App() {
               )}
               {page === "shortcuts" && (
                 <Shortcuts
+                  visible={visible}
                   items={settings.config.shortcuts}
                   onChange={(items) => config("shortcuts", items)}
                 />

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { call } from "./bridge";
+import { useVisiblePolling } from "./ui-polling";
 
 export interface UpdateStatus {
   currentVersion: string;
@@ -13,23 +14,17 @@ export interface UpdateStatus {
   error: string;
 }
 
-export function useSoftwareUpdate() {
+export function useSoftwareUpdate(visible: boolean) {
   const [status, setStatus] = useState<UpdateStatus>();
-  useEffect(() => {
-    let alive = true;
-    const refresh = () =>
-      call<UpdateStatus>("update_status")
-        .then((value) => {
-          if (alive) setStatus(value);
-        })
-        .catch(() => {});
-    void refresh();
-    const timer = setInterval(() => void refresh(), 1000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-  }, []);
+  useVisiblePolling(
+    visible,
+    () => call<UpdateStatus>("update_status"),
+    (value) =>
+      setStatus((old) =>
+        JSON.stringify(old) === JSON.stringify(value) ? old : value,
+      ),
+    1000,
+  );
   return { status, setStatus };
 }
 

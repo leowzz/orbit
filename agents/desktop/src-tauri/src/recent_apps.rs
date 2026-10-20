@@ -2,6 +2,7 @@
 #![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 use crate::shortcuts::{import_app, Shortcut};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     path::PathBuf,
@@ -80,6 +81,7 @@ pub struct RecentApps {
 pub struct Recommendation {
     app: Shortcut,
     last_used: i64,
+    icon_key: String,
 }
 #[derive(Serialize)]
 pub struct Recommendations {
@@ -136,7 +138,11 @@ impl RecentApps {
         file.sync_all()?;
         std::fs::rename(temp, &self.path)
     }
-    pub fn recommendations(&self, excluded: &[String]) -> Result<Recommendations, String> {
+    pub fn recommendations(
+        &self,
+        excluded: &[String],
+        known_icons: &HashMap<String, String>,
+    ) -> Result<Recommendations, String> {
         if let Some(error) = self.error.lock().unwrap().clone() {
             return Err(error);
         }
@@ -157,10 +163,7 @@ impl RecentApps {
             }
             if let Some(app) = cache.get(&entry.path) {
                 if !excluded.contains(&app.target) {
-                    items.push(Recommendation {
-                        app: app.clone(),
-                        last_used: entry.last_used,
-                    });
+                    items.push(Recommendation::new(app, entry.last_used, known_icons));
                 }
             }
             if items.len() >= 12 {
@@ -171,6 +174,21 @@ impl RecentApps {
             supported: cfg!(target_os = "macos"),
             items,
         })
+    }
+}
+
+impl Recommendation {
+    fn new(app: &Shortcut, last_used: i64, known_icons: &HashMap<String, String>) -> Self {
+        let icon_key = hex::encode(Sha256::digest(app.icon.as_bytes()));
+        let mut app = app.clone();
+        if known_icons.get(&app.target) == Some(&icon_key) {
+            app.icon.clear();
+        }
+        Self {
+            app,
+            last_used,
+            icon_key,
+        }
     }
 }
 
@@ -238,6 +256,33 @@ pub fn start(app: tauri::AppHandle, recent: Arc<RecentApps>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recommendation_icons_are_only_sent_when_not_cached() {
+        let mut app = Shortcut {
+            id: "app".into(),
+            title: "App".into(),
+            kind: "app".into(),
+            target: "/Applications/App.app".into(),
+            icon: "png-v1".into(),
+        };
+        let first = Recommendation::new(&app, 10, &HashMap::new());
+        assert_eq!(first.app.icon, "png-v1");
+        let known = HashMap::from([(app.target.clone(), first.icon_key.clone())]);
+        let cached = Recommendation::new(&app, 11, &known);
+        assert!(cached.app.icon.is_empty());
+        assert_eq!(cached.icon_key, first.icon_key);
+        assert_eq!(cached.last_used, 11);
+        assert_eq!(app.icon, "png-v1", "cache must retain the original icon");
+        app.icon = "png-v2".into();
+        let changed = Recommendation::new(&app, 12, &known);
+        assert_eq!(changed.app.icon, "png-v2");
+        assert_ne!(changed.icon_key, first.icon_key);
+        app.icon.clear();
+        assert_ne!(
+            Recommendation::new(&app, 13, &known).icon_key,
+            first.icon_key
+        );
+    }
     #[test]
     fn tracks_switches_and_launches_without_repeated_writes() {
         let mut h = History::default();

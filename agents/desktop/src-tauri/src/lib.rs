@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager,
+    Emitter, Manager,
 };
 use tauri_plugin_autostart::ManagerExt;
 use tokio::sync::Mutex as AsyncMutex;
@@ -139,10 +139,11 @@ async fn shortcut_website_icon(url: String) -> Result<website_icon::WebsiteInfo,
 #[tauri::command]
 async fn shortcut_recommendations(
     excluded: Vec<String>,
+    known_icons: std::collections::HashMap<String, String>,
     recent: tauri::State<'_, Arc<recent_apps::RecentApps>>,
 ) -> Result<recent_apps::Recommendations, String> {
     let recent = recent.inner().clone();
-    tokio::task::spawn_blocking(move || recent.recommendations(&excluded))
+    tokio::task::spawn_blocking(move || recent.recommendations(&excluded, &known_icons))
         .await
         .map_err(|_| "读取最近应用失败".to_string())?
 }
@@ -177,6 +178,7 @@ fn show(app: &tauri::AppHandle) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        let _ = window.emit("orbit:ui-visible", true);
     }
 }
 #[tauri::command]
@@ -329,6 +331,14 @@ pub fn run() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
+                let _ = window.emit("orbit:ui-visible", false);
+            } else if matches!(
+                event,
+                tauri::WindowEvent::Focused(_) | tauri::WindowEvent::Resized(_)
+            ) {
+                let visible =
+                    window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
+                let _ = window.emit("orbit:ui-visible", visible);
             }
         })
         .build(tauri::generate_context!())

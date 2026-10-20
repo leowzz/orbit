@@ -97,6 +97,7 @@ export async function call<T>(
               icon: "",
             },
             lastUsed: Date.now() / 1000,
+            iconKey: "preview-calendar",
           },
           {
             app: {
@@ -107,6 +108,7 @@ export async function call<T>(
               icon: "",
             },
             lastUsed: Date.now() / 1000,
+            iconKey: "preview-notes",
           },
         ],
       } as T;
