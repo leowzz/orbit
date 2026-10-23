@@ -10,19 +10,14 @@ import com.konovalov.vad.webrtc.VadWebRTC
 import com.konovalov.vad.webrtc.config.*
 import io.github.jaredmdobson.concentus.OpusApplication
 import io.github.jaredmdobson.concentus.OpusEncoder
-import org.eclipse.paho.client.mqttv3.*
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.File
-import java.security.MessageDigest
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 /** A separate microphone service: screen/widget lifecycle never suspends capture. */
 class AudioCaptureService : Service() {
@@ -34,6 +29,7 @@ class AudioCaptureService : Service() {
         private fun desiredSettings(context: Context): AudioCaptureSettings = requestedSettings ?: synchronized(settingsLock) {
             requestedSettings ?: AudioCaptureSettingsStore.forContext(context).load().also { requestedSettings = it }
         }
+        fun settings(context: Context): AudioCaptureSettings = desiredSettings(context)
         fun saveSettings(context: Context, settings: AudioCaptureSettings): AudioCaptureSettings = synchronized(settingsLock) {
             desiredSettings(context) // Preserve the last confirmed value if commit fails.
             AudioCaptureSettingsStore.forContext(context).save(settings).also { requestedSettings = it }
@@ -42,10 +38,6 @@ class AudioCaptureService : Service() {
         @Volatile var active = false
             private set
         @Volatile var state = "尚未开始录音"
-            private set
-        @Volatile var transfer = ""
-            private set
-        @Volatile var pending = 0
             private set
         fun preferences(context: Context) = context.getSharedPreferences("orbit_audio", Context.MODE_PRIVATE)
         fun enabled(context: Context) = preferences(context).getBoolean("enabled", true)
@@ -64,6 +56,7 @@ class AudioCaptureService : Service() {
             catch (_: Exception) { state = "无法读取录音连接配置，请重新连接 Orbit 后重试" }
         }
         private fun startChecked(context: Context) {
+            if (OrbitService.appVisible) AudioUploadService.start(context)
             if (!startPolicy.request(active, draining, OrbitService.appVisible, enabled(context))) {
                 if (!active && draining && enabled(context)) state = "正在保存最后一段录音，完成后自动开始"
                 return
@@ -80,9 +73,9 @@ class AudioCaptureService : Service() {
         fun snapshot(context: Context): Map<String, Any> {
             val saved = desiredSettings(context)
             return mapOf(
-                "active" to active, "state" to state, "transfer" to transfer, "pending" to pending,
+                "active" to active, "state" to state, "transfer" to AudioUploadService.transfer, "pending" to AudioUploadService.pending,
                 "enabled" to enabled(context), "settings" to saved.map(),
-                "settingsPending" to (processingSettings?.let { it != saved } ?: false),
+                "settingsPending" to (processingSettings?.let { it.copy(uploadConcurrency = saved.uploadConcurrency) != saved } ?: false),
                 "notifications" to context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(),
                 "permission" to (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED),
             )
@@ -90,43 +83,32 @@ class AudioCaptureService : Service() {
     }
     private val capture = Executors.newSingleThreadExecutor()
     private val processing = Executors.newSingleThreadExecutor()
-    private val network = Executors.newSingleThreadScheduledExecutor()
-    private val uploadQueued = AtomicBoolean(false)
     private val frames = ArrayBlockingQueue<Pair<ShortArray, Long>>(250)
     @Volatile private var running = true
     @Volatile private var capturing = true
     @Volatile private var recorder: AudioRecord? = null
-    private var mqtt: MqttClient? = null // Network worker owns all client operations.
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var config: NodeConfig
     private lateinit var outbox: AudioOutbox
     private val session = UUID.randomUUID().toString()
     private var sequence = 0L
-    private var otherPending = 0
-    private fun backlogNotice(): String = if (otherPending > 0) "；另有 $otherPending 段属于其他连接，请切回原连接同步" else ""
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() {
         super.onCreate()
         active = true
         state = "正在准备录音"
-        transfer = ""
         try {
             showNotification("正在准备录音")
             config = requireNotNull(configuration(this)) { "请先保存 MQTT 配置" }.also { it.validate() }
             require(Regex("[a-z0-9][a-z0-9_-]{0,63}").matches(config.nodeId)) { "录音设备 ID 需使用小写字母、数字、下划线或短横线，首位为字母或数字" }
             // A connection change cannot send an old device/broker backlog to a new destination.
-            val owner = MessageDigest.getInstance("SHA-256").digest("${config.uri}|${config.nodeId}|${config.username}".toByteArray())
-                .joinToString("") { "%02x".format(it) }
-            val root = File(filesDir, "audio-outbox")
-            val folder = File(root, owner)
-            outbox = AudioOutbox(folder, budgetDirectory = root)
-            otherPending = root.walkTopDown().count { it.isFile && it.name.endsWith(".json") && it.parentFile != folder }
-            pending = outbox.count()
+            val folder = AudioUploadService.folder(this, config)
+            outbox = AudioOutbox(folder, budgetDirectory = folder.parentFile!!)
+            AudioUploadService.start(this)
             wakeLock = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Orbit:Audio").apply { acquire() }
             draining = true
             processing.execute { process() }
             capture.execute { record() }
-            network.scheduleWithFixedDelay({ upload() }, 0, 5, TimeUnit.SECONDS)
         } catch (error: Exception) {
             capturing = false
             if (!draining) wakeLock?.let { if (it.isHeld) it.release() }
@@ -138,6 +120,7 @@ class AudioCaptureService : Service() {
         if (intent?.action == "stop") {
             preferences(this).edit().putBoolean("enabled", false).apply()
             state = "已停止录音"
+            AudioUploadService.start(this)
             stopSelf()
         }
         // Microphone foreground services must start while an activity is visible.
@@ -263,66 +246,7 @@ class AudioCaptureService : Service() {
             fail("本地录音队列已满或无法保存，已停止录音；当前片段未保存，请连接 Core 后重试")
             throw error
         }
-        pending = outbox.count()
-        wakeUploader()
-    }
-    private fun wakeUploader() {
-        if (!running || !uploadQueued.compareAndSet(false, true)) return
-        try {
-            network.execute {
-                uploadQueued.set(false)
-                if (running) upload()
-            }
-        } catch (_: java.util.concurrent.RejectedExecutionException) {
-            uploadQueued.set(false) // Service stopped while its last segment was being saved.
-        }
-    }
-    private fun upload() {
-        if (!running) return
-        var stage = "initialize"
-        try {
-            var client = mqtt
-            if (client?.isConnected != true) {
-                OrbitMqtt.close(client)
-                client = MqttClient(config.uri, "orbit-audio-${config.nodeId}-${UUID.randomUUID().toString().take(8)}", MemoryPersistence())
-                client.setTimeToWait(12000)
-                mqtt = client
-                val expected = "orbit/v1/nodes/${config.nodeId}/audio/acks"
-                client.setCallback(object : MqttCallback {
-                    override fun connectionLost(cause: Throwable?) { transfer = "连接断开 · 录音保存在本机，等待重传" }
-                    override fun deliveryComplete(token: IMqttDeliveryToken?) {}
-                    override fun messageArrived(topic: String?, message: MqttMessage?) {
-                        if (topic != expected || message == null || message.isRetained || message.payload.size > 4096) return
-                        val ack = runCatching { JSONObject(String(message.payload, Charsets.UTF_8)) }.getOrNull() ?: return
-                        if (ack.optInt("schema_version") != 1 || ack.optString("status") != "stored") return
-                        val id = ack.optString("segment_id")
-                        if (runCatching { UUID.fromString(id).toString() == id }.getOrDefault(false)) {
-                            runCatching { network.execute {
-                                try { outbox.acknowledge(id); pending = outbox.count() }
-                                catch (_: Exception) { transfer = "未能释放已确认的录音，将重新发送" }
-                            } }
-                        }
-                    }
-                })
-                stage = "connect"
-                client.connect(OrbitMqtt.options(config).apply { keepAliveInterval = 30 })
-                stage = "subscribe"
-                val granted = client.subscribeWithResponse(expected, 1).grantedQos
-                check(granted.size == 1 && granted[0] == 1) { "audio subscription rejected" }
-            }
-            stage = "read_outbox"
-            outbox.pending().forEach { (_, payload) ->
-                stage = "publish"
-                client.publish("orbit/v1/nodes/${config.nodeId}/audio/segments", payload, 1, false)
-            }
-            transfer = (if (pending == 0) "录音队列已同步" else "等待 Core 确认 · 本机保留 $pending 段录音") + backlogNotice()
-        } catch (error: Exception) {
-            val reason = OrbitMqtt.safeError(error)
-            // Never log exception messages/payloads: they can contain credentials or audio.
-            android.util.Log.w("OrbitAudio", "Upload failed: stage=$stage type=${error.javaClass.simpleName} reason=$reason")
-            transfer = "无法上传 · $reason；录音保存在本机，将自动重试" + backlogNotice()
-            OrbitMqtt.close(mqtt); mqtt = null
-        }
+        AudioUploadService.start(this)
     }
     override fun onDestroy() {
         running = false
@@ -330,8 +254,6 @@ class AudioCaptureService : Service() {
         runCatching { recorder?.stop() }
         capture.shutdown()
         processing.shutdown() // Drain captured frames and persist the last speech segment.
-        network.execute { OrbitMqtt.close(mqtt); mqtt = null }
-        network.shutdown()
         if (state == "正在后台录音") state = "已停止录音"
         super.onDestroy()
     }

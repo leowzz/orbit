@@ -1,8 +1,12 @@
 # 音频采集与 ASR
 
-Android 持续采集 16 kHz 单声道 PCM，通过本地 WebRTC VAD 切出语音并编码为 Opus。采集、编码及 MQTT 上传独立运行；默认连续检测到 300 ms 人声才保留片段，连续静音 600 ms 后提交片段，连续讲话最长每 10 秒提交一次，提交时不停止 AudioRecord。静音和未达到连续人声阈值的短促声音不单独上传。设备和 worker 使用本地持久队列，收到 Core 的应用层确认后才释放待发数据。
+Android 持续采集 16 kHz 单声道 PCM，通过本地 WebRTC VAD 切出语音并编码为 Opus。采集、编码及 MQTT 上传独立运行；默认连续检测到 300 ms 人声才保留片段，连续静音 600 ms 后提交片段，连续讲话最长每 10 秒提交一次，提交时不停止 AudioRecord。静音和未达到连续人声阈值的短促声音不单独上传。Android 使用本地持久队列，MQTT QoS 0 发送成功后立即删除本机片段，不订阅或等待 broker/Core 确认；发送调用报错则保留重试。发送成功仅代表本地 MQTT 客户端完成发送，不保证 Core 收到，允许丢失。worker 的任务与结果仍使用原有持久队列及应用层确认。
 
-Android 的「设置 → 录音 → 录音设置」可调整连续人声阈值（100–2000 ms）、结束静音（200–2000 ms）、人声前保留时长（0–1000 ms，默认 300 ms）、单段最长时长（3–10 秒）和 WebRTC 检测严格度（四档，默认严格）。设置保存到本机；录音中修改在片段边界生效，不重启麦克风。门槛满足后保留候选人声和前置声音；持续说话因长度切片时沿用已确认的人声状态，最后不足阈值的尾音也会保留。严格度越高越容易过滤噪声，也可能漏掉轻声说话。
+Android 的「设置 → 录音 → 录音设置」可调整连续人声阈值（100–2000 ms）、结束静音（200–2000 ms）、人声前保留时长（0–1000 ms，默认 300 ms）、单段最长时长（3–10 秒）和 WebRTC 检测严格度（四档，默认严格）。最大上传并发可设为 1–64（默认 16），保存后立即生效；降低并发不会取消已经发出的片段。上传使用独立的 dataSync 前台服务，发送完成立即补位，新录音优先于旧积压，不再每 5 秒只发送 4 段。停止录音只关闭麦克风，尾段与积压仍继续发送；打开应用时也会恢复发送，即使录音开关已关闭。队列清空后空闲 15 秒关闭上传服务。Android 15 的后台 dataSync 时限或系统强停可能暂停发送，未发送数据保留，回到应用可继续。
+
+「使用低延迟预设」将结束静音设为 300 ms、最长片段设为 3 秒、并发设为 16；点击保存后生效。Core 收到并入库后即可在管理页刷新看到记录，转写文本仍需等待 worker 识别。设置保存到本机；录音参数在片段边界生效，不重启麦克风。门槛满足后保留候选人声和前置声音；持续说话因长度切片时沿用已确认的人声状态，最后不足阈值的尾音也会保留。严格度越高越容易过滤噪声，也可能漏掉轻声说话。
+
+录音设置顶部提供「清空缓存队列」。确认后断开当前上传连接，忽略迟到的发送回调，并删除本机所有连接下的待发送片段和临时文件，显示实际删除段数。删除与录音落盘共用锁，保留队列目录以便继续录音；清理后产生的新片段仍正常入队。已发送内容不会撤回，连接和录音参数不受影响。删除失败会提示重试，可能已经清除部分片段。
 
 Dayflow 的参考点是持续采集、异步批次处理和 SQLite 历史记录；其 macOS 屏幕采集代码不直接用于 Android。本阶段结构化内容是转写文本、语言、录制时间与处理信息，未增加摘要、待办或说话人识别。
 
@@ -37,7 +41,7 @@ SQLite 会复用删除释放的页，但数据库文件不保证立即缩小；�
 
 | 账号 | 发布 | 订阅 |
 | --- | --- | --- |
-| Android 录音设备 | 自己的 `nodes/{id}/audio/segments` | 自己的 `nodes/{id}/audio/acks` |
+| Android 录音设备 | 自己的 `nodes/{id}/audio/segments` | 无（旧版客户端仍订阅自己的 `nodes/{id}/audio/acks`） |
 | Worker Agent | 自己的 `agents/{id}/audio/results`、`agents/{id}/audio/state` | `audio/jobs`、自己的 `agents/{id}/audio/acks` |
 | Core | `audio/jobs`、各设备/worker 的 `audio/acks` | `nodes/+/audio/segments`、`agents/+/audio/results`、`agents/+/audio/state` |
 
@@ -45,18 +49,18 @@ SQLite 会复用删除释放的页，但数据库文件不保证立即缩小；�
 
 ## 消息协议
 
-音频通道使用 UTF-8 JSON、`schema_version: 1`、MQTT QoS 1。除 worker 状态外均禁止 retained；不改变现有 Protobuf 状态和命令协议。每条消息最大 128 KiB。身份只能包含小写字母、数字、`_`、`-`，首位为字母或数字，最长 64 位。时间为 UTC RFC3339，ID 为 UUID。
+音频通道使用 UTF-8 JSON、`schema_version: 1`。新版 Android → Core 的 Segment 使用 MQTT QoS 0；Core/worker 通道及旧版 Android 使用 MQTT QoS 1。除 worker 状态外均禁止 retained；不改变现有 Protobuf 状态和命令协议。每条消息最大 128 KiB。身份只能包含小写字母、数字、`_`、`-`，首位为字母或数字，最长 64 位。时间为 UTC RFC3339，ID 为 UUID。
 
 | Topic | 发送方 → 接收方 | 内容 |
 | --- | --- | --- |
 | `orbit/v1/nodes/{node_id}/audio/segments` | Android → Core | Segment |
-| `orbit/v1/nodes/{node_id}/audio/acks` | Core → Android | `{schema_version, segment_id, status:"stored"}` |
+| `orbit/v1/nodes/{node_id}/audio/acks` | Core → 旧版 Android | `{schema_version, segment_id, status:"stored"}`；新版不订阅、不等待 |
 | `orbit/v1/audio/jobs` | Core → worker | `{schema_version, job_id, segment}` |
 | `orbit/v1/agents/{agent_id}/audio/results` | worker → Core | Result |
 | `orbit/v1/agents/{agent_id}/audio/acks` | Core → worker | `{schema_version, job_id, status:"stored"}` |
 | `orbit/v1/agents/{agent_id}/audio/state` | worker → Core | WorkerState（retained，约每 20 秒更新） |
 
-worker 通过 `$share/audio-asr/orbit/v1/audio/jobs` 消费。Core 先在同一事务保存片段与任务，再确认 Android；任务在收到结果前周期性重发。`job_id` 等于 `segment_id`。重复消息必须幂等，复用 ID 却修改内容必须拒绝。队列提供至少一次投递，终态结果以 Core 首次接受的内容为准。
+worker 通过 `$share/audio-asr/orbit/v1/audio/jobs` 消费。Core 先在同一事务保存片段与任务，保留向旧版 Android 发送确认的兼容行为；新版 Android 不依赖此确认。任务在收到结果前周期性重发。`job_id` 等于 `segment_id`。重复消息必须幂等，复用 ID 却修改内容必须拒绝。Core 到 worker 的队列提供至少一次投递，终态结果以 Core 首次接受的内容为准；新版 Android 上传为尽力发送，不能据本机队列清空推断 Core 已保存。
 
 Segment 字段：
 

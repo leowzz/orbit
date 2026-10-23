@@ -43,6 +43,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        AudioUploadService.start(this)
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             AudioCaptureService.start(this)
         } else if (!AudioCaptureService.preferences(this).getBoolean("asked", false)) {
@@ -101,6 +102,16 @@ class MainActivity : FlutterActivity() {
             try {
                 when (call.method) {
                     "audioStatus" -> result.success(AudioCaptureService.snapshot(this))
+                    "audioClearQueue" -> {
+                        val receiver = object : android.os.ResultReceiver(android.os.Handler(mainLooper)) {
+                            override fun onReceiveResult(code: Int, data: android.os.Bundle?) {
+                                if (code == 0) result.success(data?.getInt("removed") ?: 0)
+                                else result.error("clear_failed", "未能完全清空缓存队列，请重试", null)
+                            }
+                        }
+                        startForegroundService(Intent(this, AudioUploadService::class.java)
+                            .setAction("clearQueue").putExtra("result", receiver))
+                    }
                     "audioSaveSettings" -> {
                         val settings = try { AudioCaptureSettings.fromMap(call.arguments) }
                         catch (error: IllegalArgumentException) {
@@ -110,7 +121,10 @@ class MainActivity : FlutterActivity() {
                         io.execute {
                             try {
                                 val saved = AudioCaptureService.saveSettings(this, settings)
-                                runOnUiThread { result.success(saved.map()) }
+                                runOnUiThread {
+                                    AudioUploadService.start(this)
+                                    result.success(saved.map())
+                                }
                             } catch (_: Exception) {
                                 runOnUiThread { result.error("save_failed", "未能保存录音参数，请检查设备可用空间后重试", null) }
                             }
@@ -124,6 +138,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "audioStop" -> {
                         AudioCaptureService.preferences(this).edit().putBoolean("enabled", false).apply()
+                        AudioUploadService.start(this)
                         stopService(Intent(this, AudioCaptureService::class.java))
                         result.success(null)
                     }
@@ -171,6 +186,7 @@ class MainActivity : FlutterActivity() {
                         val previous = vault.load()
                         if (next == null) stopService(Intent(this, AudioCaptureService::class.java))
                         if (previous != next) {
+                            stopService(Intent(this, AudioUploadService::class.java))
                             ConfigVault(this, "orbit_app_mqtt").clear()
                             if (next == null) vault.clear() else vault.save(next)
                             ViewStore(this).clear()

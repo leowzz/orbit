@@ -12,17 +12,20 @@ void main() {
     'preRollMs': 300,
     'maxSegmentMs': 10000,
     'vadMode': 2,
+    'uploadConcurrency': 16,
   };
   late Map<String, int> settings;
   late List<MethodCall> calls;
   bool readFails = false;
   bool saveFails = false;
+  bool clearFails = false;
 
   setUp(() {
     settings = {...defaults};
     calls = [];
     readFails = false;
     saveFails = false;
+    clearFails = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           calls.add(call);
@@ -39,6 +42,10 @@ void main() {
             if (saveFails) throw PlatformException(code: 'save_failed');
             settings = Map<String, int>.from(call.arguments as Map);
             return settings;
+          }
+          if (call.method == 'audioClearQueue') {
+            if (clearFails) throw PlatformException(code: 'clear_failed');
+            return 527;
           }
           return null;
         });
@@ -59,6 +66,44 @@ void main() {
     await tester.tap(find.text('录音设置'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+    'queue clearing requires confirmation and reports removed count',
+    (tester) async {
+      await open(tester);
+      await tester.tap(find.text('清空缓存队列'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(calls.where((c) => c.method == 'audioClearQueue'), isEmpty);
+      await tester.tap(find.text('清空缓存队列'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('确认清空'));
+      await tester.pumpAndSettle();
+      expect(find.text('已清空缓存队列，删除 527 段录音'), findsOneWidget);
+      expect(calls.where((c) => c.method == 'audioClearQueue'), hasLength(1));
+      expect(calls.where((c) => c.method == 'audioStop'), isEmpty);
+      expect(settings, defaults);
+    },
+  );
+
+  testWidgets('failed queue clear allows retry without reporting success', (
+    tester,
+  ) async {
+    clearFails = true;
+    await open(tester);
+    await tester.tap(find.text('清空缓存队列'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认清空'));
+    await tester.pumpAndSettle();
+    expect(find.text('未能完全清空缓存队列，请重试'), findsOneWidget);
+    clearFails = false;
+    await tester.tap(find.text('清空缓存队列'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认清空'));
+    await tester.pumpAndSettle();
+    expect(find.text('已清空缓存队列，删除 527 段录音'), findsOneWidget);
+  });
 
   testWidgets(
     'saving settings persists through reopen without stopping capture',
@@ -169,6 +214,33 @@ void main() {
     await tester.scrollUntilVisible(find.text('人声连续时长阈值'), -200);
     expect(find.text('300 毫秒'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('concurrency and low latency preset persist together', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: AudioCaptureSettingsScreen()),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('使用低延迟预设'), 200);
+    await tester.tap(find.text('使用低延迟预设'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('uploadConcurrency')),
+      -100,
+    );
+    final slider = find.byKey(const ValueKey('uploadConcurrency'));
+    await tester.drag(slider, const Offset(80, 0));
+    await tester.pumpAndSettle();
+    final concurrency = tester.widget<Slider>(slider).value.round();
+    expect(concurrency, greaterThan(16));
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(settings['uploadConcurrency'], concurrency);
+    expect(settings['silenceMs'], 300);
+    expect(settings['maxSegmentMs'], 3000);
+    expect(calls.where((c) => c.method == 'audioStop'), isEmpty);
   });
 
   test('duration labels retain exact values', () {

@@ -27,10 +27,13 @@ class _AudioCaptureSettingsScreenState
     'preRollMs': 300,
     'maxSegmentMs': 10000,
     'vadMode': 2,
+    'uploadConcurrency': 16,
   };
   Map<String, int>? saved;
   Map<String, int> draft = {};
   bool saving = false;
+  bool clearing = false;
+  String? queueResult;
   String? loadError;
 
   @override
@@ -53,12 +56,13 @@ class _AudioCaptureSettingsScreenState
       'preRollMs': (0, 1000),
       'maxSegmentMs': (3000, 10000),
       'vadMode': (0, 3),
+      'uploadConcurrency': (1, 64),
     };
     for (final entry in settings.entries) {
       final (min, max) = ranges[entry.key]!;
       if (entry.value < min ||
           entry.value > max ||
-          (entry.key != 'vadMode' && entry.value % 20 != 0)) {
+          (entry.key.endsWith('Ms') && entry.value % 20 != 0)) {
         throw const FormatException();
       }
     }
@@ -109,6 +113,46 @@ class _AudioCaptureSettingsScreenState
       }
     } finally {
       if (mounted) setState(() => saving = false);
+    }
+  }
+
+  Future<void> clearQueue() async {
+    if (clearing) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('清空缓存队列？'),
+        content: const Text(
+          '将永久删除本机所有连接下尚未发送的录音缓存，无法恢复。已发送的内容不会撤回。录音会继续，新片段仍会进入队列。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认清空'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      clearing = true;
+      queueResult = null;
+    });
+    try {
+      final removed = await channel.invokeMethod<int>('audioClearQueue');
+      if (mounted) {
+        setState(() => queueResult = '已清空缓存队列，删除 ${removed ?? 0} 段录音');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => queueResult = '未能完全清空缓存队列，请重试');
+      }
+    } finally {
+      if (mounted) setState(() => clearing = false);
     }
   }
 
@@ -193,6 +237,19 @@ class _AudioCaptureSettingsScreenState
             : ListView(
                 padding: const EdgeInsets.all(24),
                 children: [
+                  Text('缓存队列', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  const Text('异常积压时可清除本机待发送的录音片段，释放存储空间。'),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: clearing ? null : clearQueue,
+                      icon: const Icon(Icons.delete_outline),
+                      label: Text(clearing ? '正在清空…' : '清空缓存队列'),
+                    ),
+                  ),
+                  if (queueResult != null) Text(queueResult!),
+                  const Divider(height: 32),
                   duration(
                     key: 'minSpeechMs',
                     label: '人声连续时长阈值',
@@ -244,7 +301,43 @@ class _AudioCaptureSettingsScreenState
                     max: 10000,
                     step: 1000,
                   ),
-                  const Text('录音中修改会在片段边界生效，录音不会中断。'),
+                  Text(
+                    '最大上传并发：${draft['uploadConcurrency']}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('同时发送的片段数量。新录音优先，发送完成立即续发；停止录音后仍继续上传。'),
+                  Slider(
+                    key: const ValueKey('uploadConcurrency'),
+                    min: 1,
+                    max: 64,
+                    divisions: 63,
+                    value: draft['uploadConcurrency']!.toDouble(),
+                    label: '${draft['uploadConcurrency']}',
+                    semanticFormatterCallback: (v) => '${v.round()} 段',
+                    onChanged: saving
+                        ? null
+                        : (v) => setState(
+                            () => draft['uploadConcurrency'] = v.round(),
+                          ),
+                  ),
+                  const Text('发送成功即清除本机片段，不等待服务器确认。网络或服务器异常可能丢失录音。'),
+                  const SizedBox(height: 16),
+                  const Text('并发设置保存后立即生效；录音参数在片段边界生效。'),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: saving
+                          ? null
+                          : () => setState(() {
+                              draft['silenceMs'] = 300;
+                              draft['maxSegmentMs'] = 3000;
+                              draft['uploadConcurrency'] = 16;
+                            }),
+                      child: const Text('使用低延迟预设'),
+                    ),
+                  ),
+                  const Text('停顿 300 毫秒即提交；连续讲话每 3 秒提交。转写还需要语音识别处理时间。'),
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerLeft,

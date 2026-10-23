@@ -7,6 +7,25 @@ import java.util.UUID
 import io.github.jaredmdobson.concentus.*
 
 class AudioPipelineTest {
+    @Test fun clearQueueRemovesAllOwnersAndTemporaryFilesButPreservesOtherData() {
+        val root = Files.createTempDirectory("orbit-audio-clear").toFile()
+        try {
+            val current = AudioOutbox(java.io.File(root, "current"), budgetDirectory = root)
+            val old = AudioOutbox(java.io.File(root, "old"), budgetDirectory = root)
+            current.put(UUID.randomUUID().toString(), byteArrayOf(1))
+            old.put(UUID.randomUUID().toString(), byteArrayOf(2))
+            java.io.File(root, "old/partial.tmp").writeText("partial")
+            val other = java.io.File(root, "settings.txt").apply { writeText("keep") }
+            assertEquals(2, AudioOutbox.clearAll(root))
+            assertEquals(0, current.count())
+            assertEquals(0, old.count())
+            assertFalse(java.io.File(root, "old/partial.tmp").exists())
+            assertEquals("keep", other.readText())
+            assertEquals(0, AudioOutbox.clearAll(root))
+            current.put(UUID.randomUUID().toString(), byteArrayOf(3))
+            assertEquals(1, AudioOutbox(java.io.File(root, "current")).count())
+        } finally { root.deleteRecursively() }
+    }
     @Test fun unifiedLogoutNeverFallsBackToAnOldLegacyIdentity() {
         assertTrue(AudioConfigurationPolicy.legacyAllowed(false, false))
         assertFalse(AudioConfigurationPolicy.legacyAllowed(false, true))
@@ -47,7 +66,7 @@ class AudioPipelineTest {
         assertEquals(listOf(500, 500, 1), emitted.map { it.size })
         assertEquals((0..1000).map { it * 20L }, emitted.flatten().map { it.startedAt })
     }
-    @Test fun outboxSurvivesReopenAndOnlyAckRemovesPayload() {
+    @Test fun outboxSurvivesReopenUntilLocalSendCompletes() {
         val root = Files.createTempDirectory("orbit-audio-test").toFile()
         try {
             val id = UUID.randomUUID().toString()
@@ -55,12 +74,12 @@ class AudioPipelineTest {
             AudioOutbox(root).put(id, payload)
             val reopened = AudioOutbox(root)
             assertArrayEquals(payload, reopened.pending().single().second)
-            assertEquals(1, reopened.count()) // A publish/PUBACK must not delete it.
+            assertEquals(1, reopened.count()) // Reading/reserving a send must not delete it.
             reopened.put(id, payload)
             assertEquals(1, reopened.count())
-            reopened.acknowledge(UUID.randomUUID().toString())
+            reopened.sent(UUID.randomUUID().toString())
             assertEquals(1, reopened.count())
-            reopened.acknowledge(id)
+            reopened.sent(id)
             assertEquals(0, AudioOutbox(root).count())
         } finally { root.deleteRecursively() }
     }
