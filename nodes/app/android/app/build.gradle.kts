@@ -56,6 +56,7 @@ android {
         release {
             // Never silently distribute an APK signed with the debug key.
             signingConfig = signingConfigs.findByName("release")
+            proguardFiles(file("../../../android/android/app/proguard-rules.pro"))
         }
     }
 }

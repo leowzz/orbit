@@ -279,6 +279,7 @@ class AudioCaptureService : Service() {
     }
     private fun upload() {
         if (!running) return
+        var stage = "initialize"
         try {
             var client = mqtt
             if (client?.isConnected != true) {
@@ -303,16 +304,23 @@ class AudioCaptureService : Service() {
                         }
                     }
                 })
+                stage = "connect"
                 client.connect(OrbitMqtt.options(config).apply { keepAliveInterval = 30 })
+                stage = "subscribe"
                 val granted = client.subscribeWithResponse(expected, 1).grantedQos
                 check(granted.size == 1 && granted[0] == 1) { "audio subscription rejected" }
             }
+            stage = "read_outbox"
             outbox.pending().forEach { (_, payload) ->
+                stage = "publish"
                 client.publish("orbit/v1/nodes/${config.nodeId}/audio/segments", payload, 1, false)
             }
             transfer = (if (pending == 0) "录音队列已同步" else "等待 Core 确认 · 本机保留 $pending 段录音") + backlogNotice()
-        } catch (_: Exception) {
-            transfer = "无法上传 · 录音保存在本机，将自动重试；请检查网络和录音设备账号权限" + backlogNotice()
+        } catch (error: Exception) {
+            val reason = OrbitMqtt.safeError(error)
+            // Never log exception messages/payloads: they can contain credentials or audio.
+            android.util.Log.w("OrbitAudio", "Upload failed: stage=$stage type=${error.javaClass.simpleName} reason=$reason")
+            transfer = "无法上传 · $reason；录音保存在本机，将自动重试" + backlogNotice()
             OrbitMqtt.close(mqtt); mqtt = null
         }
     }

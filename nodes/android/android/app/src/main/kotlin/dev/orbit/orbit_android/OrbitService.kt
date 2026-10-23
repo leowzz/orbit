@@ -37,6 +37,7 @@ object OrbitMqtt {
         runCatching { client.close(true) }
     }
     fun safeError(error: Throwable): String = when (error) {
+        is java.util.MissingResourceException -> "MQTT 组件初始化失败，请更新应用"
         is MqttException -> when (error.reasonCode) {
             4, 5 -> "认证失败或没有连接权限"
             32103 -> "无法连接，请检查地址、端口、网络或 TLS 证书"
