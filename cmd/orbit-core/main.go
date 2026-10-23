@@ -147,6 +147,7 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
+	api.ConfigureMQTT(cfg)
 	listener, err := net.Listen("tcp", cfg.App.Listen)
 	if err != nil {
 		return err

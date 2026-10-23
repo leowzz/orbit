@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -406,6 +407,18 @@ func (cfg *MQTTConfig) validate(baseDir string) error {
 }
 
 func (cfg *MQTTAdminConfig) validate() error {
+	if cfg.NodeURL != "" {
+		u, err := url.Parse(cfg.NodeURL)
+		if err != nil || (u.Scheme != "mqtt" && u.Scheme != "mqtts") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
+			return errors.New("node_url must be an mqtt:// or mqtts:// broker address without credentials, path, query or fragment")
+		}
+		if u.Port() != "" {
+			port, err := strconv.Atoi(u.Port())
+			if err != nil || port < 1 || port > 65535 {
+				return errors.New("node_url port must be between 1 and 65535")
+			}
+		}
+	}
 	cfg.URL = strings.TrimRight(strings.TrimSpace(cfg.URL), "/")
 	if cfg.URL != "" {
 		u, err := url.Parse(cfg.URL)

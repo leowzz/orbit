@@ -27,6 +27,8 @@ type Items = { items: Item[]; next: string };
 type Operation = Record<string, unknown>;
 function message(e: unknown): string {
   if (e instanceof APIError) {
+    if (e.status === 503 && e.message.includes('"mqtt_unavailable"'))
+      return "MQTT 账号清理未完成，设备授权尚未变更。请检查 Core 的 MQTT 管理连接后重试。";
     if (e.status === 409) return "内容已被其他设备修改，请刷新列表后重新编辑。";
     if (e.status === 413) return "图片过大，请选择不超过 10 MB 的图片。";
     if (e.status === 400)

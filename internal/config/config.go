@@ -116,9 +116,10 @@ type CoreConfig struct {
 	Logging             LoggingConfig                `yaml:"logging"`
 }
 
-// MQTTAdminConfig is only used by Core's authenticated console, never sent to clients.
+// MQTTAdminConfig keeps broker management credentials on Core, never on clients.
 type MQTTAdminConfig struct {
 	URL       string `yaml:"url" json:"-"`
+	NodeURL   string `yaml:"node_url" json:"-"`
 	APIKey    string `yaml:"api_key" json:"-"`
 	APISecret string `yaml:"api_secret" json:"-"`
 }
@@ -135,10 +136,11 @@ type AppConfig struct {
 }
 
 type AppDevice struct {
-	Label       string `yaml:"label"`
-	Platform    string `yaml:"platform"`
-	TokenSHA256 string `yaml:"token_sha256"`
-	Revoked     bool   `yaml:"revoked"`
+	Label        string `yaml:"label"`
+	Platform     string `yaml:"platform"`
+	TokenSHA256  string `yaml:"token_sha256"`
+	Revoked      bool   `yaml:"revoked"`
+	MQTTUsername string `yaml:"-" json:"mqtt_username,omitempty"`
 }
 
 type WebNodeConfig struct {

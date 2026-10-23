@@ -9,6 +9,7 @@ import 'app_viewport.dart';
 import 'workbench_screen.dart';
 import 'app_location.dart';
 import 'app_appearance.dart';
+import 'app_mqtt_registration.dart';
 import 'package:orbit_android/software_update.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
@@ -38,6 +39,8 @@ class _OrbitHomeState extends State<OrbitHome> {
   bool reading = false;
   bool showingMatrix = false;
   bool restoreMatrixFullscreen = false;
+
+  AppMqttRegistration? mqttRegistration;
 
   static const channel = MethodChannel('dev.orbit/node');
   @override
@@ -88,10 +91,21 @@ class _OrbitHomeState extends State<OrbitHome> {
   @override
   void didUpdateWidget(OrbitHome oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) syncConnection();
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.widgetsEnabled != widget.widgetsEnabled) {
+      syncConnection();
+    }
+  }
+
+  @override
+  void dispose() {
+    mqttRegistration?.close();
+    super.dispose();
   }
 
   Future<void> syncConnection() async {
+    mqttRegistration?.close();
+    mqttRegistration = null;
     if (!widget.widgetsEnabled) return;
     try {
       final controller = widget.controller;
@@ -101,6 +115,12 @@ class _OrbitHomeState extends State<OrbitHome> {
             ? null
             : {'server': controller.server, 'token': controller.token},
       );
+      if (mounted &&
+          widget.widgetsEnabled &&
+          controller != null &&
+          controller == widget.controller) {
+        mqttRegistration = AppMqttRegistration(controller)..start();
+      }
     } on MissingPluginException {
       /* Non-Android previews have no native widgets. */
     } on PlatformException {

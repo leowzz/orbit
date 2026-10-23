@@ -192,6 +192,11 @@ func (s *Server) changeDevice(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	s.mqttMu.Lock()
+	defer s.mqttMu.Unlock()
+	if !s.revokeDeviceMQTT(w, r, id) {
+		return
+	}
 	s.mu.Lock()
 	device, ok := s.devices[id]
 	if !ok {
@@ -200,6 +205,7 @@ func (s *Server) changeDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := ""
+	device.MQTTUsername = ""
 	var err error
 	if action == "revoke" {
 		device.Revoked = true
@@ -220,6 +226,11 @@ func (s *Server) changeDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteDevice(w http.ResponseWriter, r *http.Request) {
+	s.mqttMu.Lock()
+	defer s.mqttMu.Unlock()
+	if !s.revokeDeviceMQTT(w, r, r.PathValue("id")) {
+		return
+	}
 	s.navMu.Lock()
 	defer s.navMu.Unlock()
 	id := r.PathValue("id")

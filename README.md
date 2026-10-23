@@ -309,6 +309,7 @@ Configure Core's management connection separately from its MQTT login:
 ```yaml
 mqtt_admin:
   url: http://emqx:18083  # EMQX management origin, or URL ending in /api/v5.
+  # node_url: mqtts://mqtt.example.com:8883  # Device-reachable listener; defaults to mqtt.url.
   api_key: ""           # Create a dedicated key in EMQX Dashboard → System → API Keys.
   api_secret: ""
 ```
@@ -335,6 +336,25 @@ for that username, then removes its built-in username ACL. Partial completion is
 reported explicitly with a retry action. Core's own MQTT username is protected.
 These operations do not remove routes, retained messages, or App device tokens.
 Existing credentials/ACLs in other broker configurations remain an operator concern.
+
+Android Apps claim a dedicated, Node-scoped MQTT account after their first Core
+connection. Existing installations claim it using their saved App Token on the next
+launch after upgrading; no new QR code or token is required. The credentials are
+stored in Android's encrypted vault, separately from manually configured legacy
+MQTT connections. This provisions authentication; inbox and widget synchronization
+continue using their existing HTTP connection. An older Core, disabled management,
+or a temporary broker failure does not prevent HTTP use; the App retries failed
+claims at most once per minute while connected.
+
+Set `mqtt_admin.node_url` when Core's `mqtt.url` uses a Docker-only hostname or an
+internal listener. The device endpoint is `POST /api/v1/mqtt`, authenticated by the
+existing App Token and restricted to that device. Passwords are derived on Core,
+not stored in its device registry or included in status/list/QR responses. Repeated
+claims restore the same credentials. App Token rotation, revocation and device
+deletion retire the managed MQTT account first; if cleanup fails, the authorization
+change stops and can be retried. Keep MQTT management configured until these
+accounts have been retired. Manually rotating a managed account's password is
+temporary: a subsequent App claim restores it; rotate the App Token to replace it.
 
 For an isolated real-broker test, run `go test ./internal/mqttadmin -run TestEMQXLifecycle -v`
 with `ORBIT_TEST_EMQX_URL`, `ORBIT_TEST_EMQX_KEY`, `ORBIT_TEST_EMQX_SECRET`, and

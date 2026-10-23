@@ -25,8 +25,11 @@ import (
 )
 
 type Server struct {
-	navMu        sync.Mutex
-	navTransport interface {
+	mqttMu              sync.Mutex
+	mqttProvisioner     deviceMQTTProvisioner
+	mqttURL, mqttSecret string
+	navMu               sync.Mutex
+	navTransport        interface {
 		Publish(context.Context, mqtt.Message) error
 		Subscribe(context.Context, string, mqtt.Handler) error
 	}
@@ -66,6 +69,7 @@ func (s *Server) Handler() http.Handler {
 	s.browserRoutes(mux)
 	s.navigationRoutes(mux)
 	s.executionRoutes(mux)
+	mux.HandleFunc("POST /api/v1/mqtt", s.provisionMQTT)
 	mux.HandleFunc("GET /api/v1/status", s.auth(func(w http.ResponseWriter, r *http.Request, node string) {
 		var value json.RawMessage = json.RawMessage(`null`)
 		if s.status != nil {

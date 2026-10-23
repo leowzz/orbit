@@ -376,6 +376,51 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (Result, error) 
 	return Result{Username: input.Username, Password: secret}, nil
 }
 
+// ProvisionNode retries a Core-owned account without rotating its password on
+// every App start. Never adopt a privileged account or overwrite another ACL.
+func (c *Client) ProvisionNode(ctx context.Context, username, nodeID, secret string) error {
+	if err := c.mutable(username); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(username, "orbit-app-") || !participantPattern.MatchString(nodeID) || len(secret) < 40 {
+		return &Error{400, "设备 MQTT 认证信息无效"}
+	}
+	if err := c.checkAuthentication(ctx); err != nil {
+		return err
+	}
+	if err := c.ensureAuthorization(ctx); err != nil {
+		return err
+	}
+	var user brokerUser
+	err := c.request(ctx, "GET", usersPath+"/"+url.PathEscape(username), nil, &user)
+	exists := err == nil
+	if err != nil && !isStatus(err, 404) {
+		return err
+	}
+	if exists && user.Superuser {
+		return &Error{409, "设备 MQTT 用户权限不匹配"}
+	}
+	policy := userRules{username, rulesFor("node", nodeID)}
+	var current userRules
+	err = c.request(ctx, "GET", rulesPath+"/"+url.PathEscape(username), nil, &current)
+	if err == nil && !slices.Equal(current.Rules, policy.Rules) {
+		return &Error{409, "设备 MQTT 权限规则不匹配"}
+	}
+	if isStatus(err, 404) {
+		if exists {
+			return &Error{409, "设备 MQTT 权限规则缺失"}
+		}
+		err = c.request(ctx, "POST", rulesPath, []userRules{policy}, nil)
+	}
+	if err != nil {
+		return err
+	}
+	if exists {
+		return c.request(ctx, "PUT", usersPath+"/"+url.PathEscape(username), map[string]any{"password": secret, "is_superuser": false}, nil)
+	}
+	return c.request(ctx, "POST", usersPath, map[string]any{"user_id": username, "password": secret, "is_superuser": false}, nil)
+}
+
 func (c *Client) disconnect(ctx context.Context, username string) error {
 	clients, err := pageAll[connection](ctx, c, "/clients?username="+url.QueryEscape(username))
 	if err != nil {

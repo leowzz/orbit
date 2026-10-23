@@ -133,6 +133,7 @@ class MainActivity : FlutterActivity() {
                         }
                         val previous = vault.load()
                         if (previous != next) {
+                            ConfigVault(this, "orbit_app_mqtt").clear()
                             if (next == null) vault.clear() else vault.save(next)
                             ViewStore(this).clear()
                             if (next == null) stopService(Intent(this, OrbitService::class.java))
@@ -141,6 +142,19 @@ class MainActivity : FlutterActivity() {
                         if (next != null && !OrbitService.active) startForegroundService(Intent(this, OrbitService::class.java))
                         else if (next != null && previous != next) startForegroundService(Intent(this, OrbitService::class.java))
                         result.success(null)
+                    }
+                    "appMqttConnection" -> {
+                        val args = call.arguments as Map<*, *>
+                        val owner = NodeConfig(args["server"].toString(), "", "", args["token"].toString())
+                        if (ConfigVault(this, "orbit_app_connection").load() != owner) {
+                            result.success(false)
+                        } else {
+                            val mqtt = NodeConfig.from(args["mqtt"] as Map<*, *>).also { it.validate() }
+                            require(mqtt.username.isNotBlank() && mqtt.password.isNotBlank())
+                            val vault = ConfigVault(this, "orbit_app_mqtt")
+                            if (vault.load() != mqtt) vault.save(mqtt)
+                            result.success(true)
+                        }
                     }
                     "listLaunchableApps" -> {
                         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)

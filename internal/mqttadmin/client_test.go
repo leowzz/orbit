@@ -34,6 +34,74 @@ func authChain(w http.ResponseWriter) {
 	writeJSON(w, []map[string]any{{"id": "password_based:built_in_database", "enable": true, "user_id_type": "username"}})
 }
 
+func TestProvisionNodeRetriesWithoutChangingScopeOrPassword(t *testing.T) {
+	const username = "orbit-app-test"
+	secret := strings.Repeat("x", 43)
+	var policy userRules
+	exists, superuser, wrongPolicy := false, false, false
+	writes := 0
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/v5")
+		switch {
+		case path == "/authentication":
+			authChain(w)
+		case path == "/authorization/sources":
+			writeJSON(w, map[string]any{"sources": []map[string]any{{"type": "built_in_database", "enable": true}}})
+		case path == "/authorization/sources/built_in_database/rules/clients":
+			writeJSON(w, map[string]any{"data": []any{}})
+		case path == usersPath+"/"+username && r.Method == "GET":
+			if exists {
+				writeJSON(w, brokerUser{Username: username, Superuser: superuser})
+			} else {
+				w.WriteHeader(404)
+			}
+		case path == rulesPath+"/"+username && r.Method == "GET":
+			if policy.Username == "" {
+				w.WriteHeader(404)
+			} else if wrongPolicy {
+				writeJSON(w, userRules{username, rulesFor("node", "other")})
+			} else {
+				writeJSON(w, policy)
+			}
+		case path == rulesPath && r.Method == "POST":
+			var policies []userRules
+			_ = json.NewDecoder(r.Body).Decode(&policies)
+			policy = policies[0]
+			writes++
+			w.WriteHeader(204)
+		case (path == usersPath && r.Method == "POST") || (path == usersPath+"/"+username && r.Method == "PUT"):
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["password"] != secret || body["is_superuser"] != false || !reflect.DeepEqual(policy.Rules, rulesFor("node", "phone")) {
+				t.Error("credential or ACL changed")
+			}
+			exists = true
+			writes++
+			w.WriteHeader(204)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, path)
+			w.WriteHeader(500)
+		}
+	})
+	for i := 0; i < 2; i++ {
+		if err := c.ProvisionNode(context.Background(), username, "phone", secret); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if writes != 3 {
+		t.Fatal("expected policy then credential and idempotent password update")
+	}
+	for _, privileged := range []bool{true, false} {
+		superuser, wrongPolicy = privileged, !privileged
+		if err := c.ProvisionNode(context.Background(), username, "phone", secret); err == nil {
+			t.Fatal("unsafe account adopted")
+		}
+		if writes != 3 {
+			t.Fatal("unsafe account mutated")
+		}
+	}
+}
+
 func TestCreateInstallsRestrictivePolicyBeforeCredentialsAndRetriesOrphanPolicy(t *testing.T) {
 	for _, kind := range []string{"node", "agent"} {
 		t.Run(kind, func(t *testing.T) {

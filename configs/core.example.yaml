@@ -35,6 +35,8 @@ mqtt:
 # Use the management HTTP endpoint, not the MQTT listener. For tx's Docker network:
 mqtt_admin:
   url: http://emqx:18083
+  # Optional device-reachable listener; defaults to mqtt.url, never the management URL.
+  # node_url: mqtts://mqtt.example.com:8883
   api_key: ""
   api_secret: ""
 

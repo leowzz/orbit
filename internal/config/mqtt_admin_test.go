@@ -28,3 +28,18 @@ func TestMQTTAdminConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestMQTTNodeURL(t *testing.T) {
+	for _, address := range []string{"", "mqtt://broker.example:1883", "mqtts://broker.example", "mqtts://[::1]:8883"} {
+		cfg := MQTTAdminConfig{NodeURL: address}
+		if err := cfg.validate(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, address := range []string{"https://broker.example", "mqtt://user:secret@broker.example", "mqtt://broker.example/path", "mqtt://broker.example:65536", "mqtt://broker.example:0", "mqtt://broker.example?password=secret"} {
+		cfg := MQTTAdminConfig{NodeURL: address}
+		if err := cfg.validate(); err == nil || strings.Contains(err.Error(), "secret") {
+			t.Fatal("invalid node URL accepted or echoed")
+		}
+	}
+}
