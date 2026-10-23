@@ -46,8 +46,39 @@ func audioPage(r *http.Request) (int, int, error) {
 	}
 	return limit, offset, nil
 }
+
+func audioOrder(r *http.Request) (string, error) {
+	field, direction := r.URL.Query().Get("sort_by"), r.URL.Query().Get("order")
+	if field == "" {
+		field = "started_at"
+	}
+	if direction == "" {
+		direction = "desc"
+	}
+	// Normalize RFC3339 timestamps with and without fractional seconds.
+	column := map[string]string{
+		"started_at":  "julianday(s.started_at)",
+		"duration_ms": "s.duration_ms",
+		"speech_ms":   "s.speech_ms",
+	}[field]
+	if column == "" || (direction != "asc" && direction != "desc") {
+		return "", errors.New("invalid audio sort")
+	}
+	order := column + " " + strings.ToUpper(direction)
+	if field != "started_at" {
+		order += ",julianday(s.started_at) DESC"
+	}
+	// Equal sort values must stay in a deterministic order across pages.
+	return order + ",s.segment_id ASC", nil
+}
+
 func (s *RouteStore) listAudio(w http.ResponseWriter, r *http.Request) {
 	limit, offset, e := audioPage(r)
+	if e != nil {
+		http.Error(w, e.Error(), 400)
+		return
+	}
+	order, e := audioOrder(r)
 	if e != nil {
 		http.Error(w, e.Error(), 400)
 		return
@@ -66,7 +97,7 @@ func (s *RouteStore) listAudio(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cannot load audio", 500)
 		return
 	}
-	rows, e := s.db.QueryContext(r.Context(), `SELECT s.segment_id,s.node_id,s.session_id,s.sequence,s.started_at,s.duration_ms,s.speech_ms,j.status,COALESCE(a.text,''),COALESCE(a.language,''),COALESCE(a.agent_id,'')`+joins+where+` ORDER BY s.started_at DESC,s.segment_id LIMIT ? OFFSET ?`, append(args, limit, offset)...)
+	rows, e := s.db.QueryContext(r.Context(), `SELECT s.segment_id,s.node_id,s.session_id,s.sequence,s.started_at,s.duration_ms,s.speech_ms,j.status,COALESCE(a.text,''),COALESCE(a.language,''),COALESCE(a.agent_id,'')`+joins+where+` ORDER BY `+order+` LIMIT ? OFFSET ?`, append(args, limit, offset)...)
 	if e != nil {
 		http.Error(w, "cannot load audio", 500)
 		return

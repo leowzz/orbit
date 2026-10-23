@@ -101,6 +101,21 @@ class MainActivity : FlutterActivity() {
             try {
                 when (call.method) {
                     "audioStatus" -> result.success(AudioCaptureService.snapshot(this))
+                    "audioSaveSettings" -> {
+                        val settings = try { AudioCaptureSettings.fromMap(call.arguments) }
+                        catch (error: IllegalArgumentException) {
+                            result.error("invalid_audio_settings", error.message ?: "录音参数无效", null)
+                            return@setMethodCallHandler
+                        }
+                        io.execute {
+                            try {
+                                val saved = AudioCaptureService.saveSettings(this, settings)
+                                runOnUiThread { result.success(saved.map()) }
+                            } catch (_: Exception) {
+                                runOnUiThread { result.error("save_failed", "未能保存录音参数，请检查设备可用空间后重试", null) }
+                            }
+                        }
+                    }
                     "audioStart" -> {
                         AudioCaptureService.preferences(this).edit().putBoolean("enabled", true).apply()
                         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) requestAudioPermission()

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'audio_capture_settings.dart';
 
 class AudioCaptureCard extends StatefulWidget {
   const AudioCaptureCard({super.key});
@@ -60,6 +61,13 @@ class _AudioCaptureCardState extends State<AudioCaptureCard>
     } finally {
       if (mounted) setState(() => busy = false);
     }
+  }
+
+  Future<void> openSettings() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => const AudioCaptureSettingsScreen()),
+    );
+    if (mounted) await refresh();
   }
 
   @override
@@ -127,6 +135,15 @@ class _AudioCaptureCardState extends State<AudioCaptureCard>
                     child: const Text('打开设置'),
                   ),
               ],
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('录音设置'),
+              subtitle: status['settingsPending'] == true
+                  ? const Text('设置已保存，等待当前片段结束后生效')
+                  : null,
+              trailing: const Icon(Icons.chevron_right),
+              onTap: openSettings,
             ),
           ],
         ),

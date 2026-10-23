@@ -28,6 +28,16 @@ import java.util.concurrent.atomic.AtomicBoolean
 class AudioCaptureService : Service() {
     companion object {
         private val startPolicy = AudioStartPolicy()
+        private val settingsLock = Any()
+        @Volatile private var requestedSettings: AudioCaptureSettings? = null
+        @Volatile private var processingSettings: AudioCaptureSettings? = null
+        private fun desiredSettings(context: Context): AudioCaptureSettings = requestedSettings ?: synchronized(settingsLock) {
+            requestedSettings ?: AudioCaptureSettingsStore.forContext(context).load().also { requestedSettings = it }
+        }
+        fun saveSettings(context: Context, settings: AudioCaptureSettings): AudioCaptureSettings = synchronized(settingsLock) {
+            desiredSettings(context) // Preserve the last confirmed value if commit fails.
+            AudioCaptureSettingsStore.forContext(context).save(settings).also { requestedSettings = it }
+        }
         @Volatile private var draining = false
         @Volatile var active = false
             private set
@@ -67,12 +77,16 @@ class AudioCaptureService : Service() {
             try { context.startForegroundService(Intent(context, AudioCaptureService::class.java)) }
             catch (_: Exception) { state = "无法启动后台录音，请回到应用后重试" }
         }
-        fun snapshot(context: Context): Map<String, Any> = mapOf(
-            "active" to active, "state" to state, "transfer" to transfer, "pending" to pending,
-            "enabled" to enabled(context),
-            "notifications" to context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(),
-            "permission" to (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED),
-        )
+        fun snapshot(context: Context): Map<String, Any> {
+            val saved = desiredSettings(context)
+            return mapOf(
+                "active" to active, "state" to state, "transfer" to transfer, "pending" to pending,
+                "enabled" to enabled(context), "settings" to saved.map(),
+                "settingsPending" to (processingSettings?.let { it != saved } ?: false),
+                "notifications" to context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(),
+                "permission" to (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED),
+            )
+        }
     }
     private val capture = Executors.newSingleThreadExecutor()
     private val processing = Executors.newSingleThreadExecutor()
@@ -185,19 +199,38 @@ class AudioCaptureService : Service() {
             capturing = false
         }
     }
+    private fun vadMode(settings: AudioCaptureSettings): Mode = when (settings.vadMode) {
+        0 -> Mode.NORMAL
+        1 -> Mode.LOW_BITRATE
+        2 -> Mode.AGGRESSIVE
+        else -> Mode.VERY_AGGRESSIVE
+    }
     private fun process() {
         try {
-            VadWebRTC(SampleRate.SAMPLE_RATE_16K, FrameSize.FRAME_SIZE_320, Mode.AGGRESSIVE, 0, 0).use { vad ->
-                val segmenter = AudioSegmenter({ persist(it) })
+            var used = desiredSettings(this)
+            processingSettings = used
+            VadWebRTC(SampleRate.SAMPLE_RATE_16K, FrameSize.FRAME_SIZE_320, vadMode(used), 0, 0).use { vad ->
+                val segmenter = AudioSegmenter({ persist(it) }, used)
+                fun applyAtBoundary() {
+                    if (segmenter.settings != used) {
+                        used = segmenter.settings
+                        vad.mode = vadMode(used)
+                        processingSettings = used
+                    }
+                }
                 while (running || capturing || frames.isNotEmpty()) {
+                    segmenter.updateSettings(desiredSettings(this))
+                    applyAtBoundary()
                     val frame = frames.poll(100, TimeUnit.MILLISECONDS) ?: continue
                     segmenter.accept(AudioFrame(frame.first, frame.second, vad.isSpeech(frame.first)))
+                    applyAtBoundary()
                 }
                 segmenter.flush()
             }
         } catch (_: Exception) { if (running) fail("音频处理或保存失败，已停止录音；当前片段未保存，请检查可用空间后重试") }
         catch (_: LinkageError) { fail("当前设备无法加载语音检测组件，录音已停止") }
         finally {
+            processingSettings = null
             wakeLock?.let { if (it.isHeld) it.release() }
             Handler(mainLooper).post {
                 draining = false

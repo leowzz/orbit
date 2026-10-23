@@ -30,12 +30,12 @@ class AudioPipelineTest {
         val segmenter = AudioSegmenter({ emitted.add(it) })
         repeat(100) { segmenter.accept(frame(it, false)) }
         assertTrue(emitted.isEmpty())
-        repeat(5) { segmenter.accept(frame(100 + it, true)) }
-        repeat(30) { segmenter.accept(frame(105 + it, false)) }
+        repeat(15) { segmenter.accept(frame(100 + it, true)) }
+        repeat(30) { segmenter.accept(frame(115 + it, false)) }
         assertEquals(1, emitted.size)
-        assertEquals(50, emitted[0].size)
+        assertEquals(60, emitted[0].size)
         assertEquals(1700L, emitted[0].first().startedAt)
-        assertEquals(5, emitted[0].count { it.speech })
+        assertEquals(15, emitted[0].count { it.speech })
         segmenter.flush()
         assertEquals(1, emitted.size)
     }

@@ -16,6 +16,7 @@ const pageSize = 25;
 export default function Audio({ state }: { state: NetworkState }) {
   const [draft, setDraft] = useState({ node_id: "", status: "", q: "" });
   const [filter, setFilter] = useState(draft);
+  const [sort, setSort] = useState("started_at:desc");
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<AudioPage | null>(null);
   const [workers, setWorkers] = useState<AudioWorker[] | null>(null);
@@ -30,8 +31,11 @@ export default function Audio({ state }: { state: NetworkState }) {
     setPage(null);
     async function load() {
       setBusy(true);
+      const [sortBy, order] = sort.split(":");
       const query = new URLSearchParams({
         ...filter,
+        sort_by: sortBy,
+        order,
         limit: String(pageSize),
         offset: String(offset),
       });
@@ -60,7 +64,7 @@ export default function Audio({ state }: { state: NetworkState }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [filter, offset, refresh]);
+  }, [filter, sort, offset, refresh]);
   const label = (id: string) => state.node_labels?.[id] || id;
   return (
     <>
@@ -162,6 +166,22 @@ export default function Audio({ state }: { state: NetworkState }) {
           <Search size={16} />
           搜索
         </button>
+        <select
+          className="audio-sort"
+          aria-label="音频排序"
+          value={sort}
+          onChange={(event) => {
+            setOffset(0);
+            setSort(event.target.value);
+          }}
+        >
+          <option value="started_at:desc">录制时间：从新到旧</option>
+          <option value="started_at:asc">录制时间：从旧到新</option>
+          <option value="duration_ms:desc">音频时长：从长到短</option>
+          <option value="duration_ms:asc">音频时长：从短到长</option>
+          <option value="speech_ms:desc">人声时长：从长到短</option>
+          <option value="speech_ms:asc">人声时长：从短到长</option>
+        </select>
       </form>
       {error && (
         <div className="banner error" role="alert">
@@ -200,6 +220,9 @@ export default function Audio({ state }: { state: NetworkState }) {
                     {date(record.started_at)}
                   </time>
                   <span>{seconds(record.duration_ms)}</span>
+                  {sort.startsWith("speech_ms:") && (
+                    <span>人声 {seconds(record.speech_ms)}</span>
+                  )}
                   <Badge
                     tone={
                       record.status === "completed"
