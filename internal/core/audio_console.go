@@ -85,12 +85,18 @@ func (s *RouteStore) listAudio(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	status, node, search := q.Get("status"), q.Get("node_id"), q.Get("q")
-	if status != "" && status != "pending" && status != "completed" && status != "failed" || node != "" && !audioIdentity.MatchString(node) || len(search) > 1000 {
+	hideEmpty := q.Get("hide_empty")
+	if status != "" && status != "pending" && status != "completed" && status != "failed" || node != "" && !audioIdentity.MatchString(node) || len(search) > 1000 || hideEmpty != "" && hideEmpty != "true" && hideEmpty != "false" {
 		http.Error(w, "invalid audio filter", 400)
 		return
 	}
 	where := ` WHERE (?='' OR s.node_id=?) AND (?='' OR j.status=?) AND (?='' OR instr(lower(COALESCE(a.text,'')),lower(?))>0)`
 	args := []any{node, node, status, status, search, search}
+	if hideEmpty == "true" {
+		// Keep pending/failed jobs visible. Filter before both counting and paging.
+		where += ` AND (j.status<>'completed' OR trim(COALESCE(a.text,''),?)<>'')`
+		args = append(args, "\t\n\v\f\r \u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000")
+	}
 	joins := ` FROM audio_segments s JOIN audio_jobs j ON j.job_id=s.segment_id LEFT JOIN audio_results a ON a.job_id=j.job_id`
 	var total int
 	if e = s.db.QueryRowContext(r.Context(), `SELECT count(*)`+joins+where, args...).Scan(&total); e != nil {

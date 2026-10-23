@@ -225,7 +225,7 @@ class AudioCaptureService : Service() {
         val encoder = OpusEncoder(16000, 1, OpusApplication.OPUS_APPLICATION_VOIP).apply {
             bitrate = 24000
             complexity = 3
-            useVBR = false // 60-byte packets keep even a 10 s JSON well below 128 KiB.
+            useVBR = false // 60-byte packets keep even a 20 s JSON well below 128 KiB.
         }
         val packets = JSONArray()
         frames.forEach { frame ->

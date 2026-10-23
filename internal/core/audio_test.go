@@ -31,6 +31,20 @@ func (*audioTransport) Subscribe(context.Context, string, mqtt.Handler) error { 
 func audioFixture() AudioSegment {
 	return AudioSegment{SchemaVersion: 1, SegmentID: "b60d0429-5235-45fb-bb4d-24a25f1f8ef7", SessionID: "828bacb4-291b-44bf-a897-86f6023957cf", NodeID: "android-1", Sequence: 0, StartedAt: "2026-10-23T12:00:00Z", DurationMS: 20, SpeechMS: 20, SampleRate: 16000, Channels: 1, Codec: "opus", FrameMS: 20, Packets: []string{"AQ=="}}
 }
+func TestAudioTwentySecondSegmentLimit(t *testing.T) {
+	for _, frames := range []int{500, 501, 999, 1000, 1001} {
+		segment := audioFixture()
+		segment.Packets = make([]string, frames)
+		for i := range segment.Packets {
+			segment.Packets[i] = "AQ=="
+		}
+		segment.DurationMS = frames * 20
+		if err := segment.validate(segment.NodeID); (err != nil) != (frames > 1000) {
+			t.Errorf("frames=%d: unexpected validation result: %v", frames, err)
+		}
+	}
+}
+
 func TestAudioDurabilityDuplicatesAndResult(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "core.sqlite")

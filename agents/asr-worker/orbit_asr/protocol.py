@@ -53,7 +53,7 @@ def job(payload):
         raise ValueError("job_id must equal segment_id")
     identity(s.get("node_id"))
     number(s.get("sequence"), 0, 2**63-1)
-    number(s.get("duration_ms"), 20, 10000)
+    number(s.get("duration_ms"), 20, 20000)
     number(s.get("speech_ms"), 0, s["duration_ms"])
     for key, expected in (("sample_rate",16000),("channels",1),("frame_ms",20)):
         if type(s.get(key)) is not int or s[key] != expected:
@@ -65,7 +65,7 @@ def job(payload):
         raise ValueError("timestamp must be UTC RFC3339")
     datetime.fromisoformat(stamp.replace("Z", "+00:00"))
     packets = s.get("packets")
-    if not isinstance(packets, list) or not 1 <= len(packets) <= 500 or len(packets)*20 != s["duration_ms"]:
+    if not isinstance(packets, list) or not 1 <= len(packets) <= 1000 or len(packets)*20 != s["duration_ms"]:
         raise ValueError("invalid packet count")
     for packet in packets:
         if not isinstance(packet, str) or not 1 <= len(base64.b64decode(packet, validate=True)) <= 1275:

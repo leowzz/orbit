@@ -67,3 +67,15 @@ docker compose -f /srv/orbit-deploy/docker-compose.yml up -d --pull never --no-d
 ```
 
 普通镜像回滚保留现有数据库与 MQTT 账户，避免覆盖升级后数据；恢复备份数据库前应停止服务并另外备份当前数据。
+
+## 2026-10-24 Worker 更新
+
+通过 `ssh sdt` 更新现有 `C:\work\orbit-asr-worker`：识别成功或最终失败后，结果提交 SQLite 即以 QoS 1 投递到专用 results Topic；定时扫描保留为未确认结果的重试。Worker 接受的单段音频上限同步扩大到 20 秒 / 1000 个 20 ms Opus 帧。
+
+- Windows 候选代码测试：**97 passed, 1 skipped**；跳过的是需独立 broker/Core 的集成测试。安装文件 SHA-256 与本地候选逐项一致，安装后 import 检查通过。
+- 配置、Windows 凭据、模型及虚拟环境沿用原部署；通过现有 `Orbit ASR Worker` 登录任务重新启动 GUI 和 Worker。
+- 备份目录：`C:\work\orbit-asr-worker\backups\20261024-013750-direct-results-20s`，含被替换文件、SQLite 一致性备份、原计划任务 XML、安装文件 hash 清单和本次测试报告。
+- 重启前备份有 2179 条 done、2 条 outbox；重启后两条 outbox 均收到 Core 应用确认成为 done，随后队列为 2184 条 done、无积压，数据库 quick_check 为 ok。
+- Core 只读验收确认新进程已产生 completed 结果，并收到 `2026-10-23T17:38:18.027661Z` 的 live 心跳，状态为 ready、设备为 cuda。
+
+本次部署范围为 SDT Worker；Android 采集端与 Core 的 20 秒上限改动需要分别部署，不能仅凭本次更新认定完整链路已支持 20 秒。回滚时停止该登录任务及其进程树，将备份中的代码恢复到原目录后重新启动任务；通常保留当前数据库，不覆盖重启后收到的新任务和结果。

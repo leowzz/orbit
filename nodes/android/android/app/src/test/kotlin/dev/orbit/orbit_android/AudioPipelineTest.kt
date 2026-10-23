@@ -61,10 +61,10 @@ class AudioPipelineTest {
     @Test fun continuousSpeechSplitsWithoutDroppingBoundaryFrame() {
         val emitted = mutableListOf<List<AudioFrame>>()
         val segmenter = AudioSegmenter({ emitted.add(it) })
-        repeat(1001) { segmenter.accept(frame(it, true)) }
+        repeat(2001) { segmenter.accept(frame(it, true)) }
         segmenter.flush()
-        assertEquals(listOf(500, 500, 1), emitted.map { it.size })
-        assertEquals((0..1000).map { it * 20L }, emitted.flatten().map { it.startedAt })
+        assertEquals(listOf(1000, 1000, 1), emitted.map { it.size })
+        assertEquals((0..2000).map { it * 20L }, emitted.flatten().map { it.startedAt })
     }
     @Test fun outboxSurvivesReopenUntilLocalSendCompletes() {
         val root = Files.createTempDirectory("orbit-audio-test").toFile()

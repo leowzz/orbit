@@ -10,7 +10,7 @@ void main() {
     'minSpeechMs': 300,
     'silenceMs': 600,
     'preRollMs': 300,
-    'maxSegmentMs': 10000,
+    'maxSegmentMs': 20000,
     'vadMode': 2,
     'uploadConcurrency': 16,
   };
@@ -139,6 +139,26 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('existing ten second setting can be raised to twenty seconds', (
+    tester,
+  ) async {
+    settings = {...defaults, 'maxSegmentMs': 10000};
+    await tester.pumpWidget(
+      const MaterialApp(home: AudioCaptureSettingsScreen()),
+    );
+    await tester.pumpAndSettle();
+    final slider = find.byKey(const ValueKey('maxSegmentMs'));
+    await tester.scrollUntilVisible(slider, 200);
+    expect(tester.widget<Slider>(slider).value, 10000);
+    expect(tester.widget<Slider>(slider).max, 20000);
+    await tester.drag(slider, const Offset(1000, 0));
+    await tester.pumpAndSettle();
+    expect(tester.widget<Slider>(slider).value, 20000);
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(settings['maxSegmentMs'], 20000);
+  });
 
   testWidgets('failed save retains draft and can be retried', (tester) async {
     await open(tester);

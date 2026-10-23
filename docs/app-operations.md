@@ -194,3 +194,17 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 删除 Web 网关初始化时强制深色的逻辑；登录页和收件箱顶部均提供明暗切换按钮。首次使用跟随系统，手动选择复用 `orbit.web.theme` 并在刷新后保留；主题脚本在首屏绘制前应用，避免先显示错误主题。
 - tx 仅更新 Web 为 `orbit-web:web-theme-20261016T073758Z`，Core 容器与原连接配置保持不变。发布源码、构建清单及验证记录位于 `/srv/orbit-deploy/releases/web-theme-20261016T073758Z`；Compose 回退备份位于 `/srv/orbit-deploy/backups/web-theme-20261016T073758Z`。
 - 15 项 JS 回归与 Web Go 测试通过。真实浏览器验证系统主题变化、手动偏好、刷新及登录后保持，以及 1440px、390px、320px 和搜索状态无横向溢出。线上复核主题按钮及刷新记忆；前端资源、运行二进制摘要与本地构建一致，原登录及快照接口正常。
+
+
+### 2026-10-24 — Core 音频保留上限更新
+
+- tx Core 更新为本地镜像 `orbit-core:core-07c1ef4-20261024-mvl8ri1o`，Core 源码提交为 `07c1ef4def60aded3259d19f36d83f840df327b7`，包含可配置音频保留上限；现有配置未覆盖该值，采用默认 10000 段。Android 上传行为需另行更新手机应用。
+- 发布源码、二进制、部署脚本及验证结果：`/srv/orbit-deploy/releases/core-07c1ef4-20261024-mvl8ri1o`；停机完整备份：`/srv/orbit-deploy/backups/core-07c1ef4-20261024-mvl8ri1o`。旧镜像保留，新镜像未推送仓库，重建使用 `docker compose up -d --no-deps --pull never orbit-core`。
+- Core/config/App API/MQTT Go 测试、管理页生产构建及 14 项前端测试通过。线上二进制 SHA-256 为 `4cb183b31f4348ebcf80ad4790eac8a6c20b818e011bc391c00fc6cdf9206c90`；两份 SQLite 完整性、原管理会话、设备注册、路由、配置及音频查询验证通过。MQTT 连接与音频订阅正常，更新后有新片段入库；HTTPS 首页返回 200，未认证管理及 App API 返回 401，Web 容器未变。
+
+
+### 2026-10-24 — 音频记录默认隐藏空识别结果
+
+- Core 管理页默认隐藏已完成但转写为空或仅含空白的记录，保留等待识别与失败记录；「查看所有」即时恢复全部记录，切换时回到第一页。服务端在计数和分页前应用筛选。
+- tx Core 更新为 `orbit-core:core-audio-filter-20261024-mvl91pwv`，来源为 `8776df7` 加本次筛选改动；源码归档、差异、二进制及验证记录位于 `/srv/orbit-deploy/releases/core-audio-filter-20261024-mvl91pwv`，完整停机备份位于 `/srv/orbit-deploy/backups/core-audio-filter-20261024-mvl91pwv`。
+- Core/config/App API/MQTT 测试、管理页构建及 14 项前端测试通过。真实浏览器验证默认筛选、查看所有、翻页重置与等待/失败记录保留；线上筛选 API、公开静态资源摘要、运行二进制、原登录会话、设备注册、路由与两份 SQLite 完整性检查通过，Web 容器未变。

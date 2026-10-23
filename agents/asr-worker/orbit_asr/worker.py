@@ -133,6 +133,15 @@ class Worker:
     def publish_state(self):
         self.publish(self.prefix+"/state", encode(self.state()), retain=True)
 
+    def publish_result(self, payload):
+        # Paho queues QoS 1 asynchronously. Only Core's ACK clears the outbox.
+        try:
+            info = self.publish(self.prefix+"/results",payload)
+            if info.rc != 0:
+                LOG.warning("MQTT result delivery pending rc=%s; durable outbox will retry",info.rc)
+        except Exception as exc:
+            LOG.warning("MQTT result delivery failed error=%s; durable outbox will retry",type(exc).__name__)
+
     def on_subscribe(self, client, userdata, mid, reason_codes, properties):
         self.subscribed = bool(reason_codes) and not any(code.is_failure for code in reason_codes)
         self.subscription_error = not self.subscribed
@@ -223,8 +232,9 @@ class Worker:
             # Avoid exception strings: model/library errors can include local secrets or audio.
             result.update(status="failed",text="",language="",segments=[],error_code="asr_failed",error_message=f"Audio processing failed ({type(exc).__name__})")
         result.update(processing_ms=min(86400000,int((time.monotonic()-started)*1000)),completed_at=now())
-        self.store.finish(item["job_id"],result)
-        LOG.info("ASR result queued job=%s status=%s processing_ms=%d",item["job_id"],result["status"],result["processing_ms"])
+        payload = self.store.finish(item["job_id"],result)
+        self.publish_result(payload)
+        LOG.info("ASR result delivery attempted job=%s status=%s processing_ms=%d",item["job_id"],result["status"],result["processing_ms"])
         self.status = "ready"
         return True
 
@@ -277,7 +287,7 @@ class Worker:
                     next_state = current+20
                 if current >= next_outbox:
                     for (payload,) in self.store.outbox():
-                        self.publish(self.prefix+"/results",payload)
+                        self.publish_result(payload)
                     next_outbox = current+self.config.get("result_retry_seconds",5)
                 self.emit_status()
                 self.stop.wait(1)

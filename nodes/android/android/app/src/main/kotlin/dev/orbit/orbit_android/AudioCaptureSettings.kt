@@ -7,7 +7,7 @@ data class AudioCaptureSettings(
     val minSpeechMs: Int = 300,
     val silenceMs: Int = 600,
     val preRollMs: Int = 300,
-    val maxSegmentMs: Int = 10000,
+    val maxSegmentMs: Int = 20000,
     val vadMode: Int = 2,
     val uploadConcurrency: Int = 16,
 ) {
@@ -15,7 +15,7 @@ data class AudioCaptureSettings(
         duration(minSpeechMs, "连续人声时长", 100, 2000)
         duration(silenceMs, "结束静音时长", 200, 2000)
         duration(preRollMs, "语音预留时长", 0, 1000)
-        duration(maxSegmentMs, "最长片段时长", 3000, 10000)
+        duration(maxSegmentMs, "最长片段时长", 3000, 20000)
         require(uploadConcurrency in 1..64) { "最大上传并发需为 1–64 的整数" }
         require(vadMode in 0..3) { "语音检测严格度需为 0–3 的整数" }
     }

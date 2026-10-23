@@ -48,6 +48,7 @@ class Store:
         payload = encode(result)
         with self.lock, self.db:
             self.db.execute("UPDATE jobs SET status='outbox',result=?,payload=NULL WHERE id=?", (payload,job_id))
+        return payload
 
     def outbox(self):
         with self.lock:

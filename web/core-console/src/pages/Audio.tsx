@@ -16,6 +16,7 @@ const pageSize = 25;
 export default function Audio({ state }: { state: NetworkState }) {
   const [draft, setDraft] = useState({ node_id: "", status: "", q: "" });
   const [filter, setFilter] = useState(draft);
+  const [hideEmpty, setHideEmpty] = useState(true);
   const [sort, setSort] = useState("started_at:desc");
   const [offset, setOffset] = useState(0);
   const [page, setPage] = useState<AudioPage | null>(null);
@@ -34,6 +35,7 @@ export default function Audio({ state }: { state: NetworkState }) {
       const [sortBy, order] = sort.split(":");
       const query = new URLSearchParams({
         ...filter,
+        hide_empty: String(hideEmpty),
         sort_by: sortBy,
         order,
         limit: String(pageSize),
@@ -64,7 +66,7 @@ export default function Audio({ state }: { state: NetworkState }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [filter, sort, offset, refresh]);
+  }, [filter, hideEmpty, sort, offset, refresh]);
   const label = (id: string) => state.node_labels?.[id] || id;
   return (
     <>
@@ -155,6 +157,18 @@ export default function Audio({ state }: { state: NetworkState }) {
           <option value="completed">已识别</option>
           <option value="failed">识别失败</option>
         </select>
+        <select
+          className="audio-visibility"
+          aria-label="空识别结果筛选"
+          value={String(hideEmpty)}
+          onChange={(event) => {
+            setOffset(0);
+            setHideEmpty(event.target.value === "true");
+          }}
+        >
+          <option value="true">忽略未识别到文字</option>
+          <option value="false">查看所有</option>
+        </select>
         <input
           aria-label="搜索转写文字"
           placeholder="搜索转写文字"
@@ -205,7 +219,9 @@ export default function Audio({ state }: { state: NetworkState }) {
             <Empty title="暂无音频记录">
               {filter.q || filter.node_id || filter.status
                 ? "试试其他筛选条件。"
-                : "设备检测到语音并上传后，记录会显示在这里。"}
+                : hideEmpty
+                  ? "未识别到文字的记录已隐藏，可切换为“查看所有”。"
+                  : "设备检测到语音并上传后，记录会显示在这里。"}
             </Empty>
           ) : (
             page.items.map((record) => (

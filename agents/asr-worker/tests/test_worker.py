@@ -1,5 +1,6 @@
 import base64
 import json
+import sqlite3
 import uuid
 from types import SimpleNamespace
 
@@ -52,6 +53,20 @@ def test_poison_validation():
         job(b'{"schema_version":1,"schema_version":1}')
 
 
+@pytest.mark.parametrize("frames",[500,501,999,1000,1001])
+def test_segment_twenty_second_limit(frames):
+    item = fixture_job()
+    segment = item["segment"]
+    segment["packets"] = [segment["packets"][0]]*frames
+    segment["duration_ms"] = frames*20
+    if frames > 1000:
+        with pytest.raises(ValueError):
+            job(encode(item))
+    else:
+        assert job(encode(item)) == item
+        assert len(decode(segment)) == segment["duration_ms"]*16
+
+
 def test_durable_recovery_outbox_tombstone_capacity(tmp_path):
     path = tmp_path/"queue.sqlite"
     item = fixture_job()
@@ -87,7 +102,9 @@ class Client:
     def max_queued_messages_set(self,*args): pass
     def will_set(self,*args,**kw): pass
     def ack(self,*args): self.acks.append(args)
-    def publish(self,*args,**kw): self.messages.append((args,kw))
+    def publish(self,*args,**kw):
+        self.messages.append((args,kw))
+        return SimpleNamespace(rc=0)
     def subscribe(self,*args): self.subscriptions = args
 
 
@@ -135,6 +152,65 @@ def test_model_failure_becomes_durable_failed_result(tmp_path):
     assert result["status"] == "failed"
     assert result["text"] == ""
     assert "private" not in result["error_message"]
+
+
+@pytest.mark.parametrize("failed",[False,True],ids=["completed","failed"])
+def test_result_published_immediately_after_commit(tmp_path,monkeypatch,failed):
+    w,c = worker(tmp_path)
+    item = fixture_job()
+    deliver(w,c,item)
+    original_publish = c.publish
+    def publish(topic,payload,**kwargs):
+        assert topic == w.prefix+"/results"
+        # An independent connection proves commit precedes the first send.
+        with sqlite3.connect(w.config["database"]) as db:
+            assert db.execute("SELECT status,result FROM jobs WHERE id=?",(item["job_id"],)).fetchone() == ("outbox",payload)
+        return original_publish(topic,payload,**kwargs)
+    monkeypatch.setattr(c,"publish",publish)
+    class Model:
+        def transcribe(self,audio):
+            if failed:
+                raise RuntimeError("private failure")
+            return "立即回传","Chinese"
+    # No run loop or outbox timer: completion itself must publish.
+    assert w.process_one(Model())
+    assert len(c.messages) == 1
+    args,kwargs = c.messages[0]
+    result = json.loads(args[1])
+    assert result["job_id"] == item["job_id"]
+    assert result["status"] == ("failed" if failed else "completed")
+    assert kwargs["qos"] == 1 and kwargs["retain"] is False
+    assert kwargs["properties"].ContentType == "application/json"
+    assert w.store.outbox() == [(args[1],)]
+
+
+@pytest.mark.parametrize("failure",["exception","disconnected","queue_full"])
+def test_immediate_publish_failure_preserves_result_for_retry(tmp_path,monkeypatch,failure):
+    w,c = worker(tmp_path)
+    item = fixture_job()
+    deliver(w,c,item)
+    original_publish = c.publish
+    def unavailable(*args,**kwargs):
+        if failure == "exception":
+            raise OSError("private connection detail")
+        return SimpleNamespace(rc=4 if failure == "disconnected" else 15)
+    monkeypatch.setattr(c,"publish",unavailable)
+    class Model:
+        def transcribe(self,audio): return "saved","English"
+    assert w.process_one(Model())
+    assert not w.fatal and not w.stop.is_set()
+    payload = w.store.outbox()[0][0]
+    assert json.loads(payload)["status"] == "completed"
+    w.store.db.close()
+    w.store = Store(w.config["database"])
+    assert w.store.claim() is None
+    assert w.store.outbox() == [(payload,)]
+    monkeypatch.setattr(c,"publish",original_publish)
+    w.publish_result(w.store.outbox()[0][0])
+    assert c.messages[0][0] == (w.prefix+"/results",payload)
+    assert w.store.outbox() == [(payload,)]
+    w.on_message(c,None,SimpleNamespace(topic=w.prefix+"/acks",payload=encode(dict(schema_version=1,job_id=item["job_id"],status="stored")),retain=False,mid=4,qos=1))
+    assert w.store.outbox() == []
 
 
 @pytest.mark.parametrize("text,language",[("x"*64001,"English"),("hi","x"*65),("你"*22000,"Chinese")],

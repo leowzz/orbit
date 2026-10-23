@@ -106,7 +106,7 @@ func decodeAudio(data []byte, v any) error {
 	return nil
 }
 func (s AudioSegment) validate(node string) error {
-	if s.SchemaVersion != 1 || s.NodeID != node || !audioIdentity.MatchString(node) || !audioUUID(s.SegmentID) || !audioUUID(s.SessionID) || s.Sequence < 0 || !audioTime(s.StartedAt) || s.SampleRate != 16000 || s.Channels != 1 || s.Codec != "opus" || s.FrameMS != 20 || len(s.Packets) < 1 || len(s.Packets) > 500 || s.DurationMS != len(s.Packets)*20 || s.SpeechMS < 0 || s.SpeechMS > s.DurationMS {
+	if s.SchemaVersion != 1 || s.NodeID != node || !audioIdentity.MatchString(node) || !audioUUID(s.SegmentID) || !audioUUID(s.SessionID) || s.Sequence < 0 || !audioTime(s.StartedAt) || s.SampleRate != 16000 || s.Channels != 1 || s.Codec != "opus" || s.FrameMS != 20 || len(s.Packets) < 1 || len(s.Packets) > 1000 || s.DurationMS != len(s.Packets)*20 || s.SpeechMS < 0 || s.SpeechMS > s.DurationMS {
 		return errors.New("invalid audio segment")
 	}
 	for _, p := range s.Packets {

@@ -50,7 +50,7 @@ $env:ORBIT_MQTT_PASSWORD = '<worker password>'
 
 网络循环只执行大小限制、协议校验和短 SQLite 事务，模型加载、Opus 解码和推理在独立线程。QoS 1 PUBACK 在 SQLite commit 后发送。SQLite WAL + FULL 同步持久保存 inbox、尝试次数和 result outbox；重启将 processing 恢复到 queued。容量上限包含 queued、processing 和未被 Core 应用确认的结果；满时拒绝接受且不 PUBACK，并报告 error，Core 会继续定期投递。务必为 Core 和 broker 设置相同 128 KiB 消息容量。
 
-Core 的 `audio/acks` 才删除 outbox 内容；MQTT PUBACK 本身不代表 Core 已保存。outbox 每五秒重发，重连时重新订阅。相同 job_id 相同内容幂等；内容变化拒绝。完成后保留 ID+内容 hash tombstone，避免很晚的重发再次调用 ASR。tombstone 不自动过期，因此长期运行需监控数据库磁盘空间；不要删除仍可能被 Core 重发的记录。无效或 retained 输入作为毒消息 PUBACK 后丢弃；不能验证身份的消息不伪造 failed result。
+识别完成（成功或最终失败）后，先将结果提交到 SQLite outbox，再立即以 QoS 1、非 retained 投递到专用结果 Topic `orbit/v1/agents/{agent_id}/audio/results`，不等待定时扫描。Core 收到后立即校验、落库并回 ACK。Core 的 `audio/acks` 才删除 outbox 内容；MQTT PUBACK 本身不代表 Core 已保存。断网、发送失败或未收到 Core ACK 的结果保留在 outbox，默认每五秒重发（`result_retry_seconds`），重连时重新订阅。相同 job_id 相同内容幂等；内容变化拒绝。完成后保留 ID+内容 hash tombstone，避免很晚的重发再次调用 ASR。tombstone 不自动过期，因此长期运行需监控数据库磁盘空间；不要删除仍可能被 Core 重发的记录。无效或 retained 输入作为毒消息 PUBACK 后丢弃；不能验证身份的消息不伪造 failed result。
 
 每个合法作业最多三次推理，失败后发布结构化 failed result，错误只含有限的异常类型，不暴露音频或底层异常内容。未启用 forced aligner；成功结果仅一段覆盖整段音频，不能当作词级时间戳。20 秒更新 retained 状态，配置 offline last will；Core 以接收时间判断活性。
 

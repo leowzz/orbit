@@ -2,7 +2,10 @@
 
 .audio-filters {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 130px minmax(140px, 2fr) auto 190px;
+  grid-template-columns: minmax(120px, 1fr) 130px 190px minmax(
+      140px,
+      2fr
+    ) auto 190px;
   align-items: center;
   gap: 10px;
   margin-bottom: 18px;
@@ -120,11 +123,12 @@
 .audio-detail summary {
   cursor: pointer;
 }
-@media (max-width: 1100px) {
+@media (max-width: 1280px) {
   .audio-filters {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-  .audio-sort {
+  .audio-sort,
+  .audio-visibility {
     grid-column: 1 / -1;
   }
 }

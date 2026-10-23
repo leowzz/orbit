@@ -111,3 +111,82 @@ func TestAudioSortingAcrossPagesAndFilters(t *testing.T) {
 		}
 	}
 }
+
+func TestAudioHideEmptyResultsBeforePagination(t *testing.T) {
+	store, err := OpenRouteStore(filepath.Join(t.TempDir(), "core.sqlite"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	fixtures := []struct{ status, text string }{
+		{"completed", "第一条文字"},
+		{"completed", ""},
+		{"pending", ""},
+		{"completed", " \t\r\n\u3000\u00a0"},
+		{"failed", ""},
+		{"completed", "第二条文字"},
+	}
+	for i, fixture := range fixtures {
+		segment := audioFixture()
+		segment.SegmentID = fmt.Sprintf("00000000-0000-4000-8000-%012d", i+1)
+		segment.Sequence = int64(i + 1)
+		if err := store.storeAudioSegment(ctx, segment, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if fixture.status != "pending" {
+			result := AudioResult{SchemaVersion: 1, JobID: segment.SegmentID, SegmentID: segment.SegmentID,
+				NodeID: segment.NodeID, AgentID: "worker-1", Status: fixture.status, Text: fixture.text,
+				Device: "cpu", CompletedAt: "2026-10-24T00:00:00Z"}
+			if err := store.storeAudioResult(ctx, result); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	mux := http.NewServeMux()
+	store.audioRoutes(mux)
+	for _, tc := range []struct {
+		query string
+		want  []int64
+	}{
+		{"hide_empty=true", []int64{1, 3, 5, 6}},
+		{"hide_empty=false", []int64{1, 2, 3, 4, 5, 6}},
+		{"", []int64{1, 2, 3, 4, 5, 6}},
+		{"hide_empty=true&status=completed&node_id=android-1", []int64{1, 6}},
+		{"hide_empty=true&status=pending", []int64{3}},
+		{"hide_empty=true&status=failed", []int64{5}},
+		{"hide_empty=true&q=" + url.QueryEscape("第二"), []int64{6}},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			var got []int64
+			for offset := 0; offset <= len(tc.want); offset += 2 {
+				w := httptest.NewRecorder()
+				mux.ServeHTTP(w, httptest.NewRequest("GET", fmt.Sprintf("/api/audio/segments?%s&limit=2&offset=%d", tc.query, offset), nil))
+				if w.Code != 200 {
+					t.Fatalf("status=%d: %s", w.Code, w.Body.String())
+				}
+				var page struct {
+					Items []audioListItem
+					Total int
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+					t.Fatal(err)
+				}
+				if page.Total != len(tc.want) {
+					t.Fatalf("total=%d, want %d", page.Total, len(tc.want))
+				}
+				for _, item := range page.Items {
+					got = append(got, item.Sequence)
+				}
+			}
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/audio/segments?hide_empty=invalid", nil))
+	if w.Code != 400 {
+		t.Fatalf("invalid filter returned %d", w.Code)
+	}
+}

@@ -25,7 +25,7 @@ class _AudioCaptureSettingsScreenState
     'minSpeechMs': 300,
     'silenceMs': 600,
     'preRollMs': 300,
-    'maxSegmentMs': 10000,
+    'maxSegmentMs': 20000,
     'vadMode': 2,
     'uploadConcurrency': 16,
   };
@@ -54,7 +54,7 @@ class _AudioCaptureSettingsScreenState
       'minSpeechMs': (100, 2000),
       'silenceMs': (200, 2000),
       'preRollMs': (0, 1000),
-      'maxSegmentMs': (3000, 10000),
+      'maxSegmentMs': (3000, 20000),
       'vadMode': (0, 3),
       'uploadConcurrency': (1, 64),
     };
@@ -298,7 +298,7 @@ class _AudioCaptureSettingsScreenState
                     label: '单段最长时长',
                     explanation: '持续说话时按此时长分段上传，录音不中断。',
                     min: 3000,
-                    max: 10000,
+                    max: 20000,
                     step: 1000,
                   ),
                   Text(
