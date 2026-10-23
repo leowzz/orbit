@@ -27,13 +27,23 @@ import (
 
 // RouteStore stores one atomic, versioned routing document. An empty document is
 // intentional and must never cause YAML routes to be imported again.
-type RouteStore struct{ db *sql.DB }
+type RouteStore struct {
+	db               *sql.DB
+	audioMaxSegments int
+}
 type RouteDocument struct {
 	Revision int64                             `json:"revision"`
 	Routes   map[string]config.ProjectionRoute `json:"routes"`
 }
 
-func OpenRouteStore(path string, seed map[string]config.ProjectionRoute) (*RouteStore, error) {
+func OpenRouteStore(path string, seed map[string]config.ProjectionRoute, audioConfig ...config.AudioConfig) (*RouteStore, error) {
+	maxSegments := config.DefaultAudioMaxSegments
+	if len(audioConfig) > 0 {
+		maxSegments = int(audioConfig[0].MaxSegments)
+	}
+	if maxSegments <= 0 {
+		return nil, errors.New("audio.max_segments must be positive")
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
@@ -42,7 +52,7 @@ func OpenRouteStore(path string, seed map[string]config.ProjectionRoute) (*Route
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	store := &RouteStore{db: db}
+	store := &RouteStore{db: db, audioMaxSegments: maxSegments}
 	fail := func(err error) (*RouteStore, error) { db.Close(); return nil, err }
 	if _, err = db.Exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS routing_config (id INTEGER PRIMARY KEY CHECK (id=1), revision INTEGER NOT NULL, document TEXT NOT NULL); CREATE TABLE IF NOT EXISTS node_labels (node_id TEXT PRIMARY KEY, label TEXT NOT NULL); CREATE TABLE IF NOT EXISTS node_archives (node_id TEXT PRIMARY KEY);`); err != nil {
 		return fail(err)
@@ -51,6 +61,17 @@ func OpenRouteStore(path string, seed map[string]config.ProjectionRoute) (*Route
 		return fail(err)
 	}
 	if _, err = db.Exec(audioSchema); err != nil {
+		return fail(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return fail(err)
+	}
+	if err = store.pruneAudio(context.Background(), tx); err != nil {
+		tx.Rollback()
+		return fail(err)
+	}
+	if err = tx.Commit(); err != nil {
 		return fail(err)
 	}
 	if seed == nil {

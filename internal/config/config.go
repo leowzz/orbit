@@ -104,7 +104,8 @@ type CodexPrivacyConfig struct {
 }
 
 type CoreConfig struct {
-	App AppConfig `yaml:"app"`
+	App   AppConfig   `yaml:"app"`
+	Audio AudioConfig `yaml:"audio"`
 
 	Console             ConsoleConfig                `yaml:"console"`
 	Core                CoreIdentity                 `yaml:"core"`
@@ -115,6 +116,14 @@ type CoreConfig struct {
 	ObservationPolicies map[string]ObservationPolicy `yaml:"observation_policies"`
 	Logging             LoggingConfig                `yaml:"logging"`
 }
+
+const DefaultAudioMaxSegments = 10000
+
+type AudioConfig struct {
+	MaxSegments SegmentLimit `yaml:"max_segments"`
+}
+
+type SegmentLimit int
 
 // MQTTAdminConfig keeps broker management credentials on Core, never on clients.
 type MQTTAdminConfig struct {

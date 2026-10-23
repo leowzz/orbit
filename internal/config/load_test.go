@@ -569,6 +569,38 @@ func TestCoreConsoleSessionHours(t *testing.T) {
 	}
 }
 
+func TestCoreAudioMaxSegments(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  int
+	}{
+		{"", 10000}, {"1", 1}, {"20000", 20000},
+		{"0", 0}, {"-1", 0}, {"invalid", 0}, {"1.5", 0},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			dir := t.TempDir()
+			writeFixtureFiles(t, dir, false)
+			body := validCoreYAML
+			if tc.value != "" {
+				body += "\naudio:\n  max_segments: " + tc.value + "\n"
+			}
+			cfg, err := LoadCore(writeConfig(t, dir, "core.yaml", body))
+			if tc.want == 0 {
+				if err == nil {
+					t.Fatal("invalid retention limit accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if int(cfg.Audio.MaxSegments) != tc.want {
+				t.Fatalf("got %d, want %d", cfg.Audio.MaxSegments, tc.want)
+			}
+		})
+	}
+}
+
 func TestAppDeviceConfiguration(t *testing.T) {
 	dir := t.TempDir()
 	writeFixtureFiles(t, dir, false)

@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS audio_sessions(session_id TEXT PRIMARY KEY,node_id TE
 CREATE TABLE IF NOT EXISTS audio_segments(segment_id TEXT PRIMARY KEY,session_id TEXT NOT NULL,node_id TEXT NOT NULL,sequence INTEGER NOT NULL,started_at TEXT NOT NULL,duration_ms INTEGER NOT NULL,speech_ms INTEGER NOT NULL,payload TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS audio_segments_node_time ON audio_segments(node_id,started_at DESC,segment_id);
 CREATE INDEX IF NOT EXISTS audio_segments_time ON audio_segments(started_at DESC,segment_id);
+CREATE INDEX IF NOT EXISTS audio_segments_retention ON audio_segments(julianday(started_at),segment_id);
+CREATE INDEX IF NOT EXISTS audio_segments_session ON audio_segments(session_id);
+CREATE TABLE IF NOT EXISTS audio_retention(id INTEGER PRIMARY KEY CHECK(id=1),started_at TEXT NOT NULL,segment_id TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS audio_jobs(job_id TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,last_dispatched_at TEXT NOT NULL DEFAULT '',created_at TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS audio_jobs_pending ON audio_jobs(status,last_dispatched_at);
 CREATE TABLE IF NOT EXISTS audio_results(job_id TEXT PRIMARY KEY,agent_id TEXT NOT NULL,text TEXT NOT NULL,language TEXT NOT NULL,payload TEXT NOT NULL);
@@ -136,6 +139,15 @@ func (s *RouteStore) storeAudioSegment(ctx context.Context, segment AudioSegment
 	if !errors.Is(e, sql.ErrNoRows) {
 		return e
 	}
+	// A constant-size persisted cutoff prevents evicted uploads from coming back,
+	// even after restart or increasing the limit. ACK these retries normally.
+	var expired bool
+	if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM audio_retention WHERE (julianday(?),?) <= (julianday(started_at),segment_id))`, segment.StartedAt, segment.SegmentID).Scan(&expired); e != nil {
+		return e
+	}
+	if expired {
+		return tx.Commit()
+	}
 	var node string
 	e = tx.QueryRowContext(ctx, `SELECT node_id FROM audio_sessions WHERE session_id=?`, segment.SessionID).Scan(&node)
 	if e == nil && node != segment.NodeID {
@@ -153,8 +165,39 @@ func (s *RouteStore) storeAudioSegment(ctx context.Context, segment AudioSegment
 	if _, e = tx.ExecContext(ctx, `INSERT INTO audio_jobs(job_id,created_at) VALUES(?,?)`, segment.SegmentID, now.UTC().Format(time.RFC3339Nano)); e != nil {
 		return e
 	}
+	if e = s.pruneAudio(ctx, tx); e != nil {
+		return e
+	}
 	return tx.Commit()
 }
+
+// pruneAudio runs in the same transaction as insertion, including pending jobs.
+// SQLite reuses freed pages; this does not VACUUM the shared console database.
+func (s *RouteStore) pruneAudio(ctx context.Context, tx *sql.Tx) error {
+	var startedAt, segmentID string
+	err := tx.QueryRowContext(ctx, `SELECT started_at,segment_id FROM audio_segments ORDER BY julianday(started_at) DESC,segment_id DESC LIMIT 1 OFFSET ?`, s.audioMaxSegments).Scan(&startedAt, &segmentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO audio_retention VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET started_at=excluded.started_at,segment_id=excluded.segment_id`, startedAt, segmentID); err != nil {
+		return err
+	}
+	const expiredIDs = `SELECT segment_id FROM audio_segments WHERE (julianday(started_at),segment_id) <= (julianday(?),?)`
+	for _, table := range []string{"audio_results", "audio_jobs"} {
+		if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE job_id IN (`+expiredIDs+`)`, startedAt, segmentID); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM audio_segments WHERE segment_id IN (`+expiredIDs+`)`, startedAt, segmentID); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `DELETE FROM audio_sessions WHERE NOT EXISTS(SELECT 1 FROM audio_segments WHERE audio_segments.session_id=audio_sessions.session_id)`)
+	return err
+}
+
 func (s *RouteStore) storeAudioResult(ctx context.Context, r AudioResult) error {
 	if r.SchemaVersion != 1 || !audioIdentity.MatchString(r.AgentID) || !audioUUID(r.JobID) || r.JobID != r.SegmentID || !audioTime(r.CompletedAt) || (r.Status != "completed" && r.Status != "failed") || (r.Device != "cpu" && r.Device != "cuda") || r.ProcessingMS < 0 || r.ProcessingMS > 86400000 || len(r.Text) > 64000 || len(r.Language) > 64 || len(r.Model) > 256 || len(r.ErrorCode) > 128 || len(r.ErrorMessage) > 2048 || len(r.Segments) > 1000 {
 		return errors.New("invalid audio result")
@@ -173,6 +216,18 @@ func (s *RouteStore) storeAudioResult(ctx context.Context, r AudioResult) error 
 	var node string
 	var duration int
 	if e = tx.QueryRowContext(ctx, `SELECT node_id,duration_ms FROM audio_segments WHERE segment_id=?`, r.JobID).Scan(&node, &duration); e != nil {
+		if errors.Is(e, sql.ErrNoRows) {
+			var pruned bool
+			if e = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM audio_retention)`).Scan(&pruned); e != nil {
+				return e
+			}
+			if pruned {
+				// Results do not carry the recording time. Once retention has run,
+				// ACK missing jobs without storing them so workers release outboxes.
+				return tx.Commit()
+			}
+			return sql.ErrNoRows
+		}
 		return e
 	}
 	if node != r.NodeID {

@@ -68,7 +68,7 @@ func main() {
 }
 
 func run(cfg *config.CoreConfig, logger *zap.Logger) error {
-	store, err := core.OpenRouteStore(cfg.Console.Database, cfg.ProjectionRoutes)
+	store, err := core.OpenRouteStore(cfg.Console.Database, cfg.ProjectionRoutes, cfg.Audio)
 	if err != nil {
 		return fmt.Errorf("open core database: %w", err)
 	}

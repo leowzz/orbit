@@ -6,6 +6,8 @@ console:
   listen: 127.0.0.1:7620
   password: change-me
   database: ../data/core.sqlite
+audio:
+  max_segments: 10000
 app:
   listen: 127.0.0.1:7622
   data_dir: ../data/app

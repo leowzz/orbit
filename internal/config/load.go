@@ -21,6 +21,18 @@ var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 const defaultNTPServer = "ntp.aliyun.com"
 
+func (limit *SegmentLimit) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.ScalarNode || node.Tag != "!!int" {
+		return errors.New("audio.max_segments must be a positive integer")
+	}
+	var value int
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	*limit = SegmentLimit(value)
+	return nil
+}
+
 func defaultNTPConfig() NTPConfig {
 	return NTPConfig{
 		Server:       defaultNTPServer,
@@ -59,6 +71,7 @@ func LoadAgent(path string) (*AgentConfig, error) {
 
 func LoadCore(path string) (*CoreConfig, error) {
 	cfg := CoreConfig{
+		Audio:   AudioConfig{MaxSegments: DefaultAudioMaxSegments},
 		Console: ConsoleConfig{Listen: "127.0.0.1:7620", Database: "data/core.sqlite", SessionHours: DefaultConsoleSessionHours},
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
 		NTP:     defaultNTPConfig(),
@@ -194,6 +207,9 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	}
 	if cfg.Console.SessionHours <= 0 || cfg.Console.SessionHours > int((1<<63-1)/time.Hour) {
 		return errors.New("console.session_hours must be between 1 and 2562047 hours")
+	}
+	if cfg.Audio.MaxSegments <= 0 {
+		return errors.New("audio.max_segments must be positive")
 	}
 	if strings.TrimSpace(cfg.Console.Database) == "" {
 		return errors.New("console.database is required")
