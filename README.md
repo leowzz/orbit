@@ -265,6 +265,7 @@ The console has separate pages:
 | Agents (`/agents`) | Discovered hosts, versions, source health, and observation freshness. |
 | Devices (`/nodes`) | Unified MQTT/App device list and App authorization. |
 | Device (`/nodes/:id`) | Data content/display, independent shortcut pairings, connection and access. |
+| MQTT accounts (`/mqtt`) | Create scoped Node/Agent credentials, reset passwords and revoke access. |
 | Inbox (`/messages`) | Shared texts, tasks and photos. |
 | System (`/system`) | Core identity, storage, session, and observation policies. |
 
@@ -300,6 +301,45 @@ and console settings in YAML. SQLite stores projection routes, their revision,
 and hashed login sessions; it does not replace the deployment configuration. Relative database
 paths resolve from the Core YAML directory, so the default local configuration
 uses `configs/data/core.sqlite`.
+
+### Manage MQTT accounts (EMQX 5)
+
+Configure Core's management connection separately from its MQTT login:
+
+```yaml
+mqtt_admin:
+  url: http://emqx:18083  # EMQX management origin, or URL ending in /api/v5.
+  api_key: ""           # Create a dedicated key in EMQX Dashboard → System → API Keys.
+  api_secret: ""
+```
+
+Leave both keys empty to disable account management without affecting Core.
+Fill both values and restart Core to enable **MQTT 账号** in the console. Use
+HTTPS outside a trusted private network. These credentials stay on the server;
+the management API is protected by the console session and same-origin checks.
+
+The supported authentication chain is a single enabled `password_based:built_in_database`
+authenticator using usernames. New accounts receive a random password displayed
+once, with Topic permissions restricted to the entered Node/Agent ID. Core installs
+the per-user ACL before creating the credential. If no built-in database authorization
+source exists, the first creation adds it at the front; if it exists but is disabled
+or not first, creation stops with instructions to correct that order. Each new user's
+ACL ends in deny rules, so subsequent permissive file rules cannot broaden that
+user's access. Existing users and global fallback rules are not rewritten.
+Creation also refuses existing Client-ID ACL entries, which EMQX evaluates before
+username rules and which could bypass the new account's restrictions.
+
+Password reset preserves the user's existing privilege level and disconnects all
+of its connections. Revocation deletes the credential, disconnects all connections
+for that username, then removes its built-in username ACL. Partial completion is
+reported explicitly with a retry action. Core's own MQTT username is protected.
+These operations do not remove routes, retained messages, or App device tokens.
+Existing credentials/ACLs in other broker configurations remain an operator concern.
+
+For an isolated real-broker test, run `go test ./internal/mqttadmin -run TestEMQXLifecycle -v`
+with `ORBIT_TEST_EMQX_URL`, `ORBIT_TEST_EMQX_KEY`, `ORBIT_TEST_EMQX_SECRET`, and
+`ORBIT_TEST_EMQX_MQTT_ADDR` pointing to a disposable EMQX 5.8 instance. This test
+creates users and an authorization source; never point it at a production broker.
 
 ### Manage routes
 

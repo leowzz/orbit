@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -95,6 +96,26 @@ void main() {
       final compose = tester.getRect(find.byKey(const ValueKey('composer')));
       expect((card.left - compose.left).abs(), lessThanOrEqualTo(2));
       expect((card.right - compose.right).abs(), lessThanOrEqualTo(2));
+      final more = tester.getRect(find.byKey(const ValueKey('composer-more')));
+      final send = tester.getRect(find.widgetWithText(FilledButton, '发送'));
+      expect(compose.contains(more.topLeft), isTrue);
+      expect(compose.contains(send.bottomRight), isTrue);
+      expect(more.right, lessThan(send.left));
+      expect((more.center.dy - send.center.dy).abs(), lessThanOrEqualTo(2));
+      await waitForLocalUpdate(
+        tester,
+        () => tester
+            .widget<PopupMenuButton<String>>(
+              find.byKey(const ValueKey('composer-more')),
+            )
+            .enabled,
+      );
+      await tester.tap(find.byKey(const ValueKey('composer-more')));
+      await tester.pumpAndSettle();
+      expect(find.text('剪贴板'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
       final checkbox = tester.getRect(
         find.descendant(
           of: find.byKey(const ValueKey('first')),
@@ -131,6 +152,112 @@ void main() {
       expect(c.query, '');
       expect(c.filter, 'image');
       expect(tester.getRect(list), listBounds);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final kind in ['text', 'todo']) {
+    testWidgets('clipboard submits $kind once and preserves the draft', (
+      tester,
+    ) async {
+      final c = await controller(tester);
+      await tester.runAsync(() async {
+        await c.local.setMeta('composer_kind', kind);
+        await c.local.setMeta('draft', '保留这份草稿');
+      });
+      final clipboard = Completer<Map<String, dynamic>?>();
+      var reads = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method != 'Clipboard.getData') return null;
+          reads++;
+          return clipboard.future;
+        },
+      );
+      await tester.pumpWidget(MaterialApp(home: InboxScreen(controller: c)));
+      final more = find.byKey(const ValueKey('composer-more'));
+      await waitForLocalUpdate(
+        tester,
+        () => tester.widget<PopupMenuButton<String>>(more).enabled,
+      );
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      expect(reads, 0);
+      await tester.tap(find.text('剪贴板'));
+      await tester.pumpAndSettle();
+      expect(reads, 1);
+      expect(tester.widget<PopupMenuButton<String>>(more).enabled, isFalse);
+      expect(
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull,
+      );
+      clipboard.complete({'text': '  剪贴板内容\n第二行  '});
+      await waitForLocalUpdate(
+        tester,
+        () =>
+            c.pending.isNotEmpty &&
+            tester.widget<PopupMenuButton<String>>(more).enabled,
+      );
+      final op = jsonDecode(c.pending.single['payload']);
+      expect(op['type'], 'create');
+      expect(op['kind'], kind);
+      expect(op['body'], '剪贴板内容\n第二行');
+      expect(c.pending.single['photo'], isNull);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('composer-body')))
+            .controller!
+            .text,
+        '保留这份草稿',
+      );
+      expect(await tester.runAsync(() => c.local.meta('draft')), '保留这份草稿');
+      expect(reads, 1);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final (name, content, feedback) in [
+    ('empty', null, '剪贴板中没有文字'),
+    ('whitespace', ' \n ', '剪贴板中没有文字'),
+    ('too long', '字' * 4001, '剪贴板文字超过 4000 字，请缩短后重试'),
+    ('read failure', null, '未能读取剪贴板，请重试'),
+  ]) {
+    testWidgets('clipboard $name does not submit and allows retry', (
+      tester,
+    ) async {
+      final c = await controller(tester);
+      var retry = false;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method != 'Clipboard.getData') return null;
+          if (retry) return {'text': '重试内容'};
+          if (name == 'read failure') {
+            throw PlatformException(code: 'clipboard_unavailable');
+          }
+          return content == null ? null : {'text': content};
+        },
+      );
+      await tester.pumpWidget(MaterialApp(home: InboxScreen(controller: c)));
+      final more = find.byKey(const ValueKey('composer-more'));
+      await waitForLocalUpdate(
+        tester,
+        () => tester.widget<PopupMenuButton<String>>(more).enabled,
+      );
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('剪贴板'));
+      await tester.pumpAndSettle();
+      expect(c.pending, isEmpty);
+      expect(find.text(feedback), findsOneWidget);
+      expect(tester.widget<PopupMenuButton<String>>(more).enabled, isTrue);
+      retry = true;
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('剪贴板'));
+      await waitForLocalUpdate(tester, () => c.pending.isNotEmpty);
+      expect(jsonDecode(c.pending.single['payload'])['body'], '重试内容');
       expect(tester.takeException(), isNull);
     });
   }

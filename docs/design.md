@@ -690,10 +690,10 @@ Agent、Core 和 Node 的 YAML 均只在启动时读取。V1 不监听配置文�
 
 - `tls.enabled` 默认为 `true`，只控制 MQTT 使用 TLS 还是明文协议，不改变 Topic、消息类型、ACL 或 Capability 行为。客户端不得因证书校验或握手失败自动切换为明文；显式关闭时，操作者接受凭据和 payload 可被监听或篡改的风险。
 - 每个身份单独签发与轮换凭据，禁止固件共享全局凭据。
-- V1 凭据由操作者在 Broker 中手动创建；每个 Agent、Core 和 Node 使用独立用户名、密码与最小权限 ACL，不提供自助注册。
+- 每个 Agent、Core 和 Node 使用独立用户名、密码与最小权限 ACL，不提供自助注册。操作者可在 Broker 中创建凭据；配置 `mqtt_admin` 后，Core 管理台也可管理 EMQX 5 内置用户名认证，创建按 Node/Agent ID 限权的账号、重置密码和吊销访问。管理 API Key 与 MQTT 登录凭据独立，保存在 Core 配置文件。
 - V1 使用专用 Broker 部署作为网络和准入边界，不与其他 Orbit Network 共用同一 Topic 空间。
 - Node 的凭据只能发布自身状态并订阅自身 View；Node 不能通过协议选择上游 Agent，Projection Route 与未来 Command 授权均由 Core 控制。
-- 轮换时创建新凭据、更新部署并重启参与者，确认新连接正常后撤销旧凭据。
+- 手动轮换可先创建新凭据、更新部署，确认新连接后撤销旧凭据。管理台重置会立即更新密码并断开该账号现有连接；吊销会删除凭据、断开连接后清理用户名 ACL。部分完成需重试，Core 自身连接账号不允许在此修改。路由、retained 消息和 App Token 不随 MQTT 账号吊销而删除。
 - Capability 由编译时或配置白名单注册；参数在执行前转换为内部类型。
 - `OpenUrl` 只允许受控 scheme 和可选 host allowlist。
 - Codex display/project labels 默认隐藏，只有显式 privacy 配置才发布经过

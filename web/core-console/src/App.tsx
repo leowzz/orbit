@@ -11,6 +11,7 @@ import {
   Smartphone,
   Boxes,
   LayoutDashboard,
+  KeyRound,
   LogOut,
   Menu,
   RefreshCw,
@@ -27,10 +28,12 @@ import Agents from "./pages/Agents";
 import Nodes from "./pages/Nodes";
 import System from "./pages/System";
 import Apps from "./pages/Apps";
+import MqttUsers from "./pages/MqttUsers";
 const navigation = [
   { path: "/", label: "总览", icon: LayoutDashboard },
   { path: "/agents", label: "电脑与来源", icon: Server },
   { path: "/nodes", label: "设备", icon: Boxes },
+  { path: "/mqtt", label: "MQTT 账号", icon: KeyRound },
   { path: "/messages", label: "收件箱", icon: Smartphone },
   { path: "/system", label: "系统信息", icon: Settings2 },
 ];
@@ -310,6 +313,7 @@ export default function App() {
                 element={<System state={state} document={routes} />}
               />
               <Route path="/messages" element={<Apps />} />
+              <Route path="/mqtt" element={<MqttUsers />} />
               <Route
                 path="/apps"
                 element={<Navigate to="/messages" replace />}

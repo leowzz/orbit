@@ -232,6 +232,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	}
 	startedAt := time.Now().UTC()
 	mux := http.NewServeMux()
+	mqttAdminRoutes(mux, cfg)
 	admin := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" && r.URL.Path == "/api/app/devices" {
 			writeConsoleJSON(w, map[string]any{"enabled": false})

@@ -2075,7 +2075,55 @@ dt,
 .app-actions .danger {
   color: #a3443a;
 }
+.mqtt-users {
+  padding: 0 24px;
+}
+.mqtt-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 0;
+}
+.mqtt-user + .mqtt-user {
+  border-top: 1px solid var(--line);
+}
+.mqtt-user-info {
+  min-width: 0;
+}
+.mqtt-user-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  overflow-wrap: anywhere;
+}
+.mqtt-client-ids {
+  color: var(--muted);
+  margin-top: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.mqtt-user > .app-actions {
+  flex-shrink: 0;
+}
+.mqtt-password {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mqtt-password input {
+  min-width: 0;
+}
 @media (max-width: 600px) {
+  .mqtt-users {
+    padding: 0 16px;
+  }
+  .mqtt-user {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
   .app-device,
   .app-item {
     padding: 16px;

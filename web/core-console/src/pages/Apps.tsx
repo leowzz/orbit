@@ -480,7 +480,7 @@ export default function Apps({
     </>
   );
 }
-function Modal({
+export function Modal({
   title,
   onClose,
   children,

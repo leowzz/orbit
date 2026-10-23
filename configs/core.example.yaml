@@ -31,6 +31,13 @@ mqtt:
     username_file: secrets/core-mqtt-username
     password_file: secrets/core-mqtt-password
 
+# Optional EMQX 5 username management. Empty keys leave this feature disabled.
+# Use the management HTTP endpoint, not the MQTT listener. For tx's Docker network:
+mqtt_admin:
+  url: http://emqx:18083
+  api_key: ""
+  api_secret: ""
+
 # Projection routes are now managed in the Core console and stored in SQLite.
 # Existing projection_routes in older YAML files are imported only at first startup.
 

@@ -146,6 +146,9 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 }
 
 func (cfg *CoreConfig) validate(baseDir string) error {
+	if err := cfg.MQTTAdmin.validate(); err != nil {
+		return fmt.Errorf("mqtt_admin: %w", err)
+	}
 	if cfg.App.Listen != "" {
 		if _, _, err := net.SplitHostPort(cfg.App.Listen); err != nil {
 			return errors.New("app.listen must be host:port")
@@ -399,6 +402,26 @@ func (cfg *MQTTConfig) validate(baseDir string) error {
 	}
 	cfg.Credentials.Username = username
 	cfg.Credentials.Password = password
+	return nil
+}
+
+func (cfg *MQTTAdminConfig) validate() error {
+	cfg.URL = strings.TrimRight(strings.TrimSpace(cfg.URL), "/")
+	if cfg.URL != "" {
+		u, err := url.Parse(cfg.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/api/v5") {
+			return errors.New("url must be an HTTP(S) origin or end in /api/v5, without credentials, query or fragment")
+		}
+	}
+	if (cfg.APIKey == "") != (cfg.APISecret == "") {
+		return errors.New("api_key and api_secret must be configured together")
+	}
+	if cfg.APIKey != "" && cfg.URL == "" {
+		return errors.New("url is required with api_key and api_secret")
+	}
+	if strings.ContainsAny(cfg.APIKey, ":\r\n") || strings.ContainsAny(cfg.APISecret, "\r\n") {
+		return errors.New("invalid api_key or api_secret format")
+	}
 	return nil
 }
 

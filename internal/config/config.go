@@ -110,9 +110,21 @@ type CoreConfig struct {
 	Core                CoreIdentity                 `yaml:"core"`
 	NTP                 NTPConfig                    `yaml:"ntp"`
 	MQTT                MQTTConfig                   `yaml:"mqtt"`
+	MQTTAdmin           MQTTAdminConfig              `yaml:"mqtt_admin"`
 	ProjectionRoutes    map[string]ProjectionRoute   `yaml:"projection_routes"`
 	ObservationPolicies map[string]ObservationPolicy `yaml:"observation_policies"`
 	Logging             LoggingConfig                `yaml:"logging"`
+}
+
+// MQTTAdminConfig is only used by Core's authenticated console, never sent to clients.
+type MQTTAdminConfig struct {
+	URL       string `yaml:"url" json:"-"`
+	APIKey    string `yaml:"api_key" json:"-"`
+	APISecret string `yaml:"api_secret" json:"-"`
+}
+
+func (c MQTTAdminConfig) Enabled() bool {
+	return c.URL != "" && c.APIKey != "" && c.APISecret != ""
 }
 
 // App devices are provisioned by the operator. Only SHA-256 token digests are stored.

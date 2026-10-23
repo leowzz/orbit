@@ -187,6 +187,33 @@ class _InboxScreenState extends State<InboxScreen> {
     }
   }
 
+  Future<void> sendClipboard() async {
+    if (!composerReady || sending) return;
+    final owner = c;
+    final messageKind = kind;
+    var submitting = false;
+    setState(() => sending = true);
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      if (!mounted || c != owner) return;
+      final body = data?.text?.trim() ?? '';
+      if (body.isEmpty) {
+        notice('剪贴板中没有文字');
+        return;
+      }
+      if (body.characters.length > 4000) {
+        notice('剪贴板文字超过 4000 字，请缩短后重试');
+        return;
+      }
+      submitting = true;
+      await owner.submit('create', kind: messageKind, body: body);
+    } catch (_) {
+      notice(submitting ? '未能保存到本机，请重试' : '未能读取剪贴板，请重试');
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
+  }
+
   Future<void> pickImage() async {
     try {
       final photo = await ImagePicker().pickImage(source: ImageSource.gallery);
@@ -892,6 +919,19 @@ class _InboxScreenState extends State<InboxScreen> {
                     ),
                 ],
               ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              key: const ValueKey('composer-more'),
+              tooltip: '添加内容',
+              enabled: composerReady && !sending,
+              icon: const Icon(Icons.add_rounded),
+              onSelected: (action) {
+                if (action == 'clipboard') sendClipboard();
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'clipboard', child: Text('剪贴板')),
+              ],
             ),
             const SizedBox(width: 8),
             ValueListenableBuilder<TextEditingValue>(
