@@ -1,6 +1,12 @@
 # Orbit 实现交接
 
-更新日期：2026-10-07。
+更新日期：2026-10-24。
+
+## 当前交接：Windows Agent 与原生推理
+
+新会话请先阅读 [Windows 桌面 Agent 与原生 ASR 实现交接](docs/desktop-agent-windows-inference-handoff.md)。目标是在现有 Rust/Tauri Agent 上完整实现 macOS 能力的 Windows 对等版本，并增加可选 speech.cpp / Qwen3-ASR GGUF 推理、模型管理和 SDT 迁移。文档包含当前缺口、协议与持久队列约束、实施阶段、真机验收及可复制的接手任务说明；目前仅完成方案交接，尚未实现。
+
+## 既有 App Node 交接
 
 App 的原始需求与执行进展见 [App Node 与个人收件箱交接文档](docs/app-node-handoff.md) 开始，内容包括用户目标、当前代码边界、建议技术栈、Core 新增模块、各端能力、同步契约、里程碑和验收步骤。
 
@@ -24,6 +30,7 @@ Core 已新增可选 App HTTP/SSE API、独立 SQLite WAL 收件箱和附件目�
 
 | 入口 | 内容 |
 | --- | --- |
+| [Windows Agent 与原生 ASR 交接](docs/desktop-agent-windows-inference-handoff.md) | Windows 全能力移植、原生推理、模型管理、队列兼容与 SDT 迁移 |
 | [App 实现交接](docs/app-node-handoff.md) | 原始实现方案及当前验收进展 |
 | [README](README.md) | 当前安装、配置、运行、测试与部署命令 |
 | [CONTEXT](CONTEXT.md) | Agent、Core、Node、Observation、View、Intent 等领域术语 |

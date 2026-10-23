@@ -2,7 +2,9 @@
 
 独立的 Tauri 2 桌面 Agent。React / TypeScript 提供设置窗口，Rust 完成采集、通信和本机操作，不需要安装 Go 或运行 Go sidecar。
 
-支持 macOS 和 Windows 的同一套源代码。macOS 已进行本地构建及窗口验收；Windows 的构建和测试由 `build-desktop-agent.yml` 覆盖，仍需在 Windows 真机验证安装、凭据存储、登录启动及 Codex 链接关联。
+macOS 和 Windows 使用同一套源代码。macOS 已进行本地构建及窗口验收；当前桌面 CI 检查仅运行在 macOS，Windows 的完整能力、构建及真机验收仍需补齐。
+
+下一阶段见 [Windows 桌面 Agent 与原生 ASR 实现交接](../../docs/desktop-agent-windows-inference-handoff.md)：完整移植 macOS Agent 能力，并增加可选 Rust + speech.cpp 本地推理、模型下载/路径配置及 SDT 迁移。该文档是待实施方案，不代表这些能力已经完成。
 
 ## 使用
 
@@ -55,9 +57,9 @@ pnpm tauri build --debug --bundles app   # macOS
 pnpm tauri build --debug --bundles nsis  # Windows
 ```
 
-调试构建产物在 `src-tauri/target/debug/bundle/`。`build-desktop-agent.yml` 在 PR、main 分支变更或手动触发时构建 macOS / Windows 调试包。
+调试构建产物在 `src-tauri/target/debug/bundle/`。当前 `unit-tests.yml` 的桌面检查运行于 macOS；仓库没有 `build-desktop-agent.yml`，Windows 自动化构建需按交接文档补齐。
 
-推送 `vX.Y.Z` 或 `vX.Y.Z-rc.N` tag 时，`release.yml` 检查并构建 macOS Universal DMG（Apple Silicon / Intel，macOS 12+），以 `orbit-agent-macos-universal-TAG.dmg` 上传到同一 GitHub Release。应用版本由 tag 去掉 `v` 后注入；产物纳入 `SHA256SUMS` 和 Cosign 下载签名。未配置 Apple Developer ID 签名、公证或自动更新，首次打开可能需要在系统「隐私与安全性」中手动允许。Windows 仍仅提供 CI 调试包。完整发布与校验说明见 [Tagged releases](../../docs/releases.md)。
+推送 `vX.Y.Z` 或 `vX.Y.Z-rc.N` tag 时，`release.yml` 检查并构建 macOS Universal DMG（Apple Silicon / Intel，macOS 12+），以 `orbit-agent-macos-universal-TAG.dmg` 上传到同一 GitHub Release。应用版本由 tag 去掉 `v` 后注入；产物纳入 `SHA256SUMS` 和 Cosign 下载签名。现有流程包含 macOS 签名校验，应用内更新通过 `update.rs` 实现，目前仅支持 macOS；签名与公证的具体配置以发布文档及工作流为准。Windows 正式安装包、应用内更新和 CI 构建尚需补齐。完整发布与校验说明见 [Tagged releases](../../docs/releases.md)。
 
 仅检查界面时可运行 `pnpm dev` 并打开 `http://127.0.0.1:1420/?preview`。预览明确标记且禁止保存、连接、打开会话等操作；正式构建不包含预览入口。
 
