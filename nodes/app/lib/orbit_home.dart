@@ -11,6 +11,7 @@ import 'app_location.dart';
 import 'app_appearance.dart';
 import 'app_mqtt_registration.dart';
 import 'package:orbit_android/software_update.dart';
+import 'package:orbit_android/audio_capture.dart';
 
 /// One Android application for the shared inbox and existing desktop widgets.
 class OrbitHome extends StatefulWidget {
@@ -158,6 +159,7 @@ class _OrbitHomeState extends State<OrbitHome> {
                 onMatrix: openMatrix,
               ),
         _AppSettings(
+          audioEnabled: widget.widgetsEnabled && selected == 3,
           controller: widget.controller,
           onSettings: widget.onSettings,
         ),
@@ -261,9 +263,14 @@ class _OrbitHomeState extends State<OrbitHome> {
 }
 
 class _AppSettings extends StatelessWidget {
+  final bool audioEnabled;
   final InboxController? controller;
   final VoidCallback? onSettings;
-  const _AppSettings({this.controller, this.onSettings});
+  const _AppSettings({
+    this.controller,
+    this.onSettings,
+    this.audioEnabled = false,
+  });
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -308,6 +315,7 @@ class _AppSettings extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: onSettings,
             ),
+            if (audioEnabled) const AudioCaptureCard(),
             const SoftwareUpdateCard(),
           ],
         ),

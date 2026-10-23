@@ -24,6 +24,20 @@ Flutter Android 应用，包含两个可独立添加、可缩放的桌面小组�
 
 Node ID 在每台手机上必须唯一。正式 MQTT Client ID 是 `orbit-node-{node_id}`，测试连接使用 `orbit-node-{node_id}-test-{random}`；Broker 若限制 Client ID，需要放行对应测试 ID。
 
+## 后台录音
+
+统一 App 首次进入会说明麦克风用途并申请权限；拒绝后可到「设置 → 录音」再次申请，或打开系统设置。允许后，已有 MQTT 配置时自动开始后台录音；首次连接会在取得设备 MQTT 凭据后开始。录音状态与停止入口在设置页和常驻通知中。手动停止后保持停止，点击「开始录音」恢复。Android 13 及以上也需允许通知，才能在通知栏看到停止入口。
+
+统一 App 使用当前连接自动注册的设备 ID 和 MQTT 凭据；旧独立页面使用其保存的节点配置。手工账号请在 Core 管理页创建「录音设备」账号，旧账号需更新为带音频权限的凭据或补充 Broker ACL：发布自身 `orbit/v1/nodes/{node_id}/audio/segments`、订阅自身 `orbit/v1/nodes/{node_id}/audio/acks`，QoS 1，均不 retained。音频客户端 ID 为 `orbit-audio-{node_id}-{random}`，与原组件连接互不挤占。Node ID 仅用小写字母、数字、下划线和短横线，首位为字母或数字。
+
+采集为 16 kHz 单声道 PCM，20 ms 一帧。真实 WebRTC VAD 保留语音前 300 ms 和结束后约 600 ms，连续讲话最长 10 秒切片；每片段独立创建 Opus 编码器（24 kbps、20 ms 原始包，不含 Ogg）。静音不上传；上传、编码和采集使用独立线程，Core 处理/ASR 不会暂停麦克风。协议见[音频管线](../../docs/audio-pipeline.md)。
+
+片段原子保存到应用私有目录，收到 Core 的 `stored` 应用确认后才删除，MQTT PUBACK 不删除。新片段保存后立即唤醒上传线程；断网后持续录音并每 5 秒重试，重开应用可重传已保存数据。队列跨连接合计最多 64 MiB / 1000 段；达到上限、磁盘保存失败或处理速度跟不上时停止采集并明确显示未保存声音的情况，不覆盖旧录音。修改 MQTT 配置前需停止录音；不同连接的待发片段隔离，需切回原连接才能同步。清除应用数据或卸载会删除本机待发录音。
+
+录音不受息屏、切换 App 或桌面组件数量影响；系统强停、设备重启或系统回收后需回到 App 恢复，未切片/尚未持久化的当前音频可能丢失。停止录音也停止该服务的自动重传，重新开始后恢复。录音会增加耗电，厂商省电策略和麦克风占用的实际表现仍需真机验证。
+
+开发依赖来自 Maven Central：`com.cloudflare.realtimekit.android-vad:webrtc:2.0.10-cf.4:release@aar`（[WebRTC VAD 上游](https://github.com/gkonovalov/android-vad)，JNI 四 ABI）和 `io.github.jaredmdobson:concentus:1.0.2`（[Java Opus](https://github.com/jaredmdobson/concentus)）。JVM 测试覆盖分段边界、静音、队列重开/容量/确认及 Opus 解码；这不替代麦克风、VAD JNI、锁屏、拒绝权限和网络恢复的真机验收。
+
 ## Core 配置
 
 在现有 Core YAML 的 `projection_routes` 下添加路由，Agent ID 替换为实际值：
@@ -58,7 +72,7 @@ observation_policies:
 
 ## 后台与数据有效期
 
-Flutter 负责配置和应用内预览；Android 原生前台服务负责 MQTT、缓存和 RemoteViews。保留用户手动开启的同步通知，不申请长期唤醒锁、不绕过系统省电限制。
+Flutter 负责配置和应用内预览；Android 原生前台服务负责 MQTT、缓存和 RemoteViews。以下省电策略仅适用于桌面组件同步；录音使用独立的麦克风前台服务和采集期间的唤醒锁。
 
 - 亮屏：维持 MQTT 连接，保活 300 秒；Session 可见内容变化及时刷新，用量约每 60 秒合并刷新，未变化不重绘。App 前台每 10 秒读取本地快照，进入后台停止轮询。
 - 息屏：主动断开 MQTT，取消重连与组件定时刷新，丢弃排队的接收消息；保留桌面最后画面。亮屏/解锁后检查网络，重新订阅 retained view 并发布 State，请求 Core 补齐最新快照。

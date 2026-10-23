@@ -1,6 +1,6 @@
 # MQTT Topics
 
-V1 payloads use `application/protobuf` and MQTT QoS 1. The first status-display
+Status and command payloads use `application/protobuf` and MQTT QoS 1. The status-display
 chain uses these topics:
 
 | Topic | Publisher | Consumer | Retained |
@@ -76,7 +76,16 @@ retained and contain no arbitrary URL or shell command string.
 Android Nodes identify as `display/android/flutter` and use the `overview-android`
 profile, with the same UsageView and CodexView fields as `overview-web`. They
 use MQTT 3.1.1 QoS 1 (without the MQTT 5 Content Type property) and publish
-only their own Node State; this display-only client does not emit intents.
+their own Node State; this client does not emit intents. Android speech capture
+adds an independent JSON audio connection under its own node-owned audio topics.
+The unified App shares this native capture service and its Core-provisioned identity.
+
+Audio segments, queued jobs, acknowledgements, ASR results, and worker state use
+the dedicated JSON topics in [audio-pipeline.md](audio-pipeline.md). These messages
+use QoS 1 and are non-retained except worker state. Android retains its local
+outbox until a Core application acknowledgement; Core persists pending jobs until
+a result is saved; workers persist their results until Core acknowledges them.
+This recovery does not depend on MQTT session persistence.
 
 The `usage-oled-128x32` profile contains only the three bounded DisplaySlot
 fields. The `overview-web` profile may additionally contain sanitized CodexView

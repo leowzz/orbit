@@ -1,4 +1,139 @@
 @import "tailwindcss";
+
+.audio-filters {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 150px minmax(180px, 2fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.audio-filters .button {
+  height: 43px;
+  min-height: 43px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+.audio-workers {
+  margin-bottom: 20px;
+  padding: 0 20px;
+}
+.audio-worker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+}
+.audio-worker + .audio-worker {
+  border-top: 1px solid var(--line);
+}
+.audio-worker > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.audio-worker-model,
+.audio-worker-time {
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.audio-record {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 18px 22px;
+  background: transparent;
+  text-align: left;
+  color: var(--text);
+}
+.audio-record + .audio-record {
+  border-top: 1px solid var(--line);
+}
+.audio-record:hover {
+  background: var(--surface-soft);
+}
+.audio-record-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.audio-record-meta strong {
+  color: var(--text);
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.audio-transcript {
+  margin-top: 9px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.audio-transcript.muted {
+  color: var(--muted);
+}
+.audio-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 16px 22px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.audio-detail {
+  display: grid;
+  gap: 20px;
+}
+.audio-detail dl {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 20px;
+  margin: 0;
+}
+.audio-detail dt {
+  color: var(--muted);
+}
+.audio-detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.audio-detail-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.audio-json {
+  padding: 14px;
+  margin-top: 10px;
+  background: var(--surface-soft);
+  border-radius: 10px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.audio-detail summary {
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .audio-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .audio-worker {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .audio-record,
+  .audio-pagination {
+    padding: 16px;
+  }
+}
 @theme {
   --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
 }

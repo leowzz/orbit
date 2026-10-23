@@ -1,0 +1,11 @@
+{
+  "agent_id": "sdt-asr",
+  "host_label": "sdt",
+  "model": "Qwen/Qwen3-ASR-0.6B",
+  "device": "auto",
+  "database": "data/asr.sqlite3",
+  "queue_capacity": 1000,
+  "max_attempts": 3,
+  "result_retry_seconds": 5,
+  "mqtt": {"host": "mqtt.example.internal", "port": 8883, "tls": true, "username": "asr-worker", "password_env": "ORBIT_MQTT_PASSWORD"}
+}

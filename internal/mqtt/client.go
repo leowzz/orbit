@@ -39,6 +39,8 @@ type Message struct {
 	Topic   string
 	Payload []byte
 	Retain  bool
+	// Empty preserves the existing Protobuf wire format.
+	ContentType string
 }
 
 type Handler func(context.Context, Message) error
@@ -131,12 +133,16 @@ func reconnectBackoff() autopaho.Backoff {
 }
 
 func (c *Client) Publish(ctx context.Context, message Message) error {
+	contentType := message.ContentType
+	if contentType == "" {
+		contentType = contentTypeProtobuf
+	}
 	response, err := c.manager.Publish(ctx, &paho.Publish{
 		QoS:        1,
 		Retain:     message.Retain,
 		Topic:      message.Topic,
 		Payload:    message.Payload,
-		Properties: &paho.PublishProperties{ContentType: contentTypeProtobuf},
+		Properties: &paho.PublishProperties{ContentType: contentType},
 	})
 	if err != nil {
 		return fmt.Errorf("publish %q: %w", message.Topic, err)

@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'quick_config_server.dart';
 import 'software_update.dart';
+import 'audio_capture.dart';
 
 void main() => runApp(const OrbitApp());
 
@@ -373,6 +374,8 @@ class _NodePageState extends State<NodePage> with WidgetsBindingObserver {
         statusCard('session', 'SESSION 状态', Icons.terminal),
       ],
       const Text('点击卡片右上角，将两个组件分别添加到 Android 桌面。'),
+      const SizedBox(height: 12),
+      const AudioCaptureCard(),
       const SizedBox(height: 28),
     ];
     final settings = <Widget>[

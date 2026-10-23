@@ -7,15 +7,22 @@ Android nodes. Core includes an authenticated React console for inspecting
 Agents and Nodes and managing projection routes stored in local SQLite.
 Deployment settings remain in YAML.
 
+Android can also capture speech continuously in a microphone foreground service,
+run WebRTC VAD locally, and upload Opus segments without pausing recording. Core
+durably queues these segments for a separate [ASR worker](agents/asr-worker/README.md)
+using Qwen3-ASR on CPU or CUDA, then stores the structured results for the console's
+audio-records page. See [audio setup and protocol](docs/audio-pipeline.md).
+
 | Component | Responsibility |
 | --- | --- |
 | Agent | Collect host usage and Codex state; execute enabled typed capabilities. |
+| ASR worker Agent | Consume queued audio on a Windows/Linux host and return structured speech recognition results; desktop controls and Windows tray support. |
 | Core + console | Validate observations, manage routes, and publish device views. The console defaults to `127.0.0.1:7620`. |
 | Web Node | Personal inbox for text, links, todos and images, with its own password and a server-side device token. |
 | OLED / Android Node | Render the view assigned by Core on a physical display or Android widgets. |
 
-The architecture is split into two one-way flows: state projection and typed
-command execution.
+Alongside audio processing, the status-display architecture uses two one-way
+flows: state projection and typed command execution.
 
 **State flow: Observation -> DeviceView**
 

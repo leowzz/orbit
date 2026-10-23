@@ -254,14 +254,27 @@ type userRules struct {
 
 func rulesFor(kind, id string) []rule {
 	root := "orbit/v1/nodes/" + id
-	if kind == "agent" {
+	if kind == "agent" || kind == "worker" {
 		root = "orbit/v1/agents/" + id
+	}
+	if kind == "worker" {
+		return []rule{
+			{"allow", "publish", root + "/audio/state"},
+			{"allow", "publish", root + "/audio/results"},
+			{"allow", "subscribe", root + "/audio/acks"},
+			{"allow", "subscribe", "orbit/v1/audio/jobs"},
+			{"deny", "all", "$SYS/#"},
+			{"deny", "all", "#"},
+		}
 	}
 	rules := []rule{{"allow", "publish", root + "/state"}}
 	if kind == "agent" {
 		rules = append(rules, rule{"allow", "publish", root + "/observations/+"}, rule{"allow", "publish", root + "/results"}, rule{"allow", "publish", root + "/shortcuts"}, rule{"allow", "subscribe", root + "/commands"})
 	} else {
 		rules = append(rules, rule{"allow", "publish", root + "/intents"}, rule{"allow", "subscribe", root + "/view"}, rule{"allow", "subscribe", root + "/navigation"})
+		if kind == "audio-node" {
+			rules = append(rules, rule{"allow", "publish", root + "/audio/segments"}, rule{"allow", "subscribe", root + "/audio/acks"})
+		}
 	}
 	return append(rules, rule{"deny", "all", "$SYS/#"}, rule{"deny", "all", "#"})
 }
@@ -328,8 +341,8 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (Result, error) 
 	if err := c.mutable(input.Username); err != nil {
 		return Result{}, err
 	}
-	if (input.Kind != "node" && input.Kind != "agent") || !participantPattern.MatchString(input.ParticipantID) {
-		return Result{}, &Error{400, "请选择设备或 Agent，并填写有效 ID（小写字母、数字、下划线或短横线，最多 64 位）"}
+	if (input.Kind != "node" && input.Kind != "audio-node" && input.Kind != "agent" && input.Kind != "worker") || !participantPattern.MatchString(input.ParticipantID) {
+		return Result{}, &Error{400, "请选择连接类型，并填写有效 ID（小写字母、数字、下划线或短横线，最多 64 位）"}
 	}
 	if err := c.checkAuthentication(ctx); err != nil {
 		return Result{}, err
@@ -376,8 +389,8 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (Result, error) 
 	return Result{Username: input.Username, Password: secret}, nil
 }
 
-// ProvisionNode retries a Core-owned account without rotating its password on
-// every App start. Never adopt a privileged account or overwrite another ACL.
+// ProvisionNode provisions the Android App's Core-owned account. The exact legacy
+// node policy may gain its own audio topics; unrelated policies are never adopted.
 func (c *Client) ProvisionNode(ctx context.Context, username, nodeID, secret string) error {
 	if err := c.mutable(username); err != nil {
 		return err
@@ -400,11 +413,14 @@ func (c *Client) ProvisionNode(ctx context.Context, username, nodeID, secret str
 	if exists && user.Superuser {
 		return &Error{409, "设备 MQTT 用户权限不匹配"}
 	}
-	policy := userRules{username, rulesFor("node", nodeID)}
+	policy := userRules{username, rulesFor("audio-node", nodeID)}
 	var current userRules
 	err = c.request(ctx, "GET", rulesPath+"/"+url.PathEscape(username), nil, &current)
 	if err == nil && !slices.Equal(current.Rules, policy.Rules) {
-		return &Error{409, "设备 MQTT 权限规则不匹配"}
+		if !slices.Equal(current.Rules, rulesFor("node", nodeID)) {
+			return &Error{409, "设备 MQTT 权限规则不匹配"}
+		}
+		err = c.request(ctx, "PUT", rulesPath+"/"+url.PathEscape(username), policy, nil)
 	}
 	if isStatus(err, 404) {
 		if exists {

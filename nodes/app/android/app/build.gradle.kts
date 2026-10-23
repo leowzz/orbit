@@ -85,6 +85,8 @@ protobuf {
 dependencies {
     implementation("com.google.protobuf:protobuf-javalite:3.25.5")
     implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+    implementation("com.cloudflare.realtimekit.android-vad:webrtc:2.0.10-cf.4:release@aar")
+    implementation("io.github.jaredmdobson:concentus:1.0.2")
     testImplementation("junit:junit:4.13.2")
 }
 

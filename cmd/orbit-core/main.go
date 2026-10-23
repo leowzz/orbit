@@ -228,6 +228,15 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 	logger.Info("orbit core started",
 		zap.String("core_id", cfg.Core.ID),
 	)
+	audioRunner, err := core.NewAudioRunner(store, client, logger, now)
+	if err != nil {
+		return err
+	}
+	audioCtx, stopAudio := context.WithCancel(ctx)
+	audioErr := make(chan error, 1)
+	audioDone := make(chan struct{})
+	go func() { defer close(audioDone); audioErr <- audioRunner.Run(audioCtx) }()
+	defer func() { stopAudio(); <-audioDone }()
 	runnerErr := make(chan error, 1)
 	go func() { runnerErr <- runner.Run(ctx) }()
 	select {
@@ -239,6 +248,8 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 		}
 		return err
 	case err := <-runnerErr:
+		return err
+	case err := <-audioErr:
 		return err
 	case err := <-client.TerminalErrors():
 		return fmt.Errorf("mqtt connection terminated: %w", err)

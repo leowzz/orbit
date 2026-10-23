@@ -43,6 +43,15 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            AudioCaptureService.start(this)
+        } else if (!AudioCaptureService.preferences(this).getBoolean("asked", false)) {
+            AudioCaptureService.preferences(this).edit().putBoolean("asked", true).apply()
+            android.app.AlertDialog.Builder(this).setTitle("允许后台录音？")
+                .setMessage("Orbit 会持续使用麦克风，将语音片段保存在本机并上传到你配置的 Core。你可以随时从常驻通知或应用中停止录音。")
+                .setPositiveButton("申请麦克风权限") { _, _ -> requestAudioPermission() }
+                .setNegativeButton("暂不允许", null).show()
+        }
         if (pendingUpdatePermission && packageManager.canRequestPackageInstalls()) {
             pendingUpdatePermission = false
             try { openUpdateInstaller() }
@@ -91,6 +100,18 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.orbit/node").setMethodCallHandler { call, result ->
             try {
                 when (call.method) {
+                    "audioStatus" -> result.success(AudioCaptureService.snapshot(this))
+                    "audioStart" -> {
+                        AudioCaptureService.preferences(this).edit().putBoolean("enabled", true).apply()
+                        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) requestAudioPermission()
+                        else AudioCaptureService.start(this)
+                        result.success(null)
+                    }
+                    "audioStop" -> {
+                        AudioCaptureService.preferences(this).edit().putBoolean("enabled", false).apply()
+                        stopService(Intent(this, AudioCaptureService::class.java))
+                        result.success(null)
+                    }
                     "updateStatus" -> result.success(updates.status())
                     "checkUpdate" -> io.execute {
                         try {
@@ -124,6 +145,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "deviceModel" -> result.success(Build.MODEL)
                     "appConnection" -> {
+                        AudioCaptureService.preferences(this).edit().putBoolean("unified_app", true).apply()
                         val args = call.arguments as? Map<*, *>
                         val vault = ConfigVault(this, "orbit_app_connection")
                         val next = args?.let { NodeConfig(it["server"].toString(), "", "", it["token"].toString()) }
@@ -132,11 +154,13 @@ class MainActivity : FlutterActivity() {
                             require(uri.scheme in listOf("https", "http") && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null && next.password.isNotBlank())
                         }
                         val previous = vault.load()
+                        if (next == null) stopService(Intent(this, AudioCaptureService::class.java))
                         if (previous != next) {
                             ConfigVault(this, "orbit_app_mqtt").clear()
                             if (next == null) vault.clear() else vault.save(next)
                             ViewStore(this).clear()
                             if (next == null) stopService(Intent(this, OrbitService::class.java))
+                            stopService(Intent(this, AudioCaptureService::class.java))
                             OrbitWidgets.updateAll(this, force = true)
                         }
                         if (next != null && !OrbitService.active) startForegroundService(Intent(this, OrbitService::class.java))
@@ -152,7 +176,11 @@ class MainActivity : FlutterActivity() {
                             val mqtt = NodeConfig.from(args["mqtt"] as Map<*, *>).also { it.validate() }
                             require(mqtt.username.isNotBlank() && mqtt.password.isNotBlank())
                             val vault = ConfigVault(this, "orbit_app_mqtt")
-                            if (vault.load() != mqtt) vault.save(mqtt)
+                            if (vault.load() != mqtt) {
+                                require(!AudioCaptureService.active) { "请先停止录音，再修改 MQTT 配置" }
+                                vault.save(mqtt)
+                            }
+                            AudioCaptureService.start(this)
                             result.success(true)
                         }
                     }
@@ -187,10 +215,12 @@ class MainActivity : FlutterActivity() {
                     "save" -> {
                         val config = NodeConfig.from(call.arguments as Map<*, *>).also { it.validate() }
                         val old = ConfigVault(this).load()
+                        require(!AudioCaptureService.active || old == config) { "请先停止录音，再修改 MQTT 配置" }
                         ConfigVault(this).save(config)
                         if (old?.nodeId != config.nodeId || old.uri != config.uri) ViewStore(this).clear()
                         // A running service reloads on its serialized worker; no overlapping client IDs.
                         if (OrbitService.active) startService(Intent(this, OrbitService::class.java))
+                        AudioCaptureService.start(this)
                         OrbitWidgets.updateAll(this)
                         result.success(null)
                     }
@@ -242,6 +272,19 @@ class MainActivity : FlutterActivity() {
             } catch (error: Exception) {
                 result.error("operation_failed", "操作失败，请重新保存配置或检查设备设置", null)
             }
+        }
+    }
+    private fun requestAudioPermission() {
+        val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        requestPermissions(permissions.toTypedArray(), 42)
+    }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 42 && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            AudioCaptureService.start(this)
         }
     }
     override fun onStart() {

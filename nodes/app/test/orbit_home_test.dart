@@ -125,7 +125,10 @@ void main() {
         await tester.tap(find.widgetWithText(NavigationDestination, '收件箱'));
         await tester.pumpAndSettle();
         expect(find.text('设置页切换时保留草稿'), findsOneWidget);
-        expect(calls, widgetsEnabled ? ['appConnection'] : isEmpty);
+        expect(
+          calls.where((method) => method != 'audioStatus'),
+          widgetsEnabled ? ['appConnection'] : isEmpty,
+        );
         expect(tester.takeException(), isNull);
       },
     );

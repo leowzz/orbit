@@ -14,6 +14,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  Mic,
   RefreshCw,
   Server,
   Settings2,
@@ -29,12 +30,14 @@ import Nodes from "./pages/Nodes";
 import System from "./pages/System";
 import Apps from "./pages/Apps";
 import MqttUsers from "./pages/MqttUsers";
+import Audio from "./pages/Audio";
 const navigation = [
   { path: "/", label: "总览", icon: LayoutDashboard },
   { path: "/agents", label: "电脑与来源", icon: Server },
   { path: "/nodes", label: "设备", icon: Boxes },
   { path: "/mqtt", label: "MQTT 账号", icon: KeyRound },
   { path: "/messages", label: "收件箱", icon: Smartphone },
+  { path: "/audio", label: "音频记录", icon: Mic },
   { path: "/system", label: "系统信息", icon: Settings2 },
 ];
 export default function App() {
@@ -314,6 +317,7 @@ export default function App() {
               />
               <Route path="/messages" element={<Apps />} />
               <Route path="/mqtt" element={<MqttUsers />} />
+              <Route path="/audio" element={<Audio state={state} />} />
               <Route
                 path="/apps"
                 element={<Navigate to="/messages" replace />}

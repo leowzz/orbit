@@ -265,11 +265,13 @@ function CreateDialog({
             onChange={(e) => setKind(e.target.value)}
           >
             <option value="node">设备（Node）</option>
+            <option value="audio-node">录音设备（Android Node）</option>
             <option value="agent">电脑（Agent）</option>
+            <option value="worker">语音识别（Worker Agent）</option>
           </select>
         </label>
         <label>
-          {kind === "node" ? "Node ID" : "Agent ID"}
+          {kind.endsWith("node") ? "Node ID" : "Agent ID"}
           <input
             name="participant_id"
             autoFocus
@@ -280,7 +282,7 @@ function CreateDialog({
             disabled={busy}
             onChange={(e) => setId(e.target.value)}
             placeholder={
-              kind === "node" ? "例如：android-phone" : "例如：macos-agent"
+              kind.endsWith("node") ? "例如：android-phone" : "例如：asr-sdt"
             }
           />
         </label>
@@ -347,7 +349,7 @@ function CredentialDialog({
           </label>
           {secret.participant_id && (
             <label>
-              {secret.kind === "node" ? "Node ID" : "Agent ID"}
+              {secret.kind?.endsWith("node") ? "Node ID" : "Agent ID"}
               <input readOnly value={secret.participant_id} />
             </label>
           )}
@@ -396,7 +398,7 @@ function CredentialDialog({
                     `用户名: ${secret.username}`,
                     ...(secret.participant_id
                       ? [
-                          `${secret.kind === "node" ? "Node" : "Agent"} ID: ${secret.participant_id}`,
+                          `${secret.kind?.endsWith("node") ? "Node" : "Agent"} ID: ${secret.participant_id}`,
                         ]
                       : []),
                     `密码: ${secret.password}`,

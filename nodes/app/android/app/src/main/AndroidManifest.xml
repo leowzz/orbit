@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
@@ -11,6 +14,7 @@
         android:name=".OrbitApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher">
+        <meta-data android:name="dev.orbit.UNIFIED_APP" android:value="true" />
         <provider android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.updates"
             android:exported="false" android:grantUriPermissions="true">
@@ -50,6 +54,7 @@
             android:taskAffinity=""
             android:theme="@style/InputMethodPickerTheme"
             android:label="切换输入法" />
+        <service android:name=".AudioCaptureService" android:exported="false" android:foregroundServiceType="microphone" />
         <service android:name=".OrbitService" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="User-enabled continuous MQTT updates for Orbit home-screen status widgets" />
         </service>

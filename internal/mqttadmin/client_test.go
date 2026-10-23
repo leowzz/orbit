@@ -69,10 +69,14 @@ func TestProvisionNodeRetriesWithoutChangingScopeOrPassword(t *testing.T) {
 			policy = policies[0]
 			writes++
 			w.WriteHeader(204)
+		case path == rulesPath+"/"+username && r.Method == "PUT":
+			_ = json.NewDecoder(r.Body).Decode(&policy)
+			writes++
+			w.WriteHeader(204)
 		case (path == usersPath && r.Method == "POST") || (path == usersPath+"/"+username && r.Method == "PUT"):
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["password"] != secret || body["is_superuser"] != false || !reflect.DeepEqual(policy.Rules, rulesFor("node", "phone")) {
+			if body["password"] != secret || body["is_superuser"] != false || !reflect.DeepEqual(policy.Rules, rulesFor("audio-node", "phone")) {
 				t.Error("credential or ACL changed")
 			}
 			exists = true
@@ -91,19 +95,26 @@ func TestProvisionNodeRetriesWithoutChangingScopeOrPassword(t *testing.T) {
 	if writes != 3 {
 		t.Fatal("expected policy then credential and idempotent password update")
 	}
+	policy.Rules = rulesFor("node", "phone")
+	if err := c.ProvisionNode(context.Background(), username, "phone", secret); err != nil {
+		t.Fatalf("legacy Android ACL upgrade failed: %v", err)
+	}
+	if writes != 5 || !reflect.DeepEqual(policy.Rules, rulesFor("audio-node", "phone")) {
+		t.Fatal("legacy policy was not upgraded before credentials")
+	}
 	for _, privileged := range []bool{true, false} {
 		superuser, wrongPolicy = privileged, !privileged
 		if err := c.ProvisionNode(context.Background(), username, "phone", secret); err == nil {
 			t.Fatal("unsafe account adopted")
 		}
-		if writes != 3 {
+		if writes != 5 {
 			t.Fatal("unsafe account mutated")
 		}
 	}
 }
 
 func TestCreateInstallsRestrictivePolicyBeforeCredentialsAndRetriesOrphanPolicy(t *testing.T) {
-	for _, kind := range []string{"node", "agent"} {
+	for _, kind := range []string{"node", "audio-node", "agent", "worker"} {
 		t.Run(kind, func(t *testing.T) {
 			var policy userRules
 			var order []string
@@ -172,6 +183,9 @@ func TestCreateInstallsRestrictivePolicyBeforeCredentialsAndRetriesOrphanPolicy(
 				t.Fatal(order)
 			}
 			for _, rule := range policy.Rules {
+				if kind == "worker" && rule.Permission == "allow" && rule.Action == "subscribe" && rule.Topic == "orbit/v1/audio/jobs" {
+					continue
+				}
 				if rule.Permission == "allow" && !strings.Contains(rule.Topic, "/device-one/") {
 					t.Fatal("scope escaped")
 				}
