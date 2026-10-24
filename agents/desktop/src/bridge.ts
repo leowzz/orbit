@@ -48,11 +48,22 @@ const settings: Settings = {
       refreshEndpoint: "",
       usageEndpoint: "",
     },
+    inference: {
+      enabled: false,
+      agentId: "sdt-asr",
+      username: "",
+      modelPath: "",
+      runtimePath: "",
+      device: "auto",
+      queueCapacity: 1000,
+    },
   },
   mqttPassword: null,
   usagePassword: null,
+  inferencePassword: null,
   hasMqttPassword: false,
   hasUsagePassword: false,
+  hasInferencePassword: false,
 };
 const status: Status = {
   running: false,

@@ -4,7 +4,7 @@
 
 ## 当前交接：Windows Agent 与原生推理
 
-新会话请先阅读 [Windows 桌面 Agent 与原生 ASR 实现交接](docs/desktop-agent-windows-inference-handoff.md)。目标是在现有 Rust/Tauri Agent 上完整实现 macOS 能力的 Windows 对等版本，并增加可选 speech.cpp / Qwen3-ASR GGUF 推理、模型管理和 SDT 迁移。文档包含当前缺口、协议与持久队列约束、实施阶段、真机验收及可复制的接手任务说明；目前仅完成方案交接，尚未实现。
+新会话请先阅读 [Windows 桌面 Agent 与原生 ASR 实现交接](docs/desktop-agent-windows-inference-handoff.md)。目标是在现有 Rust/Tauri Agent 上完整实现 macOS 能力的 Windows 对等版本，并增加可选 speech.cpp / Qwen3-ASR GGUF 推理、模型管理和 SDT 迁移。当前已落地本地推理配置、严格音频协议、SQLite 持久队列、speech.cpp v0.8.11 C ABI 封装和 Core 的 Vulkan/Metal 后端兼容；Windows 真机推理、MQTT worker 生命周期、Opus 解码、安装发布及 SDT 迁移仍需继续验收。
 
 ## 既有 App Node 交接
 

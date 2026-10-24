@@ -18,6 +18,7 @@ pub struct Config {
     pub mqtt: Mqtt,
     pub codex: Codex,
     pub usage: Usage,
+    pub inference: Inference,
     pub allow_open: bool,
     pub ntp_server: String,
     pub ntp_interval: u64,
@@ -62,6 +63,30 @@ pub struct Usage {
     pub login_endpoint: String,
     pub refresh_endpoint: String,
     pub usage_endpoint: String,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Inference {
+    pub enabled: bool,
+    pub agent_id: String,
+    pub username: String,
+    pub model_path: String,
+    pub runtime_path: String,
+    pub device: String,
+    pub queue_capacity: u32,
+}
+impl Default for Inference {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            agent_id: "sdt-asr".into(),
+            username: String::new(),
+            model_path: String::new(),
+            runtime_path: String::new(),
+            device: "auto".into(),
+            queue_capacity: 1000,
+        }
+    }
 }
 impl Default for Codex {
     fn default() -> Self {
@@ -112,6 +137,7 @@ impl Default for Config {
             mqtt: Mqtt::default(),
             codex: Codex::default(),
             usage: Usage::default(),
+            inference: Inference::default(),
             allow_open: false,
             ntp_server: "ntp.aliyun.com".into(),
             ntp_interval: 600,
@@ -123,6 +149,7 @@ impl Default for Config {
 pub struct Secrets {
     pub mqtt: String,
     pub usage: String,
+    pub inference: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -130,8 +157,10 @@ pub struct Settings {
     pub config: Config,
     pub mqtt_password: Option<String>,
     pub usage_password: Option<String>,
+    pub inference_password: Option<String>,
     pub has_mqtt_password: bool,
     pub has_usage_password: bool,
+    pub has_inference_password: bool,
 }
 impl Settings {
     pub fn masked(config: Config, secrets: &Secrets) -> Self {
@@ -139,8 +168,10 @@ impl Settings {
             config,
             mqtt_password: None,
             usage_password: None,
+            inference_password: None,
             has_mqtt_password: !secrets.mqtt.is_empty(),
             has_usage_password: !secrets.usage.is_empty(),
+            has_inference_password: !secrets.inference.is_empty(),
         }
     }
     pub fn secrets(&self, previous: &Secrets) -> Secrets {
@@ -153,6 +184,10 @@ impl Settings {
                 .usage_password
                 .clone()
                 .unwrap_or_else(|| previous.usage.clone()),
+            inference: self
+                .inference_password
+                .clone()
+                .unwrap_or_else(|| previous.inference.clone()),
         }
     }
 }
@@ -188,8 +223,8 @@ impl Config {
         if self.mqtt.cert_file.is_empty() != self.mqtt.key_file.is_empty() {
             return Err("客户端证书和私钥需要同时填写".into());
         }
-        if !self.codex.enabled && !self.usage.enabled {
-            return Err("请至少启用一种数据来源".into());
+        if !self.codex.enabled && !self.usage.enabled && !self.inference.enabled {
+            return Err("请至少启用一种数据来源或本地推理".into());
         }
         if self.allow_open && !self.codex.enabled {
             return Err("允许打开会话前需启用 Codex 来源".into());
@@ -230,6 +265,17 @@ impl Config {
                 return Err("请检查 Sub2API 时区、采集间隔和超时设置".into());
             }
         }
+        if self.inference.enabled {
+            if !audio_identity(&self.inference.agent_id) {
+                return Err("本地推理 Worker 标识只能包含小写字母、数字、横线和下划线".into());
+            }
+            if self.inference.queue_capacity == 0 || self.inference.queue_capacity > 1000 {
+                return Err("本地推理队列容量需在 1–1000 之间".into());
+            }
+            if !matches!(self.inference.device.as_str(), "auto" | "cpu" | "gpu") {
+                return Err("本地推理设备只能选择自动、CPU 或 GPU".into());
+            }
+        }
         if self.ntp_server.trim().is_empty()
             || self.ntp_interval == 0
             || !(1..=30).contains(&self.ntp_timeout)
@@ -238,6 +284,14 @@ impl Config {
         }
         Ok(())
     }
+}
+fn audio_identity(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value.as_bytes()[0].is_ascii_alphanumeric()
+        && value
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')
 }
 impl Usage {
     pub fn endpoints(&self) -> [String; 3] {
@@ -426,6 +480,19 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
     c.usage.login_endpoint = text(&["sources", "sub2api", "login_endpoint"]);
     c.usage.refresh_endpoint = text(&["sources", "sub2api", "refresh_endpoint"]);
     c.usage.usage_endpoint = text(&["sources", "sub2api", "usage_endpoint"]);
+    c.inference.enabled = boolean(&["inference", "enabled"], false);
+    c.inference.agent_id = text(&["inference", "agent_id"]);
+    if c.inference.agent_id.is_empty() {
+        c.inference.agent_id = Inference::default().agent_id;
+    }
+    c.inference.username = text(&["inference", "username"]);
+    c.inference.model_path = resolve(text(&["inference", "model_path"]));
+    c.inference.runtime_path = resolve(text(&["inference", "runtime_path"]));
+    let device = text(&["inference", "device"]);
+    if !device.is_empty() {
+        c.inference.device = device;
+    }
+    c.inference.queue_capacity = v["inference"]["queue_capacity"].as_u64().unwrap_or(1000) as u32;
     c.allow_open = boolean(&["capabilities", "open_codex_session", "enabled"], false);
     let ntp = text(&["ntp", "server"]);
     if !ntp.is_empty() {
@@ -434,6 +501,7 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
     let secrets = Secrets {
         mqtt: secret(&["mqtt", "credentials", "password_file"])?,
         usage: secret(&["sources", "sub2api", "credentials", "password_file"])?,
+        inference: secret(&["inference", "credentials", "password_file"])?,
     };
     c.ntp_interval = duration(&["ntp", "sync_interval"], 600)?;
     c.ntp_timeout = duration(&["ntp", "timeout"], 2)?;
@@ -452,8 +520,10 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
         config: c,
         mqtt_password: Some(secrets.mqtt),
         usage_password: Some(secrets.usage),
+        inference_password: Some(secrets.inference),
         has_mqtt_password: false,
         has_usage_password: false,
+        has_inference_password: false,
     })
 }
 
@@ -559,10 +629,23 @@ mod tests {
         let s = Secrets {
             mqtt: "secret".into(),
             usage: "other".into(),
+            inference: "asr-secret".into(),
         };
         let text = serde_json::to_string(&Settings::masked(c, &s)).unwrap();
         assert!(!text.contains("secret"));
         assert!(!text.contains("other"));
+        assert!(!text.contains("asr-secret"));
+    }
+    #[test]
+    fn inference_can_be_the_only_enabled_capability() {
+        let mut c = Config::default();
+        c.mqtt.url = "mqtts://example.test:8883".into();
+        c.codex.enabled = false;
+        c.usage.enabled = false;
+        c.inference.enabled = true;
+        assert!(c.validate(&Secrets::default()).is_ok());
+        c.inference.device = "cuda".into();
+        assert!(c.validate(&Secrets::default()).is_err());
     }
     #[test]
     fn import_resolves_secrets_and_preserves_identity() {

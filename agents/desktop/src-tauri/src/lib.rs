@@ -2,6 +2,7 @@ pub mod clock;
 pub mod codex;
 pub mod commands;
 pub mod config;
+pub mod inference;
 pub mod recent_apps;
 pub mod runtime;
 pub mod shortcuts;
@@ -45,12 +46,41 @@ impl Agent {
     }
     fn launch(&self, inner: &mut Inner) {
         let cancel = CancellationToken::new();
-        let task = tauri::async_runtime::spawn(runtime::run(
-            inner.config.clone(),
-            inner.secrets.clone(),
-            self.status.clone(),
-            cancel.clone(),
-        ));
+        if let Ok(mut status) = self.status.lock() {
+            status.running = true;
+            status.message = "正在启动本机 Worker".into();
+        }
+        let config = inner.config.clone();
+        let secrets = inner.secrets.clone();
+        let inference_config = config.clone();
+        let inference_secrets = secrets.clone();
+        let status = self.status.clone();
+        let ordinary_status = status.clone();
+        let ordinary_cancel = cancel.clone();
+        let inference_cancel = cancel.clone();
+        let task = tauri::async_runtime::spawn(async move {
+            let ordinary = async move {
+                if config.codex.enabled || config.usage.enabled {
+                    runtime::run(config, secrets, ordinary_status, ordinary_cancel).await;
+                } else {
+                    ordinary_cancel.cancelled().await;
+                }
+            };
+            let inference = async move {
+                if inference_config.inference.enabled {
+                    inference::worker::run(
+                        inference_config,
+                        inference_secrets,
+                        status,
+                        inference_cancel,
+                    )
+                    .await;
+                } else {
+                    inference_cancel.cancelled().await;
+                }
+            };
+            tokio::join!(ordinary, inference);
+        });
         inner.active = Some(Active { cancel, task });
     }
 }

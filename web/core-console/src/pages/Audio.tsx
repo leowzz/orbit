@@ -8,6 +8,7 @@ import {
   type AudioWorker,
   audioStatus,
   workerStatus,
+  audioDevice,
   seconds,
 } from "../audio";
 import { Modal } from "./Apps";
@@ -93,7 +94,7 @@ export default function Audio({ state }: { state: NetworkState }) {
               <div>
                 <strong>{worker.host_label || worker.agent_id}</strong>
                 <span className="audio-worker-model">
-                  {worker.model} · {worker.device === "cuda" ? "GPU" : "CPU"}
+                  {worker.model} · {audioDevice(worker.device)}
                 </span>
               </div>
               <div>
@@ -370,8 +371,7 @@ function AudioRecordDetail({
               <>
                 <dt>模型</dt>
                 <dd>
-                  {detail.result.model} ·{" "}
-                  {detail.result.device === "cuda" ? "GPU" : "CPU"}
+                  {detail.result.model} · {audioDevice(detail.result.device)}
                 </dd>
                 <dt>语言</dt>
                 <dd>{detail.result.language || "未识别"}</dd>

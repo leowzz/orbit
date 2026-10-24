@@ -50,13 +50,24 @@ export interface Config {
     refreshEndpoint: string;
     usageEndpoint: string;
   };
+  inference: {
+    enabled: boolean;
+    agentId: string;
+    username: string;
+    modelPath: string;
+    runtimePath: string;
+    device: "auto" | "cpu" | "gpu";
+    queueCapacity: number;
+  };
 }
 export interface Settings {
   config: Config;
   mqttPassword: string | null;
   usagePassword: string | null;
+  inferencePassword: string | null;
   hasMqttPassword: boolean;
   hasUsagePassword: boolean;
+  hasInferencePassword: boolean;
 }
 export interface Source {
   lastSuccess: number | null;

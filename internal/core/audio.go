@@ -83,6 +83,10 @@ type AudioWorkerState struct {
 	UpdatedAt     string `json:"updated_at"`
 }
 
+func audioDevice(value string) bool {
+	return value == "cpu" || value == "cuda" || value == "vulkan" || value == "metal"
+}
+
 func audioUUID(s string) bool {
 	u, e := uuid.Parse(s)
 	return e == nil && u.String() == strings.ToLower(s)
@@ -199,7 +203,7 @@ func (s *RouteStore) pruneAudio(ctx context.Context, tx *sql.Tx) error {
 }
 
 func (s *RouteStore) storeAudioResult(ctx context.Context, r AudioResult) error {
-	if r.SchemaVersion != 1 || !audioIdentity.MatchString(r.AgentID) || !audioUUID(r.JobID) || r.JobID != r.SegmentID || !audioTime(r.CompletedAt) || (r.Status != "completed" && r.Status != "failed") || (r.Device != "cpu" && r.Device != "cuda") || r.ProcessingMS < 0 || r.ProcessingMS > 86400000 || len(r.Text) > 64000 || len(r.Language) > 64 || len(r.Model) > 256 || len(r.ErrorCode) > 128 || len(r.ErrorMessage) > 2048 || len(r.Segments) > 1000 {
+	if r.SchemaVersion != 1 || !audioIdentity.MatchString(r.AgentID) || !audioUUID(r.JobID) || r.JobID != r.SegmentID || !audioTime(r.CompletedAt) || (r.Status != "completed" && r.Status != "failed") || !audioDevice(r.Device) || r.ProcessingMS < 0 || r.ProcessingMS > 86400000 || len(r.Text) > 64000 || len(r.Language) > 64 || len(r.Model) > 256 || len(r.ErrorCode) > 128 || len(r.ErrorMessage) > 2048 || len(r.Segments) > 1000 {
 		return errors.New("invalid audio result")
 	}
 	if r.Status == "completed" && (r.ErrorCode != "" || r.ErrorMessage != "") {
@@ -325,7 +329,7 @@ func (r *AudioRunner) handle(ctx context.Context, m mqtt.Message) error {
 		if e := decodeAudio(m.Payload, &w); e != nil {
 			return e
 		}
-		if w.SchemaVersion != 1 || w.AgentID != p[3] || !audioTime(w.UpdatedAt) || len(w.HostLabel) > 256 || len(w.Model) > 256 || (w.Device != "cpu" && w.Device != "cuda") || !strings.Contains("|starting|ready|processing|error|offline|", "|"+w.Status+"|") {
+		if w.SchemaVersion != 1 || w.AgentID != p[3] || !audioTime(w.UpdatedAt) || len(w.HostLabel) > 256 || len(w.Model) > 256 || !audioDevice(w.Device) || !strings.Contains("|starting|ready|processing|error|offline|", "|"+w.Status+"|") {
 			return errors.New("invalid audio worker state")
 		}
 		raw, _ := json.Marshal(w)

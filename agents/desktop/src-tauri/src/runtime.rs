@@ -38,6 +38,7 @@ pub struct Status {
     pub weekly_error: String,
     pub clock_error: String,
     pub last_ack: Option<i64>,
+    pub inference: InferenceView,
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +47,16 @@ pub struct SourceView {
     pub error: String,
     pub sessions: Option<u32>,
     pub running_sessions: Option<u32>,
+}
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InferenceView {
+    pub status: String,
+    pub connected: bool,
+    pub device: String,
+    pub queued: u32,
+    pub outbox: u32,
+    pub error: String,
 }
 pub type SharedStatus = Arc<Mutex<Status>>;
 fn update(status: &SharedStatus, f: impl FnOnce(&mut Status)) {
@@ -428,11 +439,9 @@ fn record_source(
 
 pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: CancellationToken) {
     update(&status, |v| {
-        *v = Status {
-            running: true,
-            message: "正在连接".into(),
-            ..Default::default()
-        }
+        v.running = true;
+        v.message = "正在连接".into();
+        v.connected = false;
     });
     let clock = Arc::new(Clock::default());
     let mut workers = JoinSet::new();

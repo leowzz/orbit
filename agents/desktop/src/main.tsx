@@ -137,7 +137,7 @@ function App() {
     );
   }
   function source(
-    group: "mqtt" | "codex" | "usage",
+    group: "mqtt" | "codex" | "usage" | "inference",
     key: string,
     value: unknown,
   ) {
@@ -747,6 +747,95 @@ function App() {
                             </Field>
                           ))}
                         </details>
+                      </>
+                    )}
+                  </Section>
+                  <Section title="本地语音识别">
+                    <Toggle
+                      label="启用本地推理 Worker"
+                      hint="使用本机 speech.cpp/Qwen3-ASR 处理 Core 音频任务；默认关闭。"
+                      value={settings.config.inference.enabled}
+                      onChange={(v) => source("inference", "enabled", v)}
+                    />
+                    {settings.config.inference.enabled && (
+                      <>
+                        <Field label="Worker 标识">
+                          <input
+                            value={settings.config.inference.agentId}
+                            onChange={(e) =>
+                              source("inference", "agentId", e.target.value)
+                            }
+                          />
+                        </Field>
+                        <div className="two-col">
+                          <Field label="Worker 用户名">
+                            <input
+                              value={settings.config.inference.username}
+                              onChange={(e) =>
+                                source("inference", "username", e.target.value)
+                              }
+                            />
+                          </Field>
+                          <Field label="Worker 密码">
+                            <input
+                              type="password"
+                              autoComplete="new-password"
+                              placeholder={
+                                settings.hasInferencePassword
+                                  ? "已保存，未修改时保留"
+                                  : ""
+                              }
+                              value={settings.inferencePassword ?? ""}
+                              onChange={(e) =>
+                                setSettings({
+                                  ...settings,
+                                  inferencePassword: e.target.value,
+                                })
+                              }
+                            />
+                          </Field>
+                        </div>
+                        <Field label="模型路径" hint="GGUF 文件路径；未填写时不会加载模型。">
+                          <input
+                            value={settings.config.inference.modelPath}
+                            onChange={(e) =>
+                              source("inference", "modelPath", e.target.value)
+                            }
+                          />
+                        </Field>
+                        <div className="two-col">
+                          <Field label="运行库路径">
+                            <input
+                              value={settings.config.inference.runtimePath}
+                              onChange={(e) =>
+                                source("inference", "runtimePath", e.target.value)
+                              }
+                            />
+                          </Field>
+                          <Field label="设备">
+                            <select
+                              value={settings.config.inference.device}
+                              onChange={(e) =>
+                                source("inference", "device", e.target.value)
+                              }
+                            >
+                              <option value="auto">自动</option>
+                              <option value="cpu">CPU</option>
+                              <option value="gpu">GPU（Vulkan/Metal）</option>
+                            </select>
+                          </Field>
+                        </div>
+                        <Field label="队列容量">
+                          <input
+                            type="number"
+                            min={1}
+                            max={1000}
+                            value={settings.config.inference.queueCapacity}
+                            onChange={(e) =>
+                              source("inference", "queueCapacity", Number(e.target.value))
+                            }
+                          />
+                        </Field>
                       </>
                     )}
                   </Section>

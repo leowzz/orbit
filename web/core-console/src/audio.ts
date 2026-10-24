@@ -69,4 +69,8 @@ export const workerStatus = (worker: AudioWorker) =>
         error: "发生错误",
         offline: "未连接",
       }[worker.status] ?? worker.status);
+export const audioDevice = (device: string) =>
+  ({ cpu: "CPU", cuda: "CUDA", vulkan: "Vulkan", metal: "Metal" })[
+    device
+  ] ?? device;
 export const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} 秒`;

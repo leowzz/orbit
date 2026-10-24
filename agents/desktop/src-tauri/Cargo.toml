@@ -21,6 +21,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
+thiserror = "2"
 serde_yaml = "0.9"
 prost = "0.13"
 prost-types = "0.13"
@@ -47,6 +48,7 @@ base64 = "0.22"
 sysinfo = "0.33"
 scraper = "0.24"
 image = { version = "0.25", default-features = false, features = ["png", "ico", "jpeg", "gif", "webp"] }
+libloading = "0.8"
 resvg = { version = "0.45", default-features = false }
 
 [dev-dependencies]
