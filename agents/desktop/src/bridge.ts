@@ -50,6 +50,7 @@ const settings: Settings = {
     },
     inference: {
       enabled: false,
+      modelId: "qwen3-asr-0.6b-q8_0",
       agentId: "sdt-asr",
       username: "",
       modelPath: "",
@@ -74,6 +75,20 @@ const status: Status = {
   weeklyError: "",
   clockError: "",
   lastAck: null,
+  inference: {
+    status: "offline",
+    connected: false,
+    device: "",
+    queued: 0,
+    outbox: 0,
+    error: "",
+    modelId: "qwen3-asr-0.6b-q8_0",
+    modelReady: false,
+    modelDownloading: false,
+    modelDownloaded: 0,
+    modelTotal: 0,
+    modelError: "",
+  },
 };
 export async function call<T>(
   command: string,
@@ -83,6 +98,23 @@ export async function call<T>(
   if (preview) {
     if (command === "settings_get") return structuredClone(settings) as T;
     if (command === "agent_status") return structuredClone(status) as T;
+    if (command === "inference_models")
+      return [
+        {
+          id: "qwen3-asr-0.6b-q8_0",
+          name: "Qwen3-ASR 0.6B Q8_0",
+          filename: "Qwen3-ASR-0.6B-Q8_0.gguf",
+          revision: "ee78f8709547f39bea3b924a16c72403826cac92",
+          url: "",
+          size: 841502336,
+          downloaded: 0,
+          installed: false,
+          active: false,
+          path: "~/Library/Application Support/Orbit/inference/models/Qwen3-ASR-0.6B-Q8_0.gguf",
+          runtimePath: "",
+          runtimeInstalled: false,
+        },
+      ] as T;
     if (command === "autostart_get") return false as T;
     if (command === "update_status" || command === "update_check")
       return {
@@ -109,6 +141,7 @@ export async function call<T>(
             },
             lastUsed: Date.now() / 1000,
             iconKey: "preview-calendar",
+            status: "running",
           },
           {
             app: {
@@ -120,6 +153,7 @@ export async function call<T>(
             },
             lastUsed: Date.now() / 1000,
             iconKey: "preview-notes",
+            status: "recent",
           },
         ],
       } as T;

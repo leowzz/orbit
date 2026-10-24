@@ -9,10 +9,13 @@ pub mod shortcuts;
 pub mod update;
 pub mod usage;
 pub mod website_icon;
+#[cfg(windows)]
+mod windows_apps;
 pub mod wire {
     include!(concat!(env!("OUT_DIR"), "/orbit.v1.rs"));
 }
 use config::{Config, Secrets, Settings, Store};
+use inference::assets::{self, ModelView};
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -20,6 +23,7 @@ use tauri::{
     Emitter, Manager,
 };
 use tauri_plugin_autostart::ManagerExt;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 struct Active {
@@ -144,6 +148,136 @@ async fn connection_test(
     };
     runtime::test_connection(&settings.config, &secrets).await
 }
+
+#[tauri::command]
+async fn inference_models(agent: tauri::State<'_, Agent>) -> Result<Vec<ModelView>, String> {
+    let inner = agent.inner.lock().await;
+    Ok(vec![assets::model_view(
+        &inner.config.inference.model_id,
+        &inner.config.inference.model_path,
+        &inner.config.inference.runtime_path,
+    )])
+}
+
+async fn apply_inference_model(
+    agent: &Agent,
+    model_id: &str,
+    model_path: std::path::PathBuf,
+) -> Result<Settings, String> {
+    let mut inner = agent.inner.lock().await;
+    inner.config.inference.model_id = model_id.into();
+    inner.config.inference.model_path = model_path.to_string_lossy().into_owned();
+    inner.config.validate(&inner.secrets)?;
+    agent.store.save(&inner.config, &inner.secrets)?;
+    let running = runtime::snapshot(&agent.status).running;
+    Agent::stop(&mut inner).await;
+    if running {
+        agent.launch(&mut inner);
+    }
+    Ok(Settings::masked(inner.config.clone(), &inner.secrets))
+}
+
+#[tauri::command]
+async fn inference_select_model(
+    model_id: String,
+    agent: tauri::State<'_, Agent>,
+) -> Result<Settings, String> {
+    let spec = assets::model_spec(&model_id).ok_or("暂不支持这个模型")?;
+    let path = assets::managed_model_path();
+    tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || assets::verify(&path, spec).map_err(|_| "模型文件校验失败，请重新下载".to_string())
+    })
+    .await
+    .map_err(|_| "模型校验任务失败".to_string())??;
+    apply_inference_model(&agent, &model_id, path).await
+}
+
+#[tauri::command]
+async fn inference_download_model(
+    model_id: String,
+    agent: tauri::State<'_, Agent>,
+) -> Result<Settings, String> {
+    let spec = assets::model_spec(&model_id).ok_or("暂不支持这个模型")?;
+    let (url, target) = if model_id == assets::MODEL_ID {
+        (assets::MODEL_URL, assets::managed_model_path())
+    } else {
+        return Err("暂不支持这个模型".into());
+    };
+    {
+        let mut status = agent.status.lock().map_err(|_| "无法读取 Agent 状态")?;
+        if status.inference.model_downloading {
+            return Err("模型正在下载中".into());
+        }
+        status.inference.model_downloading = true;
+        status.inference.model_downloaded = 0;
+        status.inference.model_total = spec.expected_size.unwrap_or(0);
+        status.inference.model_error.clear();
+    }
+    let result = async {
+        let parent = target.parent().ok_or("模型目录无效")?;
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|_| "无法创建模型目录")?;
+        let partial = target.with_extension("gguf.part");
+        let response = reqwest::Client::new()
+            .get(url)
+            .send()
+            .await
+            .map_err(|_| "模型下载连接失败")?
+            .error_for_status()
+            .map_err(|_| "模型下载服务返回错误")?;
+        let total = response
+            .content_length()
+            .or(spec.expected_size)
+            .unwrap_or(0);
+        if let Ok(mut status) = agent.status.lock() {
+            status.inference.model_total = total;
+        }
+        let mut stream = response;
+        let mut file = tokio::fs::File::create(&partial)
+            .await
+            .map_err(|_| "无法写入模型文件")?;
+        let mut downloaded = 0u64;
+        while let Some(chunk) = stream.chunk().await.map_err(|_| "模型下载中断")? {
+            file.write_all(&chunk)
+                .await
+                .map_err(|_| "无法写入模型文件")?;
+            downloaded = downloaded.saturating_add(chunk.len() as u64);
+            if let Ok(mut status) = agent.status.lock() {
+                status.inference.model_downloaded = downloaded;
+            }
+        }
+        file.flush().await.map_err(|_| "无法保存模型文件")?;
+        drop(file);
+        let partial_for_verify = partial.clone();
+        tokio::task::spawn_blocking(move || assets::verify(&partial_for_verify, spec))
+            .await
+            .map_err(|_| "模型校验任务失败")?
+            .map_err(|_| "模型校验失败，下载文件已删除")?;
+        let _ = tokio::fs::remove_file(&target).await;
+        tokio::fs::rename(&partial, &target)
+            .await
+            .map_err(|_| "无法安装模型文件")?;
+        Ok::<_, String>(())
+    }
+    .await;
+    if let Err(error) = result {
+        let _ = tokio::fs::remove_file(target.with_extension("gguf.part")).await;
+        if let Ok(mut status) = agent.status.lock() {
+            status.inference.model_downloading = false;
+            status.inference.model_error = error.clone();
+        }
+        return Err(error);
+    }
+    if let Ok(mut status) = agent.status.lock() {
+        status.inference.model_downloading = false;
+        status.inference.model_downloaded = spec.expected_size.unwrap_or(0);
+        status.inference.model_total = spec.expected_size.unwrap_or(0);
+        status.inference.model_error.clear();
+    }
+    apply_inference_model(&agent, &model_id, target).await
+}
 #[tauri::command]
 async fn settings_import(path: String) -> Result<Settings, String> {
     tokio::task::spawn_blocking(move || config::import_yaml(std::path::Path::new(&path)))
@@ -249,6 +383,9 @@ pub fn run() {
             agent_status,
             agent_set_running,
             connection_test,
+            inference_models,
+            inference_select_model,
+            inference_download_model,
             autostart_get,
             autostart_set,
             update_status,

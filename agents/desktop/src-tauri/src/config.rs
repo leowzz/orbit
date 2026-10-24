@@ -68,6 +68,7 @@ pub struct Usage {
 #[serde(default, rename_all = "camelCase")]
 pub struct Inference {
     pub enabled: bool,
+    pub model_id: String,
     pub agent_id: String,
     pub username: String,
     pub model_path: String,
@@ -79,10 +80,15 @@ impl Default for Inference {
     fn default() -> Self {
         Self {
             enabled: false,
+            model_id: crate::inference::assets::MODEL_ID.into(),
             agent_id: "sdt-asr".into(),
             username: String::new(),
-            model_path: String::new(),
-            runtime_path: String::new(),
+            model_path: crate::inference::assets::managed_model_path()
+                .to_string_lossy()
+                .into_owned(),
+            runtime_path: crate::inference::assets::managed_runtime_path()
+                .to_string_lossy()
+                .into_owned(),
             device: "auto".into(),
             queue_capacity: 1000,
         }
@@ -481,6 +487,10 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
     c.usage.refresh_endpoint = text(&["sources", "sub2api", "refresh_endpoint"]);
     c.usage.usage_endpoint = text(&["sources", "sub2api", "usage_endpoint"]);
     c.inference.enabled = boolean(&["inference", "enabled"], false);
+    c.inference.model_id = text(&["inference", "model_id"]);
+    if c.inference.model_id.is_empty() {
+        c.inference.model_id = crate::inference::assets::MODEL_ID.into();
+    }
     c.inference.agent_id = text(&["inference", "agent_id"]);
     if c.inference.agent_id.is_empty() {
         c.inference.agent_id = Inference::default().agent_id;

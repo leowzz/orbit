@@ -57,6 +57,12 @@ pub struct InferenceView {
     pub queued: u32,
     pub outbox: u32,
     pub error: String,
+    pub model_id: String,
+    pub model_ready: bool,
+    pub model_downloading: bool,
+    pub model_downloaded: u64,
+    pub model_total: u64,
+    pub model_error: String,
 }
 pub type SharedStatus = Arc<Mutex<Status>>;
 fn update(status: &SharedStatus, f: impl FnOnce(&mut Status)) {

@@ -12,10 +12,11 @@ import {
   RefreshCw,
   Check,
   Orbit,
+  Mic2,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { call, preview } from "./bridge";
-import type { Settings, Status, Source } from "./types";
+import type { InferenceModel, Settings, Status, Source } from "./types";
 import "./style.css";
 import { Shortcuts } from "./Shortcuts";
 import { SoftwareUpdate, useSoftwareUpdate } from "./SoftwareUpdate";
@@ -24,6 +25,7 @@ const pages = [
   { id: "status", name: "运行状态", icon: Activity },
   { id: "connection", name: "连接", icon: Cable },
   { id: "sources", name: "数据来源", icon: Database },
+  { id: "asr", name: "语音识别", icon: Mic2 },
   { id: "shortcuts", name: "快捷入口", icon: Orbit },
   { id: "preferences", name: "偏好设置", icon: SlidersHorizontal },
 ] as const;
@@ -88,6 +90,7 @@ function App() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [autostart, setAutostart] = useState(false);
+  const [models, setModels] = useState<InferenceModel[]>([]);
   const visible = useWindowVisible();
   const update = useSoftwareUpdate(visible);
   const [installing, setInstalling] = useState(false);
@@ -97,6 +100,25 @@ function App() {
       update.status?.phase ?? "",
     );
   const dirty = !!settings && JSON.stringify(settings) !== saved;
+  const inference = status?.inference ?? {
+    status: "offline",
+    connected: false,
+    device: "",
+    queued: 0,
+    outbox: 0,
+    error: "",
+    modelId: "qwen3-asr-0.6b-q8_0",
+    modelReady: false,
+    modelDownloading: false,
+    modelDownloaded: 0,
+    modelTotal: 0,
+    modelError: "",
+  };
+  function bytes(value: number) {
+    if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(1)} GB`;
+    if (value >= 1024 ** 2) return `${(value / 1024 ** 2).toFixed(0)} MB`;
+    return `${value} B`;
+  }
   async function action(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
@@ -115,6 +137,7 @@ function App() {
     setSaved(JSON.stringify(s));
     setStatus(await call<Status>("agent_status"));
     setAutostart(await call<boolean>("autostart_get"));
+    setModels(await call<InferenceModel[]>("inference_models"));
   }
   useEffect(() => {
     void action(load);
@@ -127,6 +150,9 @@ function App() {
   );
   useEffect(() => {
     document.querySelector(".scroll")?.scrollTo({ top: 0 });
+  }, [page]);
+  useEffect(() => {
+    if (page === "asr") void action(async () => setModels(await call("inference_models")));
   }, [page]);
   function config<K extends keyof Settings["config"]>(
     key: K,
@@ -314,6 +340,8 @@ function App() {
                   ? "连接到你的 Orbit 服务"
                   : page === "sources"
                     ? "选择要同步到工作台的数据"
+                    : page === "asr"
+                      ? "管理本机模型、推理设备和 ASR Worker"
                     : page === "shortcuts"
                       ? "管理可由其他设备打开的本机应用和网址"
                       : "管理启动方式与远程操作"}
@@ -537,6 +565,215 @@ function App() {
                   </div>
                 </>
               )}
+              {page === "asr" && (
+                <>
+                  <section className="connection-state">
+                    <div
+                      className={`status-symbol ${inference.connected && inference.modelReady ? "good" : ""}`}
+                    >
+                      <Mic2 size={25} />
+                    </div>
+                    <div>
+                      <h2>
+                        {!settings.config.inference.enabled
+                          ? "本地 ASR 未启用"
+                          : inference.error ||
+                            (inference.connected
+                              ? "ASR Worker 已连接 MQTT"
+                              : "ASR Worker 未连接")}
+                      </h2>
+                      <p>
+                        {inference.modelReady
+                          ? `${inference.device.toUpperCase()} · ${inference.queued} 个待处理任务 · ${inference.outbox} 个待确认结果`
+                          : "下载并选择模型后，保存设置即可启动本机推理。"}
+                      </p>
+                    </div>
+                    <span className={`tag ${inference.modelReady ? "good" : ""}`}>
+                      {inference.status || "offline"}
+                    </span>
+                  </section>
+                  <Section title="Worker 设置">
+                    <Toggle
+                      label="启用本地 ASR Worker"
+                      hint="Agent 会在后台加载 speech.cpp，并从 Core 音频队列消费任务。"
+                      value={settings.config.inference.enabled}
+                      onChange={(v) => source("inference", "enabled", v)}
+                    />
+                    <div className="two-col">
+                      <Field label="计算设备">
+                        <select
+                          value={settings.config.inference.device}
+                          onChange={(e) =>
+                            source("inference", "device", e.target.value)
+                          }
+                        >
+                          <option value="auto">自动选择</option>
+                          <option value="cpu">CPU</option>
+                          <option value="gpu">GPU（Vulkan / Metal）</option>
+                        </select>
+                      </Field>
+                      <Field label="队列容量">
+                        <input
+                          type="number"
+                          min={1}
+                          max={1000}
+                          value={settings.config.inference.queueCapacity}
+                          onChange={(e) =>
+                            source("inference", "queueCapacity", Number(e.target.value))
+                          }
+                        />
+                      </Field>
+                    </div>
+                    <div className="two-col">
+                      <Field label="Worker 标识">
+                        <input
+                          value={settings.config.inference.agentId}
+                          onChange={(e) =>
+                            source("inference", "agentId", e.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field label="Worker 用户名">
+                        <input
+                          value={settings.config.inference.username}
+                          onChange={(e) =>
+                            source("inference", "username", e.target.value)
+                          }
+                        />
+                      </Field>
+                    </div>
+                    <Field label="Worker 密码" hint="密码保存在 Windows 凭据存储中。">
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={
+                          settings.hasInferencePassword
+                            ? "已保存，未修改时保留"
+                            : ""
+                        }
+                        value={settings.inferencePassword ?? ""}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            inferencePassword: e.target.value,
+                          })
+                        }
+                      />
+                    </Field>
+                  </Section>
+                  <Section title="模型库">
+                    {models.length === 0 ? (
+                      <p className="muted">正在读取模型库…</p>
+                    ) : (
+                      models.map((model) => {
+                        const progress =
+                          inference.modelTotal > 0
+                            ? Math.min(
+                                100,
+                                (inference.modelDownloaded / inference.modelTotal) * 100,
+                              )
+                            : 0;
+                        return (
+                          <div className="model-card" key={model.id}>
+                            <div className="model-card-head">
+                              <div>
+                                <strong>{model.name}</strong>
+                                <small>{model.filename} · {bytes(model.size)}</small>
+                              </div>
+                              <span className={`tag ${model.active && model.installed ? "good" : ""}`}>
+                                {model.active && model.installed
+                                  ? "当前使用"
+                                  : model.installed
+                                    ? "已下载"
+                                    : "未下载"}
+                              </span>
+                            </div>
+                            <p className="muted">固定版本 {model.revision.slice(0, 8)} · Qwen3-ASR 原生 GGUF</p>
+                            <p className="model-path">{model.path}</p>
+                            {inference.modelDownloading && (
+                              <div className="model-progress" aria-label="模型下载进度">
+                                <div style={{ width: `${progress}%` }} />
+                                <span>{progress.toFixed(0)}% · {bytes(inference.modelDownloaded)} / {bytes(inference.modelTotal)}</span>
+                              </div>
+                            )}
+                            {inference.modelError && <p className="inline-error">{inference.modelError}</p>}
+                            <div className="model-actions">
+                              <button
+                                className="primary"
+                                disabled={inference.modelDownloading || model.active}
+                                onClick={() =>
+                                  void action(async () => {
+                                    const result = await call<Settings>(
+                                      model.installed
+                                        ? "inference_select_model"
+                                        : "inference_download_model",
+                                      { modelId: model.id },
+                                    );
+                                    setSettings(result);
+                                    setSaved(JSON.stringify(result));
+                                    setModels(await call<InferenceModel[]>("inference_models"));
+                                    setStatus(await call<Status>("agent_status"));
+                                    setNotice(model.installed ? "模型已切换并应用" : "模型下载完成，已应用");
+                                  })
+                                }
+                              >
+                                {model.active ? "当前使用" : model.installed ? "使用此模型" : "下载并使用"}
+                              </button>
+                              <button
+                                onClick={() =>
+                                  void action(async () => {
+                                    const p = await open({
+                                      multiple: false,
+                                      filters: [{ name: "GGUF 模型", extensions: ["gguf"] }],
+                                    });
+                                    if (typeof p === "string") source("inference", "modelPath", p);
+                                  })
+                                }
+                              >
+                                选择本地 GGUF
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </Section>
+                  <Section title="运行库">
+                    <Field
+                      label="speech.cpp 运行库"
+                      hint="Windows 使用 speech.dll；运行库由 Agent 负责加载，模型与运行库可以独立替换。"
+                    >
+                      <span className="path-input">
+                        <input
+                          value={settings.config.inference.runtimePath}
+                          onChange={(e) =>
+                            source("inference", "runtimePath", e.target.value)
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void action(async () => {
+                              const p = await open({
+                                multiple: false,
+                                filters: [{ name: "speech runtime", extensions: ["dll", "dylib"] }],
+                              });
+                              if (typeof p === "string") source("inference", "runtimePath", p);
+                            })
+                          }
+                        >
+                          <FolderOpen size={17} />
+                        </button>
+                      </span>
+                    </Field>
+                    <p className="muted">
+                      {models[0]?.runtimeInstalled
+                        ? `检测到托管运行库：${models[0].runtimePath}`
+                        : "尚未检测到托管运行库；请填写已安装的 speech.dll 路径。"}
+                    </p>
+                  </Section>
+                </>
+              )}
               {page === "sources" && (
                 <>
                   <Section title="Codex">
@@ -747,95 +984,6 @@ function App() {
                             </Field>
                           ))}
                         </details>
-                      </>
-                    )}
-                  </Section>
-                  <Section title="本地语音识别">
-                    <Toggle
-                      label="启用本地推理 Worker"
-                      hint="使用本机 speech.cpp/Qwen3-ASR 处理 Core 音频任务；默认关闭。"
-                      value={settings.config.inference.enabled}
-                      onChange={(v) => source("inference", "enabled", v)}
-                    />
-                    {settings.config.inference.enabled && (
-                      <>
-                        <Field label="Worker 标识">
-                          <input
-                            value={settings.config.inference.agentId}
-                            onChange={(e) =>
-                              source("inference", "agentId", e.target.value)
-                            }
-                          />
-                        </Field>
-                        <div className="two-col">
-                          <Field label="Worker 用户名">
-                            <input
-                              value={settings.config.inference.username}
-                              onChange={(e) =>
-                                source("inference", "username", e.target.value)
-                              }
-                            />
-                          </Field>
-                          <Field label="Worker 密码">
-                            <input
-                              type="password"
-                              autoComplete="new-password"
-                              placeholder={
-                                settings.hasInferencePassword
-                                  ? "已保存，未修改时保留"
-                                  : ""
-                              }
-                              value={settings.inferencePassword ?? ""}
-                              onChange={(e) =>
-                                setSettings({
-                                  ...settings,
-                                  inferencePassword: e.target.value,
-                                })
-                              }
-                            />
-                          </Field>
-                        </div>
-                        <Field label="模型路径" hint="GGUF 文件路径；未填写时不会加载模型。">
-                          <input
-                            value={settings.config.inference.modelPath}
-                            onChange={(e) =>
-                              source("inference", "modelPath", e.target.value)
-                            }
-                          />
-                        </Field>
-                        <div className="two-col">
-                          <Field label="运行库路径">
-                            <input
-                              value={settings.config.inference.runtimePath}
-                              onChange={(e) =>
-                                source("inference", "runtimePath", e.target.value)
-                              }
-                            />
-                          </Field>
-                          <Field label="设备">
-                            <select
-                              value={settings.config.inference.device}
-                              onChange={(e) =>
-                                source("inference", "device", e.target.value)
-                              }
-                            >
-                              <option value="auto">自动</option>
-                              <option value="cpu">CPU</option>
-                              <option value="gpu">GPU（Vulkan/Metal）</option>
-                            </select>
-                          </Field>
-                        </div>
-                        <Field label="队列容量">
-                          <input
-                            type="number"
-                            min={1}
-                            max={1000}
-                            value={settings.config.inference.queueCapacity}
-                            onChange={(e) =>
-                              source("inference", "queueCapacity", Number(e.target.value))
-                            }
-                          />
-                        </Field>
                       </>
                     )}
                   </Section>

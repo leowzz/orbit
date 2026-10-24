@@ -181,7 +181,8 @@ h2 {
   color: #5b6b60;
 }
 input:not([type="checkbox"]),
-textarea {
+textarea,
+select {
   border: 1px solid #d8e1da;
   border-radius: 6px;
   background: #fcfdfb;
@@ -372,6 +373,65 @@ footer > div {
 .tag.good {
   background: #e9f3e9;
   color: #3e7b49;
+}
+.model-card {
+  border: 1px solid #e1e9e1;
+  border-radius: 9px;
+  padding: 14px;
+  background: #fbfdfb;
+}
+.model-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.model-card-head strong,
+.model-card-head small {
+  display: block;
+}
+.model-card-head strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: #334b3c;
+}
+.model-card-head small {
+  margin-top: 4px;
+  color: #7f8c82;
+}
+.model-path {
+  margin: 9px 0;
+  color: #718077;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.model-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.model-progress {
+  position: relative;
+  height: 22px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #e8eee8;
+}
+.model-progress > div {
+  height: 100%;
+  background: #70a985;
+  transition: width 0.2s ease;
+}
+.model-progress span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #355e43;
+  font-size: 11px;
 }
 .help-row {
   display: flex;
@@ -598,6 +658,19 @@ button.recommendation {
 .recommendation > svg:last-child {
   flex-shrink: 0;
   color: #718174;
+}
+.recommendation-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.recommendation-status {
+  font-size: 11px;
+  color: #788178;
+}
+.recommendation-status.foreground,
+.recommendation-status.running {
+  color: #38624e;
 }
 .shortcut-empty {
   color: #788178;

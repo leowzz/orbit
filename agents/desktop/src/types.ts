@@ -52,6 +52,7 @@ export interface Config {
   };
   inference: {
     enabled: boolean;
+    modelId: string;
     agentId: string;
     username: string;
     modelPath: string;
@@ -84,4 +85,33 @@ export interface Status {
   weeklyError: string;
   clockError: string;
   lastAck: number | null;
+  inference: InferenceStatus;
+}
+export interface InferenceStatus {
+  status: string;
+  connected: boolean;
+  device: string;
+  queued: number;
+  outbox: number;
+  error: string;
+  modelId: string;
+  modelReady: boolean;
+  modelDownloading: boolean;
+  modelDownloaded: number;
+  modelTotal: number;
+  modelError: string;
+}
+export interface InferenceModel {
+  id: string;
+  name: string;
+  filename: string;
+  revision: string;
+  url: string;
+  size: number;
+  downloaded: number;
+  installed: boolean;
+  active: boolean;
+  path: string;
+  runtimePath: string;
+  runtimeInstalled: boolean;
 }

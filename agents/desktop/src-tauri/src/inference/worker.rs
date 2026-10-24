@@ -1,4 +1,5 @@
 use super::{
+    assets,
     engine::{EngineError, SpeechApi, SpeechModel},
     opus::Decoder,
     protocol::{decode_job, Job, ResultMessage, TextSegment},
@@ -305,6 +306,12 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
     update_inference(&status, |v| {
         v.status = "starting".into();
         v.device = device.into();
+        v.model_id = if c.inference.model_id.is_empty() {
+            assets::MODEL_ID.into()
+        } else {
+            c.inference.model_id.clone()
+        };
+        v.model_ready = false;
         v.error.clear();
     });
     let runtime = match SpeechApi::load(&c.inference.runtime_path) {
@@ -336,6 +343,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
             return;
         }
     };
+    update_inference(&status, |v| v.model_ready = true);
     let queue = queue_path(&c.inference.agent_id);
     if let Some(parent) = queue.parent() {
         if let Err(error) = std::fs::create_dir_all(parent) {
