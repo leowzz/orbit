@@ -113,6 +113,7 @@ pub fn import_app(raw: &str) -> Result<Shortcut, String> {
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
+    #[cfg(not(windows))]
     let mut icon = String::new();
     #[cfg(target_os = "macos")]
     {
@@ -154,9 +155,10 @@ pub fn import_app(raw: &str) -> Result<Shortcut, String> {
         icon = macos_icon(&path).unwrap_or_default();
     }
     #[cfg(windows)]
-    {
-        icon = windows_icon(&path).unwrap_or_default();
-    }
+    let (title, icon) = {
+        let metadata = crate::windows_apps::metadata(&path);
+        (metadata.0.unwrap_or(title), metadata.1)
+    };
     Ok(Shortcut {
         id: uuid::Uuid::new_v4().to_string(),
         title,
@@ -210,7 +212,7 @@ pub fn import_icon(raw: &str) -> Result<String, String> {
         encoded_png(std::fs::read(path).map_err(|_| "无法读取图标")?)
     }
 }
-fn encoded_png(b: Vec<u8>) -> Result<String, String> {
+pub(crate) fn encoded_png(b: Vec<u8>) -> Result<String, String> {
     if b.len() > 32768 || !b.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Err("请使用不超过 32 KB 的 PNG 图标".into());
     };
@@ -218,21 +220,12 @@ fn encoded_png(b: Vec<u8>) -> Result<String, String> {
 }
 #[cfg(windows)]
 fn windows_image(path: &Path) -> Result<String, String> {
-    windows_render(path, false)
-}
-#[cfg(windows)]
-fn windows_icon(path: &Path) -> Result<String, String> {
-    windows_render(path, true)
-}
-#[cfg(windows)]
-fn windows_render(path: &Path, application: bool) -> Result<String, String> {
     use std::os::windows::process::CommandExt;
     // Paths are environment values, never interpolated into PowerShell code.
-    let script = r#"Add-Type -AssemblyName System.Drawing; $p=$env:ORBIT_ICON_INPUT; if($env:ORBIT_ICON_APP -eq '1'){ if([IO.Path]::GetExtension($p) -eq '.lnk'){ $p=(New-Object -ComObject WScript.Shell).CreateShortcut($p).TargetPath }; $im=[Drawing.Icon]::ExtractAssociatedIcon($p).ToBitmap() }else{$im=[Drawing.Image]::FromFile($p)}; $b=New-Object Drawing.Bitmap 64,64; $g=[Drawing.Graphics]::FromImage($b); $g.DrawImage($im,0,0,64,64); $m=New-Object IO.MemoryStream; $b.Save($m,[Drawing.Imaging.ImageFormat]::Png); [Console]::Write([Convert]::ToBase64String($m.ToArray())); $g.Dispose(); $im.Dispose(); $b.Dispose(); $m.Dispose()"#;
+    let script = r#"Add-Type -AssemblyName System.Drawing; $im=[Drawing.Image]::FromFile($env:ORBIT_ICON_INPUT); $b=New-Object Drawing.Bitmap 64,64; $g=[Drawing.Graphics]::FromImage($b); $g.DrawImage($im,0,0,64,64); $m=New-Object IO.MemoryStream; $b.Save($m,[Drawing.Imaging.ImageFormat]::Png); [Console]::Write([Convert]::ToBase64String($m.ToArray())); $g.Dispose(); $im.Dispose(); $b.Dispose(); $m.Dispose()"#;
     let out = Command::new("powershell.exe")
         .args(["-NoProfile", "-NonInteractive", "-Command", script])
         .env("ORBIT_ICON_INPUT", path)
-        .env("ORBIT_ICON_APP", if application { "1" } else { "0" })
         .creation_flags(0x08000000)
         .output()
         .map_err(|_| "无法读取应用图标")?;

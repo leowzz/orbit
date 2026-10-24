@@ -80,15 +80,19 @@ func TestAudioSortingAcrossPagesAndFilters(t *testing.T) {
 					t.Fatalf("status %d: %s", w.Code, w.Body.String())
 				}
 				var page struct {
-					Items  []audioListItem `json:"items"`
-					Total  int             `json:"total"`
-					Offset int             `json:"offset"`
+					Items   []audioListItem `json:"items"`
+					Total   int             `json:"total"`
+					Offset  int             `json:"offset"`
+					Metrics audioMetrics    `json:"metrics"`
 				}
 				if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
 					t.Fatal(err)
 				}
 				if page.Total != len(tc.want) || page.Offset != offset || len(page.Items) > 2 {
 					t.Fatalf("incorrect page: %+v", page)
+				}
+				if page.Metrics != (audioMetrics{Total: 5, Pending: 1, Completed: 3, Failed: 1}) {
+					t.Fatalf("metrics = %+v, want all audio statuses", page.Metrics)
 				}
 				for _, item := range page.Items {
 					got = append(got, item.Sequence)

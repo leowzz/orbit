@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, Server, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { NetworkState, RouteDocument } from "../api";
-import { date } from "../api";
+import { api, date, errorText, type NetworkState, type RouteDocument } from "../api";
+import { audioDevice, workerStatus, type AudioWorker } from "../audio";
 import { Badge, Empty, PageHead } from "../components";
 export default function Agents({
   state,
@@ -12,6 +12,29 @@ export default function Agents({
   document: RouteDocument;
 }) {
   const [query, setQuery] = useState("");
+  const [workers, setWorkers] = useState<AudioWorker[] | null>(null);
+  const [workerError, setWorkerError] = useState("");
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function poll() {
+      try {
+        const result = await api<{ items: AudioWorker[] }>("/audio/workers");
+        if (active) {
+          setWorkers(result.items);
+          setWorkerError("");
+        }
+      } catch (e) {
+        if (active) setWorkerError(errorText(e));
+      }
+      if (active) timer = setTimeout(poll, 5000);
+    }
+    void poll();
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, []);
   const agents = state.agents.filter((a) =>
     (a.id + " " + a.state.hostLabel)
       .toLowerCase()
@@ -23,6 +46,41 @@ export default function Agents({
         title="电脑与来源"
         description="查看已连接的主机，以及各项数据的状态与更新时间。"
       />
+      {workerError && (
+        <div className="banner error" role="alert">
+          Orbit Windows Agent 状态读取失败：{workerError}
+        </div>
+      )}
+      {workers && workers.length > 0 && (
+        <section className="panel orbit-agent-panel" aria-label="Orbit Windows Agent">
+          <div className="orbit-agent-panel-head">
+            <div>
+              <h2>Orbit Windows Agent</h2>
+              <p>本地推理 Worker 会直接接入 Core，状态每 5 秒同步。</p>
+            </div>
+            <Badge tone={workers.some((worker) => worker.online) ? "good" : "warn"}>
+              {workers.filter((worker) => worker.online).length}/{workers.length} 在线
+            </Badge>
+          </div>
+          <div className="orbit-agent-list">
+            {workers.map((worker) => (
+              <div className="orbit-agent-row" key={worker.agent_id}>
+                <div>
+                  <strong>{worker.host_label || worker.agent_id}</strong>
+                  <span className="mono">{worker.agent_id}</span>
+                </div>
+                <div>
+                  <span>{worker.model} · {audioDevice(worker.device)}</span>
+                  <Badge tone={worker.online && worker.status === "ready" ? "good" : worker.status === "error" ? "warn" : "neutral"}>
+                    {workerStatus(worker)}
+                  </Badge>
+                  <small>{date(worker.received_at)}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="toolbar">
         <div className="tabs">
           <span className="selected">
@@ -140,7 +198,7 @@ export default function Agents({
           );
         })}
       </div>
-      {!agents.length && (
+      {!agents.length && workers?.length === 0 && (
         <Empty title={query ? "没有匹配的 Agent" : "还没有发现 Agent"}>
           {query
             ? "试试其他名称或 ID。"

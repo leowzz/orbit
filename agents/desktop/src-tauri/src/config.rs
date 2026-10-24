@@ -606,11 +606,11 @@ impl Store {
     }
 }
 #[cfg(not(windows))]
-fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
     fs::rename(from, to)
 }
 #[cfg(windows)]
-fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
+pub(crate) fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     #[link(name = "kernel32")]
     extern "system" {

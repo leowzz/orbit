@@ -59,6 +59,9 @@ certs/
 *.log
 *.tmp
 
+# Local native ASR runtime, model files, and downloaded binaries
+/runtime/
+
 /data/
 # Core console local database
 *.sqlite

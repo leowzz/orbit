@@ -24,6 +24,13 @@ type audioListItem struct {
 	AgentID    string `json:"agent_id"`
 }
 
+type audioMetrics struct {
+	Total     int `json:"total"`
+	Pending   int `json:"pending"`
+	Completed int `json:"completed"`
+	Failed    int `json:"failed"`
+}
+
 func (s *RouteStore) audioRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/audio/segments", s.listAudio)
 	mux.HandleFunc("GET /api/audio/segments/{id}", s.getAudio)
@@ -122,7 +129,39 @@ func (s *RouteStore) listAudio(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cannot load audio", 500)
 		return
 	}
-	writeConsoleJSON(w, map[string]any{"items": items, "total": total, "limit": limit, "offset": offset})
+	if e = rows.Close(); e != nil {
+		http.Error(w, "cannot load audio", 500)
+		return
+	}
+	metrics := audioMetrics{}
+	metricRows, e := s.db.QueryContext(r.Context(), `SELECT status,count(*) FROM audio_jobs GROUP BY status`)
+	if e != nil {
+		http.Error(w, "cannot load audio", 500)
+		return
+	}
+	defer metricRows.Close()
+	for metricRows.Next() {
+		var status string
+		var count int
+		if e = metricRows.Scan(&status, &count); e != nil {
+			http.Error(w, "cannot load audio", 500)
+			return
+		}
+		metrics.Total += count
+		switch status {
+		case "pending":
+			metrics.Pending = count
+		case "completed":
+			metrics.Completed = count
+		case "failed":
+			metrics.Failed = count
+		}
+	}
+	if e = metricRows.Err(); e != nil {
+		http.Error(w, "cannot load audio", 500)
+		return
+	}
+	writeConsoleJSON(w, map[string]any{"items": items, "total": total, "limit": limit, "offset": offset, "metrics": metrics})
 }
 func (s *RouteStore) getAudio(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

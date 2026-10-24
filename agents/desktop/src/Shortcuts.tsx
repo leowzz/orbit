@@ -405,7 +405,7 @@ export function Shortcuts({
         <p className="shortcut-empty">正在读取最近应用…</p>
       ) : recommendations?.supported === false ? (
         <p className="shortcut-empty">
-          最近应用推荐目前支持 macOS，仍可手动添加应用。
+          当前系统暂不支持最近应用推荐，仍可手动添加应用。
         </p>
       ) : available.length === 0 ? (
         <p className="shortcut-empty">
@@ -413,13 +413,13 @@ export function Shortcuts({
         </p>
       ) : (
         <div className="shortcut-recommendations">
-          {available.map(({ app }) => (
+          {available.map(({ app, status, lastUsed }) => (
             <button
               type="button"
               className="recommendation"
               key={app.target}
               disabled={busy || items.length >= 24}
-              title={`添加 ${app.title}`}
+              title={`添加 ${app.title}\n${app.target}\n最近使用：${new Date(lastUsed * 1000).toLocaleString()}`}
               onClick={() => {
                 try {
                   add([{ ...app, id: crypto.randomUUID() }]);
@@ -430,7 +430,16 @@ export function Shortcuts({
               }}
             >
               <AppIcon item={app} />
-              <span>{app.title}</span>
+              <span className="recommendation-info">
+                <span>{app.title}</span>
+                <small className={`recommendation-status ${status}`}>
+                  {status === "foreground"
+                    ? "正在使用"
+                    : status === "running"
+                      ? "运行中"
+                      : "最近使用"}
+                </small>
+              </span>
               <Plus size={14} />
             </button>
           ))}

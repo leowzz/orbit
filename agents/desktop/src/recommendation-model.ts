@@ -2,7 +2,12 @@ import type { Shortcut } from "./types";
 
 export type Recommendations = {
   supported: boolean;
-  items: { app: Shortcut; lastUsed: number; iconKey: string }[];
+  items: {
+    app: Shortcut;
+    lastUsed: number;
+    iconKey: string;
+    status: "foreground" | "running" | "recent";
+  }[];
 };
 
 export function knownIcons(previous: Recommendations | null) {
@@ -28,6 +33,7 @@ export function mergeRecommendations(
       old &&
       old.iconKey === item.iconKey &&
       old.lastUsed === item.lastUsed &&
+      old.status === item.status &&
       old.app.id === app.id &&
       old.app.title === app.title &&
       old.app.kind === app.kind &&

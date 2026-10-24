@@ -82,6 +82,26 @@ export default function Audio({ state }: { state: NetworkState }) {
           刷新
         </button>
       </div>
+      {page && (
+        <section className="audio-metrics" aria-label="音频处理指标">
+          <div className="audio-metric">
+            <span>总记录</span>
+            <strong>{page.metrics.total}</strong>
+          </div>
+          <div className="audio-metric pending">
+            <span>待处理</span>
+            <strong>{page.metrics.pending}</strong>
+          </div>
+          <div className="audio-metric completed">
+            <span>已处理</span>
+            <strong>{page.metrics.completed}</strong>
+          </div>
+          <div className="audio-metric failed">
+            <span>处理失败</span>
+            <strong>{page.metrics.failed}</strong>
+          </div>
+        </section>
+      )}
       {workerError && (
         <div className="banner error" role="alert">
           识别服务状态读取失败：{workerError}

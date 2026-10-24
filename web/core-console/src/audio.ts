@@ -17,6 +17,13 @@ export interface AudioPage {
   total: number;
   limit: number;
   offset: number;
+  metrics: AudioMetrics;
+}
+export interface AudioMetrics {
+  total: number;
+  pending: number;
+  completed: number;
+  failed: number;
 }
 export interface AudioResult {
   schema_version: number;

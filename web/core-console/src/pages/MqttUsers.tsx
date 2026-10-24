@@ -267,7 +267,7 @@ function CreateDialog({
             <option value="node">设备（Node）</option>
             <option value="audio-node">录音设备（Android Node）</option>
             <option value="agent">电脑（Agent）</option>
-            <option value="worker">语音识别（Worker Agent）</option>
+            <option value="worker">Orbit Windows Agent（语音识别）</option>
           </select>
         </label>
         <label>
@@ -300,6 +300,7 @@ function CreateDialog({
         </label>
         <p>
           新账号仅能发布和订阅此 ID 所需的 Orbit Topic。请在连接端使用相同 ID。
+          {kind === "worker" && " Windows Agent 的普通采集账号与语音识别账号需要分开创建。"}
         </p>
         {error && (
           <p className="banner error" role="alert">

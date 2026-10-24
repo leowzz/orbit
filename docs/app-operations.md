@@ -208,3 +208,10 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - Core 管理页默认隐藏已完成但转写为空或仅含空白的记录，保留等待识别与失败记录；「查看所有」即时恢复全部记录，切换时回到第一页。服务端在计数和分页前应用筛选。
 - tx Core 更新为 `orbit-core:core-audio-filter-20261024-mvl91pwv`，来源为 `8776df7` 加本次筛选改动；源码归档、差异、二进制及验证记录位于 `/srv/orbit-deploy/releases/core-audio-filter-20261024-mvl91pwv`，完整停机备份位于 `/srv/orbit-deploy/backups/core-audio-filter-20261024-mvl91pwv`。
 - Core/config/App API/MQTT 测试、管理页构建及 14 项前端测试通过。真实浏览器验证默认筛选、查看所有、翻页重置与等待/失败记录保留；线上筛选 API、公开静态资源摘要、运行二进制、原登录会话、设备注册、路由与两份 SQLite 完整性检查通过，Web 容器未变。
+
+### 2026-10-24 — 音频指标与 Windows Agent 管理台更新
+
+- tx Core 更新为 `orbit-core:core-console-20261024-147116b`，构建自 `147116b` 的 Core 源码快照，加音频指标与 Agent 管理台未提交改动。音频页顶部展示总记录、待处理、已处理和失败；电脑与来源页展示 ASR Worker 状态，支持新 Windows Agent 使用的 Vulkan 后端。
+- 发布源码、差异、二进制和验证记录：`/srv/orbit-deploy/releases/core-console-20261024-147116b`；停机配置与完整 Core 数据备份：`/srv/orbit-deploy/backups/core-console-20261024-147116b`。旧镜像保留。回滚仅切回旧镜像，保留升级后新写入的数据。
+- Core/config/App API/MQTT/嵌入资源 Go 测试、管理台构建及 14 项前端测试通过。线上 HTTPS 静态资源哈希、二进制哈希、指标接口、未认证访问 401、原管理会话、原路由和设备授权均验证通过；两份 SQLite 完整性为 ok，Web 容器未变。本次未执行浏览器交互或 Windows Agent 真机验收。
+- 上线验证时共有 3338 条音频记录：待处理 399、已完成 2939、失败 0。此数值为部署时快照。运行二进制 SHA-256：`9d0a25209bf5cf600c8712c83ef1198b0ee099653510c72aacc41eacbebce9c4`。

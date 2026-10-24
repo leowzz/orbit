@@ -16,8 +16,21 @@ const response = (
       app: { id: target, target, kind: "app", title: "A", icon },
       iconKey,
       lastUsed: 123,
+      status: "running",
     },
   ],
+});
+
+test("a process closing or gaining focus updates status while retaining its cached icon", () => {
+  const first = mergeRecommendations(null, response("png"));
+  for (const status of ["recent", "foreground"]) {
+    const incoming = response("");
+    incoming.items[0].status = status;
+    const next = mergeRecommendations(first, incoming);
+    assert.notEqual(next, first);
+    assert.equal(next.items[0].status, status);
+    assert.equal(next.items[0].app.icon, "png");
+  }
 });
 
 test("cached icons survive omitted payloads and unchanged lists keep their identity", () => {
