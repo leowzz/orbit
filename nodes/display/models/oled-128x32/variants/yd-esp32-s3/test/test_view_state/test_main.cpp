@@ -83,6 +83,9 @@ void test_rejects_text_over_the_fixed_bound() {
   TEST_ASSERT_FALSE(setText(text, too_long));
 }
 
+void setUp() {}
+void tearDown() {}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_accepts_first_view_and_marks_it_stale_until_clock_is_trusted);

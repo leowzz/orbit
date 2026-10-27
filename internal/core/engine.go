@@ -19,6 +19,9 @@ const (
 	displaySeries       = "display"
 	oledModel           = "oled-128x32"
 	ydVariant           = "yd-esp32-s3"
+	xiaozhiModel        = "xiaozhi-320x240"
+	xiaozhiVariant      = "ma-xin-wifi"
+	xiaozhiProfile      = "metrics-xiaozhi-320x240"
 	usageProfile        = "usage-oled-128x32"
 	codexWeeklyProfile  = "codex-weekly-oled-128x32"
 	rotatingOLEDProfile = "rotating-oled-128x32"
@@ -127,10 +130,13 @@ func New(config Config) (*Engine, error) {
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
 		}
-		if route.NodeID == "" || (route.Profile != usageProfile && route.Profile != codexWeeklyProfile && route.Profile != rotatingOLEDProfile && route.Profile != webProfile && route.Profile != androidProfile && route.Profile != appProfile) || len(route.Inputs) == 0 {
+		if route.NodeID == "" || (route.Profile != xiaozhiProfile && route.Profile != usageProfile && route.Profile != codexWeeklyProfile && route.Profile != rotatingOLEDProfile && route.Profile != webProfile && route.Profile != androidProfile && route.Profile != appProfile) || len(route.Inputs) == 0 {
 			return nil, fmt.Errorf("invalid route for node %q", route.NodeID)
 		}
 		inputTypes := make(map[orbitv1.ObservationType]struct{}, len(route.Inputs))
+		if route.Profile == xiaozhiProfile && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "rotating" {
+			return nil, fmt.Errorf("xiaozhi route requires usage, codex or rotating display mode")
+		}
 		for _, input := range route.Inputs {
 			if input.AgentID == "" || (input.ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_USAGE && input.ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
 				return nil, fmt.Errorf("invalid route input for node %q", route.NodeID)
@@ -268,14 +274,14 @@ func (e *Engine) ApplyNodeState(now time.Time, state *orbitv1.NodeState) ([]*orb
 		return nil, errors.New("node state producer does not match node id")
 	}
 	if state.SeriesId != displaySeries ||
-		!((state.ModelId == oledModel && state.VariantId == ydVariant) || (state.ModelId == webModel && state.VariantId == webVariant) || (state.ModelId == androidModel && state.VariantId == androidVariant)) {
+		!((state.ModelId == xiaozhiModel && state.VariantId == xiaozhiVariant) || (state.ModelId == oledModel && state.VariantId == ydVariant) || (state.ModelId == webModel && state.VariantId == webVariant) || (state.ModelId == androidModel && state.VariantId == androidVariant)) {
 		return nil, fmt.Errorf("unsupported node product %s/%s/%s", state.SeriesId, state.ModelId, state.VariantId)
 	}
 	route := e.routeForNode(state.NodeId)
 	if route != nil && route.Profile == appProfile {
 		return nil, errors.New("HTTP App routes do not accept MQTT node state")
 	}
-	if route != nil && (((route.Profile == usageProfile || route.Profile == codexWeeklyProfile || route.Profile == rotatingOLEDProfile) && state.ModelId != oledModel) || (route.Profile == webProfile && state.ModelId != webModel) || (route.Profile == androidProfile && state.ModelId != androidModel)) {
+	if route != nil && (((route.Profile == usageProfile || route.Profile == codexWeeklyProfile || route.Profile == rotatingOLEDProfile) && state.ModelId != oledModel) || (route.Profile == xiaozhiProfile && state.ModelId != xiaozhiModel) || (route.Profile == webProfile && state.ModelId != webModel) || (route.Profile == androidProfile && state.ModelId != androidModel)) {
 		return nil, fmt.Errorf("node product %s does not match projection profile %s", state.ModelId, route.Profile)
 	}
 	producedAt, err := requiredTimestamp(state.Metadata.ProducedAt, "node produced_at")
@@ -558,6 +564,9 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 			}
 		}
 		view.Primary = &orbitv1.DisplaySlot{Text: formatCost(cost), Emphasis: orbitv1.Emphasis_EMPHASIS_STRONG}
+		if route.Profile == xiaozhiProfile {
+			view.Primary.Text = formatXiaozhiCost(cost)
+		}
 		view.Secondary = &orbitv1.DisplaySlot{Text: formatMetric(tokens), Emphasis: orbitv1.Emphasis_EMPHASIS_NORMAL}
 		view.Footer = &orbitv1.DisplaySlot{Text: formatMetric(tpm), Emphasis: orbitv1.Emphasis_EMPHASIS_DIM}
 	}
@@ -856,6 +865,18 @@ func formatCost(micros int64) string {
 		return "$99999+"
 	}
 	return fmt.Sprintf("$%d.%02d", cents/100, cents%100)
+}
+
+// Round directly from the source precision to avoid rounding cents twice.
+func formatXiaozhiCost(micros int64) string {
+	tenths := micros / 100_000
+	if micros%100_000 >= 50_000 {
+		tenths++
+	}
+	if tenths >= 1_000_000 {
+		return "$99999+"
+	}
+	return fmt.Sprintf("$%d.%d", tenths/10, tenths%10)
 }
 
 func formatMetric(value uint64) string {

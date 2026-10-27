@@ -97,6 +97,10 @@ build-go: build-console
 build-node:
 	$(MAKE) -C "$(NODE_DIR)" build CONFIG=config.example.yaml
 
+.PHONY: build-xiaozhi
+build-xiaozhi:
+	cd nodes/display/models/xiaozhi-320x240/variants/ma-xin-wifi && uv sync --frozen && uv run python scripts/firmware.py package --config config.example.yaml
+
 test: test-go test-web test-dev
 
 .PHONY: test-web test-dev

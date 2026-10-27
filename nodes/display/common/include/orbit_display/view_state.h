@@ -48,6 +48,7 @@ struct DisplayView {
   int64_t fresh_until{0};
   int64_t retain_until{0};
   NodeId node_id{};
+  BoundedText<16U> display_kind{};
   DisplayText primary{};
   DisplayText secondary{};
   DisplayText footer{};

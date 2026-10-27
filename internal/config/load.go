@@ -239,11 +239,14 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		if err := validateID("projection route node_id", nodeID); err != nil {
 			return err
 		}
-		if route.Profile != "usage-oled-128x32" && route.Profile != "codex-weekly-oled-128x32" && route.Profile != "rotating-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-android" && route.Profile != "overview-app" {
+		if route.Profile != "metrics-xiaozhi-320x240" && route.Profile != "usage-oled-128x32" && route.Profile != "codex-weekly-oled-128x32" && route.Profile != "rotating-oled-128x32" && route.Profile != "overview-web" && route.Profile != "overview-android" && route.Profile != "overview-app" {
 			return fmt.Errorf("projection route %q: unsupported profile %q", nodeID, route.Profile)
 		}
 		if len(route.Inputs) == 0 {
 			return fmt.Errorf("projection route %q: inputs must not be empty", nodeID)
+		}
+		if route.Profile == "metrics-xiaozhi-320x240" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "rotating" {
+			return fmt.Errorf("projection route %q: xiaozhi requires usage, codex or rotating display mode", nodeID)
 		}
 		seen := make(map[string]struct{}, len(route.Inputs))
 		for i, input := range route.Inputs {

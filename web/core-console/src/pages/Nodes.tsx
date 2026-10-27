@@ -115,6 +115,7 @@ export default function Nodes({
             web: "overview-web",
             android: "overview-android",
             "oled-128x32": "usage-oled-128x32",
+            "xiaozhi-320x240": "metrics-xiaozhi-320x240",
           } as Record<string, string>
         )[node.modelId] ?? "overview-web",
       model: node.modelId,
@@ -136,11 +137,14 @@ export default function Nodes({
         id,
         label: state.node_labels?.[id] || id,
         profile: route.profile,
-        model: route.profile.endsWith("-oled-128x32")
-          ? "oled-128x32"
-          : route.profile === "overview-web"
-            ? "web"
-            : "android",
+        model:
+          route.profile === "metrics-xiaozhi-320x240"
+            ? "xiaozhi-320x240"
+            : route.profile.endsWith("-oled-128x32")
+              ? "oled-128x32"
+              : route.profile === "overview-web"
+                ? "web"
+                : "android",
         discovered: false,
       });
   const known = new Set(devices.keys());
@@ -271,7 +275,7 @@ export default function Nodes({
                 )}
                 <div
                   className={
-                    current.model === "oled-128x32"
+                    ["oled-128x32", "xiaozhi-320x240"].includes(current.model)
                       ? "device-settings device-metrics-settings"
                       : "device-settings"
                   }
@@ -287,7 +291,9 @@ export default function Nodes({
                       onChange={onChange}
                     />
                   </section>
-                  {current.model !== "oled-128x32" && (
+                  {!["oled-128x32", "xiaozhi-320x240"].includes(
+                    current.model,
+                  ) && (
                     <section aria-label="快捷操作">
                       {enabled ? (
                         <DeviceShortcuts
@@ -391,6 +397,7 @@ export default function Nodes({
                 ["archived", "已归档"],
                 ["app", "Orbit App"],
                 ["oled-128x32", "OLED"],
+                ["xiaozhi-320x240", "小智"],
                 ["web", "Web"],
                 ["android", "旧版 Android"],
               ].map(([id, label]) => (

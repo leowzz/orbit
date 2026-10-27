@@ -9,7 +9,7 @@ import (
 
 func TestDisplayModesAcrossDestinations(t *testing.T) {
 	now := time.Now().UTC()
-	for _, profile := range []string{usageProfile, webProfile, androidProfile, appProfile} {
+	for _, profile := range []string{usageProfile, xiaozhiProfile, webProfile, androidProfile, appProfile} {
 		t.Run(profile, func(t *testing.T) {
 			e := rotatingEngine(t, now, 3)
 			route := e.config.Routes[0]
@@ -24,6 +24,10 @@ func TestDisplayModesAcrossDestinations(t *testing.T) {
 					t.Fatalf("tick %d: %v %v", tick, views, err)
 				}
 				v := views[0]
+				wantCost := "$12.35"
+				if profile == xiaozhiProfile {
+					wantCost = "$12.3"
+				}
 				want := "usage"
 				if tick == 3 {
 					want = "codex"
@@ -38,7 +42,7 @@ func TestDisplayModesAcrossDestinations(t *testing.T) {
 					if profile != usageProfile && v.GetCodex().WeeklyLimit == nil {
 						t.Fatal("missing quota payload")
 					}
-				} else if v.Primary.Text != "$12.35" || v.Codex != nil {
+				} else if v.Primary.Text != wantCost || v.Codex != nil {
 					t.Fatal("usage page retained quota", v)
 				}
 			}

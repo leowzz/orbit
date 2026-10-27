@@ -68,11 +68,39 @@ void test_encodes_node_state_with_metadata() {
   TEST_ASSERT_EQUAL_STRING("yd-esp32-s3", decoded.variant_id);
 }
 
+void test_decodes_explicit_display_page() {
+  orbit_v1_DeviceView view = orbit_v1_DeviceView_init_zero;
+  view.has_metadata = true;
+  view.metadata.revision = 1;
+  view.has_fresh_until = view.has_retain_until = true;
+  view.fresh_until.seconds = 2000;
+  view.retain_until.seconds = 3000;
+  view.has_primary = view.has_secondary = view.has_footer = true;
+  setGeneratedText(view.node_id, "xiaozhi-desk-01");
+  setGeneratedText(view.core_epoch, "core-epoch");
+  setGeneratedText(view.display_kind, "codex");
+  setGeneratedText(view.primary.text, "50%");
+  std::array<uint8_t, 1024> bytes{};
+  auto stream = pb_ostream_from_buffer(bytes.data(), bytes.size());
+  TEST_ASSERT_TRUE(pb_encode(&stream, orbit_v1_DeviceView_fields, &view));
+  auto codec = makeNanopbProtocolCodec();
+  orbit_display::DisplayView decoded;
+  orbit_display::CodecError error;
+  TEST_ASSERT_TRUE(codec->decodeDeviceView(bytes.data(), stream.bytes_written, decoded, error));
+  TEST_ASSERT_EQUAL_STRING("codex", decoded.display_kind.value);
+  TEST_ASSERT_EQUAL_STRING("50%", decoded.primary.value);
+  TEST_ASSERT_EQUAL_INT64(2000, decoded.fresh_until);
+}
+
 }  // namespace
+
+void setUp() {}
+void tearDown() {}
 
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_decodes_device_view);
   RUN_TEST(test_encodes_node_state_with_metadata);
+  RUN_TEST(test_decodes_explicit_display_page);
   return UNITY_END();
 }

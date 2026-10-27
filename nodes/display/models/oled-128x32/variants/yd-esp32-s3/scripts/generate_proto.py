@@ -52,8 +52,8 @@ def main() -> int:
         "--options-file", str(project_dir / "scripts" / "orbit.options"),
         "--output-dir", str(output),
     ])
-    command.extend(str(source.relative_to(proto_root)) for source in sources)
-    command.append(str(timestamp_proto))
+    command.extend(source.relative_to(proto_root).as_posix() for source in sources)
+    command.append(timestamp_proto.as_posix())
     subprocess.run(command, check=True, cwd=proto_root)
     return 0
 

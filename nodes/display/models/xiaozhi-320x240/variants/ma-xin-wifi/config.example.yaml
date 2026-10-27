@@ -1,0 +1,27 @@
+# Required values remain active. Optional settings are commented; defaults are noted where applicable.
+
+node:
+  # Must match a projection_routes key in the Core configuration.
+  id: xiaozhi-desk-01
+  firmware_version: 0.1.0
+
+# Wi-Fi and MQTT credentials are compiled into the firmware. Do not commit real values.
+wifi:
+  ssid: replace-with-wifi-ssid
+  password: replace-with-wifi-password
+
+mqtt:
+  host: broker.example.com
+  port: 8883
+  username: replace-with-node-mqtt-username
+  password: replace-with-node-mqtt-password
+  # Optional; defaults to 60 seconds.
+  # keep_alive_seconds: 60
+  tls:
+    # Optional; defaults to true. ca_file is required while TLS is enabled.
+    # enabled: true
+    ca_file: ../../../oled-128x32/variants/yd-esp32-s3/assets/DigiCertGlobalRootG2.crt
+
+# Optional; brightness_percent defaults to 56 and accepts values from 0 to 100.
+# display:
+#   brightness_percent: 56

@@ -273,11 +273,13 @@ export default function RouteFlow({
                   <DeviceIcon
                     model={
                       node?.modelId ??
-                      (route.profile === "overview-web"
-                        ? "web"
-                        : route.profile === "overview-android"
-                          ? "android"
-                          : "oled-128x32")
+                      (route.profile === "metrics-xiaozhi-320x240"
+                        ? "xiaozhi-320x240"
+                        : route.profile === "overview-web"
+                          ? "web"
+                          : route.profile === "overview-android"
+                            ? "android"
+                            : "oled-128x32")
                     }
                   />
                   <div>

@@ -168,7 +168,8 @@ export default function DeviceContent({
   }
   const mode = displayMode(draft);
   const sessions = sessionsEnabled(draft);
-  const oled = profile.endsWith("-oled-128x32");
+  const metricsOnly =
+    profile.endsWith("-oled-128x32") || profile === "metrics-xiaozhi-320x240";
   const needsUsage =
     mode === "usage" ||
     mode === "rotating" ||
@@ -319,7 +320,7 @@ export default function DeviceContent({
             </span>
           </div>
         )}
-        {!oled && (
+        {!metricsOnly && (
           <SettingSwitch
             title="显示 Codex 会话"
             description="同步会话详情；打开会话仍需电脑允许执行"

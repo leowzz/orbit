@@ -1,4 +1,11 @@
+#ifdef ARDUINO
 #include "mqtt_node_runtime.h"
+#ifndef ORBIT_MODEL_ID
+#define ORBIT_MODEL_ID "oled-128x32"
+#endif
+#ifndef ORBIT_VARIANT_ID
+#define ORBIT_VARIANT_ID "yd-esp32-s3"
+#endif
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -252,8 +259,8 @@ bool MqttNodeRuntime::publishNodeState() {
   node_state.revision = node_revision_++;
   if (!orbit_display::setText(node_state.node_id, generated_config::kNodeId) ||
       !orbit_display::setText(node_state.series_id, "display") ||
-      !orbit_display::setText(node_state.model_id, "oled-128x32") ||
-      !orbit_display::setText(node_state.variant_id, "yd-esp32-s3") ||
+      !orbit_display::setText(node_state.model_id, ORBIT_MODEL_ID) ||
+      !orbit_display::setText(node_state.variant_id, ORBIT_VARIANT_ID) ||
       !orbit_display::setText(node_state.firmware_version,
                               generated_config::kFirmwareVersion)) {
     return false;
@@ -294,3 +301,5 @@ void MqttNodeRuntime::setError(orbit_display::RuntimeState state,
   state_ = state;
   error_ = error;
 }
+
+#endif

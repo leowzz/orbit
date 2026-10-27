@@ -16,3 +16,4 @@ orbit.v1.NodeState.firmware_version max_size:33
 orbit.v1.DisplaySlot.text max_size:65
 orbit.v1.DeviceView.node_id max_size:65
 orbit.v1.DeviceView.core_epoch max_size:65
+orbit.v1.DeviceView.display_kind max_size:17

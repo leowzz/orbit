@@ -30,7 +30,7 @@ func TestDestinationIndependentDisplayModes(t *testing.T) {
 		"usage": {MaxTTL: Duration{Duration: time.Minute}}, "codex": {MaxTTL: Duration{Duration: time.Minute}},
 	}}
 	inputs := []ProjectionInput{{AgentID: "a", ObservationType: "usage"}, {AgentID: "b", ObservationType: "codex"}}
-	for _, profile := range []string{"usage-oled-128x32", "overview-web", "overview-android", "overview-app"} {
+	for _, profile := range []string{"usage-oled-128x32", "metrics-xiaozhi-320x240", "overview-web", "overview-android", "overview-app"} {
 		for _, tc := range []struct {
 			mode           string
 			count, seconds int
@@ -40,7 +40,8 @@ func TestDestinationIndependentDisplayModes(t *testing.T) {
 			{"codex", 1, 0, false}, {"rotating", 1, 3, false}, {"usage", 2, 3, false}, {"other", 2, 0, false},
 		} {
 			err := cfg.ValidateRoutes(map[string]ProjectionRoute{"phone": {Profile: profile, DisplayMode: tc.mode, RotationSeconds: tc.seconds, Inputs: inputs[:tc.count]}})
-			if (err == nil) != tc.valid {
+			valid := tc.valid && !(profile == "metrics-xiaozhi-320x240" && tc.mode == "sessions")
+			if (err == nil) != valid {
 				t.Fatalf("%s %+v: %v", profile, tc, err)
 			}
 		}

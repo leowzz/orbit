@@ -44,6 +44,9 @@ void test_changes_return_minimum_bounding_tile_region() {
   TEST_ASSERT_EQUAL_UINT8(3, dirty.height);
 }
 
+void setUp() {}
+void tearDown() {}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_identical_buffers_have_no_dirty_region);

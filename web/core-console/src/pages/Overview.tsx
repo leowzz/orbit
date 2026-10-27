@@ -63,7 +63,12 @@ export default function Overview({
       devices.set(id, {
         id,
         label: state.node_labels?.[id] || id,
-        model: route.profile.endsWith("-oled-128x32") ? "oled-128x32" : "web",
+        model:
+          route.profile === "metrics-xiaozhi-320x240"
+            ? "xiaozhi-320x240"
+            : route.profile.endsWith("-oled-128x32")
+              ? "oled-128x32"
+              : "web",
         description: "预配置设备",
       });
   for (const id of state.archived_nodes ?? []) devices.delete(id);

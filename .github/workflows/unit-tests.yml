@@ -128,3 +128,8 @@ jobs:
         run: uv sync --frozen
       - name: Test firmware config and native logic
         run: make check
+      - name: Build Xiaozhi firmware package
+        working-directory: nodes/display/models/xiaozhi-320x240/variants/ma-xin-wifi
+        run: |
+          uv sync --frozen
+          uv run python scripts/firmware.py package --config config.example.yaml

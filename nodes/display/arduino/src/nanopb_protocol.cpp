@@ -51,6 +51,7 @@ class NanopbProtocolCodec final : public orbit_display::IProtocolCodec {
     decoded.retain_until = message.retain_until.seconds;
     if (!orbit_display::setText(decoded.node_id, message.node_id) ||
         !orbit_display::setText(decoded.core_epoch, message.core_epoch) ||
+        !orbit_display::setText(decoded.display_kind, message.display_kind) ||
         !orbit_display::setText(decoded.primary, message.primary.text) ||
         !orbit_display::setText(decoded.secondary, message.secondary.text) ||
         !orbit_display::setText(decoded.footer, message.footer.text)) {

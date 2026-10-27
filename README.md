@@ -20,6 +20,7 @@ audio-records page. See [audio setup and protocol](docs/audio-pipeline.md).
 | Core + console | Validate observations, manage routes, and publish device views. The console defaults to `127.0.0.1:7620`. |
 | Web Node | Personal inbox for text, links, todos and images, with its own password and a server-side device token. |
 | OLED / Android Node | Render the view assigned by Core on a physical display or Android widgets. |
+| Xiaozhi color display | ESP32-S3 / ST7789 320x240 device showing API usage or weekly quota, managed by Core. [Firmware build and USB setup](nodes/display/models/xiaozhi-320x240/variants/ma-xin-wifi/README.md). |
 
 Alongside audio processing, the status-display architecture uses two one-way
 flows: state projection and typed command execution.

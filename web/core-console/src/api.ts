@@ -132,12 +132,14 @@ export const profileName = (profile: string) =>
     "codex-weekly-oled-128x32": "OLED 显示屏",
     "rotating-oled-128x32": "OLED 显示屏",
     "overview-web": "Web · 工作台",
+    "metrics-xiaozhi-320x240": "小智彩屏",
     "overview-android": "Android · 旧版连接",
     "overview-app": "Orbit App · 统一连接",
   })[profile] ?? profile;
 export const modelName = (model: string) =>
   ({
     "oled-128x32": "OLED 显示屏",
+    "xiaozhi-320x240": "小智彩屏",
     web: "Web 工作台",
     android: "Android 设备",
   })[model] ?? model;
@@ -166,7 +168,8 @@ export const displayModes = [
 ] as const;
 
 export const supportsSessions = (route: Route) =>
-  !route.profile.endsWith("-oled-128x32");
+  !route.profile.endsWith("-oled-128x32") &&
+  route.profile !== "metrics-xiaozhi-320x240";
 export const sessionsEnabled = (route: Route) =>
   supportsSessions(route) &&
   (route.sessions_enabled ??

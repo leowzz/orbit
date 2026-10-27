@@ -1,5 +1,5 @@
 # Shared display firmware
 
-Shared protocol, connection, state, and rendering foundations belong here once
-the firmware generation path is fixed.
+Bounded protocol interfaces and view state shared by OLED and Xiaozhi displays.
+The Arduino MQTT/TLS transport and nanopb codec live in `../arduino/`.
 
