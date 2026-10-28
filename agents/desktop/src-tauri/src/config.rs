@@ -155,6 +155,7 @@ impl Default for Config {
 pub struct Secrets {
     pub mqtt: String,
     pub usage: String,
+    #[serde(default)]
     pub inference: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -628,6 +629,30 @@ pub(crate) fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn legacy_secrets_preserve_credentials_without_inference() {
+        let secrets: Secrets =
+            serde_json::from_str(r#"{"mqtt":"mqtt-secret","usage":"usage-secret"}"#).unwrap();
+        assert_eq!(secrets.mqtt, "mqtt-secret");
+        assert_eq!(secrets.usage, "usage-secret");
+        assert!(secrets.inference.is_empty());
+    }
+    #[test]
+    fn current_secrets_preserve_inference_and_reject_invalid_fields() {
+        let secrets: Secrets = serde_json::from_str(
+            r#"{"mqtt":"mqtt-secret","usage":"usage-secret","inference":"asr-secret"}"#,
+        )
+        .unwrap();
+        assert_eq!(secrets.inference, "asr-secret");
+        for invalid in [
+            r#"{"mqtt":"mqtt-secret","usage":"usage-secret","inference":null}"#,
+            r#"{"mqtt":"mqtt-secret","usage":"usage-secret","inference":123}"#,
+            r#"{"usage":"usage-secret"}"#,
+            r#"{"mqtt":"mqtt-secret"}"#,
+        ] {
+            assert!(serde_json::from_str::<Secrets>(invalid).is_err());
+        }
+    }
     #[test]
     fn identity_matches_go() {
         assert_eq!(derive_id(" ABC "), derive_id("abc"));
