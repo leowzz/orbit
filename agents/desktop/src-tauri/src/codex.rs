@@ -417,7 +417,208 @@ pub fn parse_weekly(v: &Value, now: i64) -> Result<CodexWeeklyLimit, String> {
     }
     Err("Codex 周限不可用".into())
 }
-pub async fn weekly(c: &Codex, now: i64) -> Result<CodexWeeklyLimit, String> {
+// Only allowlisted categories and numeric codes cross into status/UI. Never retain
+// RPC messages, stderr, URLs or credentials in diagnostics.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeeklyError {
+    pub stage: &'static str,
+    pub code: &'static str,
+    pub rpc_code: Option<i64>,
+    pub http_status: Option<u16>,
+}
+impl WeeklyError {
+    pub fn new(stage: &'static str, code: &'static str) -> Self {
+        Self {
+            stage,
+            code,
+            rpc_code: None,
+            http_status: None,
+        }
+    }
+    fn transient(&self) -> bool {
+        matches!(self.code, "timeout" | "transport" | "closed" | "network")
+            || (self.stage == "request" && matches!(self.code, "server" | "rpc"))
+    }
+}
+impl std::fmt::Display for WeeklyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match (self.stage, self.code) {
+            (_, "start") => "无法启动 Codex，请检查程序位置",
+            (_, "authentication") => "Codex 登录已失效或尚未登录，请在 Codex 中登录",
+            (_, "forbidden") => "Codex 拒绝访问周限，请检查账户权限或网络访问限制",
+            (_, "rate_limited") => "Codex 请求过于频繁，将稍后自动重试",
+            (_, "unsupported") => "当前 Codex 不支持读取周限，请检查版本或登录方式",
+            ("initialize", "timeout") => "Codex 初始化超时，将自动重试",
+            ("initialize", _) => "Codex 初始化失败，将稍后重试；持续失败请检查版本",
+            (_, "timeout") => "读取 Codex 周限超时，将自动重试",
+            (_, "transport" | "closed") => "与 Codex 的连接中断，将自动重试",
+            (_, "server") => "Codex 服务暂不可用，将自动重试",
+            (_, "network") => "无法连接 Codex 服务，请检查网络；将自动重试",
+            (_, "unavailable") => "Codex 未返回周限，将稍后自动重试",
+            (_, "invalid_data") => "Codex 周限数据无效或已重置，将稍后自动重试",
+            _ => "读取 Codex 周限失败，将自动重试",
+        })
+    }
+}
+impl std::error::Error for WeeklyError {}
+
+fn weekly_rpc_error(stage: &'static str, error: &Value) -> WeeklyError {
+    let rpc_code = error["code"].as_i64();
+    // Older Codex versions only expose HTTP status in the message. Read it for
+    // classification, but never copy any part of the message into diagnostics.
+    let message = error["message"].as_str().unwrap_or("").to_ascii_lowercase();
+    let http_status = ["httpStatus", "statusCode", "status"]
+        .iter()
+        .find_map(|key| error["data"][key].as_u64())
+        .filter(|n| (400..600).contains(n))
+        .map(|n| n as u16)
+        .or_else(|| {
+            [401u16, 403, 429, 500, 502, 503, 504]
+                .into_iter()
+                .find(|n| {
+                    [
+                        format!("http {n}"),
+                        format!("status {n}"),
+                        format!("status code: {n}"),
+                    ]
+                    .iter()
+                    .any(|pattern| message.contains(pattern))
+                })
+        });
+    let code = match http_status {
+        Some(401) => "authentication",
+        Some(403) => "forbidden",
+        Some(429) => "rate_limited",
+        Some(500..=599) => "server",
+        _ if rpc_code == Some(-32601) => "unsupported",
+        _ if [
+            "not logged in",
+            "authentication required",
+            "requires chatgpt authentication",
+            "refresh token has expired",
+            "refresh token has already been used",
+        ]
+        .iter()
+        .any(|s| message.contains(s)) =>
+        {
+            "authentication"
+        }
+        _ if message.contains("not supported") => "unsupported",
+        _ if message.contains("timed out") || message.contains("timeout") => "timeout",
+        _ if [
+            "error sending request",
+            "failed to connect",
+            "dns error",
+            "connection refused",
+            "connection reset",
+        ]
+        .iter()
+        .any(|s| message.contains(s)) =>
+        {
+            "network"
+        }
+        _ => "rpc",
+    };
+    WeeklyError {
+        stage,
+        code,
+        rpc_code,
+        http_status,
+    }
+}
+
+#[derive(Default)]
+pub struct WeeklyRetry {
+    failures: usize,
+}
+impl WeeklyRetry {
+    pub fn delay(&mut self, error: Option<&WeeklyError>) -> Duration {
+        match error {
+            None => {
+                self.failures = 0;
+                Duration::from_secs(60)
+            }
+            Some(error) if error.transient() => {
+                let seconds = [5, 15, 30, 60][self.failures.min(3)];
+                self.failures = (self.failures + 1).min(3);
+                Duration::from_secs(seconds)
+            }
+            Some(_) => {
+                self.failures = 0;
+                Duration::from_secs(60)
+            }
+        }
+    }
+}
+
+async fn weekly_response<R: tokio::io::AsyncBufRead + Unpin>(
+    output: &mut R,
+    expected_id: i64,
+    stage: &'static str,
+) -> Result<Value, WeeklyError> {
+    loop {
+        let mut bytes = Vec::new();
+        let n = (&mut *output)
+            .take(1048577)
+            .read_until(b'\n', &mut bytes)
+            .await
+            .map_err(|_| WeeklyError::new(stage, "transport"))?;
+        if n == 0 {
+            return Err(WeeklyError::new(stage, "closed"));
+        }
+        if n > 1048576 {
+            return Err(WeeklyError::new(stage, "invalid_data"));
+        }
+        let mut v: Value =
+            serde_json::from_slice(&bytes).map_err(|_| WeeklyError::new(stage, "invalid_data"))?;
+        if v["id"].as_i64() != Some(expected_id) {
+            continue;
+        }
+        if !v["error"].is_null() {
+            return Err(weekly_rpc_error(stage, &v["error"]));
+        }
+        if v.get("result").is_none_or(Value::is_null) {
+            return Err(WeeklyError::new(stage, "invalid_data"));
+        }
+        return Ok(v["result"].take());
+    }
+}
+
+async fn weekly_exchange<W, R>(
+    input: &mut W,
+    output: &mut R,
+    now: i64,
+    initialize_timeout: Duration,
+    request_timeout: Duration,
+) -> Result<CodexWeeklyLimit, WeeklyError>
+where
+    W: tokio::io::AsyncWrite + Unpin,
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    tokio::time::timeout(initialize_timeout, async {
+        input.write_all(b"{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"orbit\",\"title\":\"Orbit\",\"version\":\"0.1.0\"}}}\n").await
+            .map_err(|_| WeeklyError::new("initialize", "transport"))?;
+        weekly_response(output, 1, "initialize").await
+    }).await.map_err(|_| WeeklyError::new("initialize", "timeout"))??;
+    let result = tokio::time::timeout(request_timeout, async {
+        input.write_all(b"{\"method\":\"initialized\"}\n{\"id\":2,\"method\":\"account/rateLimits/read\"}\n").await
+            .map_err(|_| WeeklyError::new("request", "transport"))?;
+        weekly_response(output, 2, "request").await
+    }).await.map_err(|_| WeeklyError::new("request", "timeout"))??;
+    parse_weekly(&result, now).map_err(|message| {
+        WeeklyError::new(
+            "parse",
+            if message == "Codex 周限不可用" {
+                "unavailable"
+            } else {
+                "invalid_data"
+            },
+        )
+    })
+}
+
+pub async fn weekly(c: &Codex, now: i64) -> Result<CodexWeeklyLimit, WeeklyError> {
     let mut command = tokio::process::Command::new(&c.binary);
     command
         .args(["app-server", "--listen", "stdio://"])
@@ -430,18 +631,28 @@ pub async fn weekly(c: &Codex, now: i64) -> Result<CodexWeeklyLimit, String> {
     command.creation_flags(0x08000000);
     let mut child = command
         .spawn()
-        .map_err(|_| "无法启动 Codex，请检查程序位置")?;
-    let result=tokio::time::timeout(Duration::from_secs(15),async{
-        let mut input=child.stdin.take().ok_or("无法连接 Codex")?;let mut output=BufReader::new(child.stdout.take().ok_or("无法连接 Codex")?);
-        input.write_all(b"{\"id\":1,\"method\":\"initialize\",\"params\":{\"clientInfo\":{\"name\":\"orbit\",\"title\":\"Orbit\",\"version\":\"0.1.0\"}}}\n").await.map_err(|_|"无法初始化 Codex")?;
-        let mut initialized=false;
-        loop{let mut bytes=Vec::new();let n=(&mut output).take(1048577).read_until(b'\n',&mut bytes).await.map_err(|_|"读取 Codex 周限失败")?;if n==0||n>1048576{return Err("Codex 返回数据不可用".into())}
-            let Ok(v)=serde_json::from_slice::<Value>(&bytes)else{continue};let id=v["id"].as_i64().unwrap_or(0);if id!=1&&id!=2{continue}
-            if !v["error"].is_null(){return Err("请在 Codex 中登录后重试".into())}
-            if id==2{return parse_weekly(&v["result"],now)}
-            if !initialized{initialized=true;input.write_all(b"{\"method\":\"initialized\"}\n{\"id\":2,\"method\":\"account/rateLimits/read\"}\n").await.map_err(|_|"无法读取 Codex 周限")?;}
-        }
-    }).await.map_err(|_|"读取 Codex 周限超时".to_string()).and_then(|r|r);
+        .map_err(|_| WeeklyError::new("spawn", "start"))?;
+    let result = async {
+        let mut input = child
+            .stdin
+            .take()
+            .ok_or_else(|| WeeklyError::new("initialize", "transport"))?;
+        let mut output = BufReader::new(
+            child
+                .stdout
+                .take()
+                .ok_or_else(|| WeeklyError::new("initialize", "transport"))?,
+        );
+        weekly_exchange(
+            &mut input,
+            &mut output,
+            now,
+            Duration::from_secs(5),
+            Duration::from_secs(15),
+        )
+        .await
+    }
+    .await;
     let _ = child.kill().await;
     let _ = child.wait().await;
     result
@@ -450,6 +661,209 @@ pub async fn weekly(c: &Codex, now: i64) -> Result<CodexWeeklyLimit, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn weekly_rpc_errors_are_classified_without_retaining_private_text() {
+        let cases = [
+            (
+                serde_json::json!({"code":-32000,"message":"HTTP 401: token=private-secret https://private.invalid"}),
+                "authentication",
+                Some(401),
+            ),
+            (
+                serde_json::json!({"code":-32000,"message":"HTTP 403 Forbidden"}),
+                "forbidden",
+                Some(403),
+            ),
+            (
+                serde_json::json!({"code":-32000,"message":"private-secret", "data":{"statusCode":429}}),
+                "rate_limited",
+                Some(429),
+            ),
+            (
+                serde_json::json!({"code":-32000,"message":"unexpected status 503 private-secret"}),
+                "server",
+                Some(503),
+            ),
+            (
+                serde_json::json!({"code":-32601,"message":"private-secret"}),
+                "unsupported",
+                None,
+            ),
+            (
+                serde_json::json!({"code":-32000,"message":"Not logged in private-secret"}),
+                "authentication",
+                None,
+            ),
+            (
+                serde_json::json!({"code":-32000,"message":"request timed out private-secret"}),
+                "timeout",
+                None,
+            ),
+            (
+                serde_json::json!({"code":-32000,"message":"error sending request for url (https://private.invalid)"}),
+                "network",
+                None,
+            ),
+            (
+                serde_json::json!({"code":-32000,"message":"unknown failure private-secret"}),
+                "rpc",
+                None,
+            ),
+        ];
+        for (value, code, http) in cases {
+            let error = weekly_rpc_error("request", &value);
+            assert_eq!(error.code, code);
+            assert_eq!(error.http_status, http);
+            assert_eq!(error.rpc_code, value["code"].as_i64());
+            let safe = format!(
+                "{} {:?} {}",
+                error,
+                error,
+                serde_json::to_string(&error).unwrap()
+            );
+            assert!(!safe.contains("private"));
+            if code != "authentication" && code != "unsupported" {
+                assert!(!error.to_string().contains("登录"));
+            }
+        }
+    }
+
+    #[test]
+    fn weekly_retries_back_off_and_reset_after_recovery() {
+        let mut retry = WeeklyRetry::default();
+        let failure = WeeklyError::new("request", "timeout");
+        for seconds in [5, 15, 30, 60, 60, 60] {
+            assert_eq!(retry.delay(Some(&failure)), Duration::from_secs(seconds));
+        }
+        assert_eq!(retry.delay(None), Duration::from_secs(60));
+        assert_eq!(retry.delay(Some(&failure)), Duration::from_secs(5));
+        for code in [
+            "authentication",
+            "forbidden",
+            "unsupported",
+            "rate_limited",
+            "invalid_data",
+            "start",
+        ] {
+            assert_eq!(
+                retry.delay(Some(&WeeklyError::new("request", code))),
+                Duration::from_secs(60)
+            );
+        }
+        assert_eq!(retry.delay(Some(&failure)), Duration::from_secs(5));
+        assert_eq!(
+            retry.delay(Some(&WeeklyError::new("initialize", "timeout"))),
+            Duration::from_secs(15)
+        );
+    }
+
+    #[tokio::test]
+    async fn weekly_exchange_obeys_handshake_and_ignores_notifications() {
+        let (client, server) = tokio::io::duplex(4096);
+        let (mut read, mut write) = tokio::io::split(client);
+        let server = tokio::spawn(async move {
+            let (read, mut write) = tokio::io::split(server);
+            let mut read = BufReader::new(read).lines();
+            let v: Value = serde_json::from_str(&read.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(v["method"], "initialize");
+            write
+                .write_all(b"{\"method\":\"notice\"}\n{\"id\":1,\"result\":{}}\n")
+                .await
+                .unwrap();
+            let v: Value = serde_json::from_str(&read.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(v["method"], "initialized");
+            let v: Value = serde_json::from_str(&read.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(v["method"], "account/rateLimits/read");
+            write.write_all(b"{\"id\":99,\"error\":{}}\n{\"id\":2,\"result\":{\"rateLimits\":{\"primary\":{\"windowDurationMins\":10080,\"usedPercent\":25,\"resetsAt\":1000}}}}\n").await.unwrap();
+        });
+        let result = weekly_exchange(
+            &mut write,
+            &mut BufReader::new(&mut read),
+            100,
+            Duration::from_secs(1),
+            Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
+        assert_eq!(result.remaining_percent, 75.);
+        assert_eq!(result.observed_at.unwrap().seconds, 100);
+        assert_eq!(result.fresh_until.unwrap().seconds, 280);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn weekly_exchange_distinguishes_phase_timeouts() {
+        for (reply, stage) in [
+            ("", "initialize"),
+            ("{\"id\":1,\"result\":{}}\n", "request"),
+        ] {
+            let (read, mut peer) = tokio::io::duplex(4096);
+            peer.write_all(reply.as_bytes()).await.unwrap();
+            let error = weekly_exchange(
+                &mut tokio::io::sink(),
+                &mut BufReader::new(read),
+                100,
+                Duration::from_millis(10),
+                Duration::from_millis(10),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!(error.stage, stage);
+            assert_eq!(error.code, "timeout");
+        }
+    }
+
+    #[tokio::test]
+    async fn weekly_exchange_rejects_bad_responses_without_claiming_auth_failure() {
+        for (reply, stage, code) in [
+            ("", "initialize", "closed"),
+            ("not-json\n", "initialize", "invalid_data"),
+            ("{\"id\":1,\"result\":{}}\n", "request", "closed"),
+            (
+                "{\"id\":1,\"error\":{\"code\":-32601}}\n",
+                "initialize",
+                "unsupported",
+            ),
+            (
+                "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":{}}\n",
+                "parse",
+                "unavailable",
+            ),
+            (
+                "{\"id\":1,\"result\":{}}\n{\"id\":2,\"result\":null}\n",
+                "request",
+                "invalid_data",
+            ),
+        ] {
+            let mut output = BufReader::new(reply.as_bytes());
+            let error = weekly_exchange(
+                &mut tokio::io::sink(),
+                &mut output,
+                100,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+            )
+            .await
+            .unwrap_err();
+            assert_eq!((error.stage, error.code), (stage, code));
+        }
+        let bytes = vec![b'x'; 1048577];
+        let error = weekly_response(&mut BufReader::new(bytes.as_slice()), 1, "initialize")
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, "invalid_data");
+    }
+
+    #[tokio::test]
+    async fn weekly_spawn_failure_is_actionable() {
+        let config = Codex {
+            binary: "/nonexistent/orbit-test-codex".into(),
+            ..Codex::default()
+        };
+        let error = weekly(&config, 100).await.unwrap_err();
+        assert_eq!((error.stage, error.code), ("spawn", "start"));
+    }
     #[test]
     fn windows_project_and_filters() {
         assert_eq!("C:\\work\\orbit".rsplit(['/', '\\']).next(), Some("orbit"));

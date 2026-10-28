@@ -16,7 +16,9 @@ async fn main() -> Result<(), String> {
         value.sessions.len()
     );
     if std::env::args().any(|a| a == "--quota") {
-        let value = codex::weekly(&config, now).await?;
+        let value = codex::weekly(&config, now)
+            .await
+            .map_err(|e| e.to_string())?;
         assert!((0.0..=100.0).contains(&value.remaining_percent));
         println!("Codex weekly quota RPC OK");
     }

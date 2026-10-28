@@ -83,6 +83,21 @@ export interface Status {
   codex: Source;
   usage: Source;
   weeklyError: string;
+  weeklyDiagnostics: {
+    lastAttempt: number | null;
+    lastSuccess: number | null;
+    lastFailure: number | null;
+    durationMs: number;
+    failureDurationMs: number;
+    consecutiveFailures: number;
+    nextAttempt: number | null;
+    lastError: {
+      stage: string;
+      code: string;
+      rpcCode: number | null;
+      httpStatus: number | null;
+    } | null;
+  };
   clockError: string;
   lastAck: number | null;
   inference: InferenceStatus;

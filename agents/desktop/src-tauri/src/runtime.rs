@@ -36,9 +36,52 @@ pub struct Status {
     pub codex: SourceView,
     pub usage: SourceView,
     pub weekly_error: String,
+    pub weekly_diagnostics: WeeklyDiagnostics,
     pub clock_error: String,
     pub last_ack: Option<i64>,
     pub inference: InferenceView,
+}
+// Retain the last failure after recovery so intermittent errors remain inspectable.
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeeklyDiagnostics {
+    pub last_attempt: Option<i64>,
+    pub last_success: Option<i64>,
+    pub last_failure: Option<i64>,
+    pub duration_ms: u64,
+    pub failure_duration_ms: u64,
+    pub consecutive_failures: u32,
+    pub next_attempt: Option<i64>,
+    pub last_error: Option<codex::WeeklyError>,
+}
+fn record_weekly_attempt(
+    status: &SharedStatus,
+    result: &Result<wire::CodexWeeklyLimit, codex::WeeklyError>,
+    attempted_at: i64,
+    completed_at: i64,
+    duration_ms: u64,
+    delay: Duration,
+) {
+    update(status, |v| {
+        let d = &mut v.weekly_diagnostics;
+        d.last_attempt = Some(attempted_at);
+        d.duration_ms = duration_ms;
+        d.next_attempt = Some(completed_at + delay.as_secs() as i64);
+        match result {
+            Ok(value) => {
+                d.last_success = value.observed_at.map(|t| t.seconds);
+                d.consecutive_failures = 0;
+                v.weekly_error.clear();
+            }
+            Err(error) => {
+                d.last_failure = Some(completed_at);
+                d.failure_duration_ms = duration_ms;
+                d.consecutive_failures = d.consecutive_failures.saturating_add(1);
+                d.last_error = Some(error.clone());
+                v.weekly_error = error.to_string();
+            }
+        }
+    });
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -149,7 +192,7 @@ pub async fn test_connection(c: &Config, s: &Secrets) -> Result<String, String> 
 enum SourceEvent {
     Codex(Result<wire::CodexObservation, String>),
     Usage(Result<wire::UsageObservation, String>),
-    Weekly(Result<wire::CodexWeeklyLimit, String>),
+    Weekly(Result<wire::CodexWeeklyLimit, codex::WeeklyError>),
 }
 fn spawn_sources(
     c: &Config,
@@ -157,6 +200,7 @@ fn spawn_sources(
     clock: Arc<Clock>,
     tx: mpsc::Sender<SourceEvent>,
     workers: &mut JoinSet<()>,
+    status: &SharedStatus,
 ) {
     if c.codex.enabled {
         let config = c.codex.clone();
@@ -179,13 +223,26 @@ fn spawn_sources(
             let config = c.codex.clone();
             let out = tx.clone();
             let time = clock.clone();
+            let status = status.clone();
             workers.spawn(async move {
+                let mut retry = codex::WeeklyRetry::default();
                 loop {
-                    let result = codex::weekly(&config, time.now()).await;
+                    let attempted_at = time.now();
+                    let started = std::time::Instant::now();
+                    let result = codex::weekly(&config, attempted_at).await;
+                    let delay = retry.delay(result.as_ref().err());
+                    record_weekly_attempt(
+                        &status,
+                        &result,
+                        attempted_at,
+                        time.now(),
+                        started.elapsed().as_millis() as u64,
+                        delay,
+                    );
                     if out.send(SourceEvent::Weekly(result)).await.is_err() {
                         break;
                     }
-                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    tokio::time::sleep(delay).await;
                 }
             });
         }
@@ -412,7 +469,7 @@ fn record_source(
         SourceEvent::Codex(result) => match result {
             Ok(mut value) => {
                 value.weekly_limit =
-                    weekly.filter(|w| w.fresh_until.as_ref().is_some_and(|t| t.seconds > now));
+                    weekly.filter(|w| w.resets_at.as_ref().is_some_and(|t| t.seconds > now));
                 update(status, |v| {
                     v.codex.last_success = value.observed_at.as_ref().map(|t| t.seconds);
                     v.codex.error.clear();
@@ -433,19 +490,24 @@ fn record_source(
             }
             Err(e) => update(status, |v| v.usage.error = e),
         },
-        SourceEvent::Weekly(result) => match result {
-            Ok(value) => {
+        SourceEvent::Weekly(result) => {
+            if let Ok(value) = result {
                 *weekly = Some(value);
-                update(status, |v| v.weekly_error.clear());
+                // Publish recovered quota without waiting for the next session scan.
+                if let Some(Payload::Codex(observation)) = &mut latest[1] {
+                    observation.weekly_limit =
+                        weekly.filter(|w| w.resets_at.is_some_and(|t| t.seconds > now));
+                }
             }
-            Err(e) => update(status, |v| v.weekly_error = e),
-        },
+        }
     }
 }
 
 pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: CancellationToken) {
     update(&status, |v| {
         v.running = true;
+        v.weekly_error.clear();
+        v.weekly_diagnostics = WeeklyDiagnostics::default();
         v.message = "正在连接".into();
         v.connected = false;
     });
@@ -466,7 +528,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
     // Bound initial correction before timestamps are produced; NTP failure falls back to system time.
     tokio::select! {_ = cancel.cancelled()=>{},_ = tokio::time::sleep(Duration::from_secs(ntp_timeout))=>{}}
     let (tx, mut rx) = mpsc::channel(16);
-    spawn_sources(&c, &s, clock.clone(), tx, &mut workers);
+    spawn_sources(&c, &s, clock.clone(), tx, &mut workers, &status);
     let mut latest = [None, None];
     let mut weekly = None;
     let mut executor = Executor::default();
@@ -610,6 +672,116 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn weekly_failure_preserves_stale_values_until_reset_and_recovers_immediately() {
+        let status = Arc::new(Mutex::new(Status::default()));
+        let mut latest = [None, None];
+        let mut weekly = None;
+        let quota = wire::CodexWeeklyLimit {
+            remaining_percent: 42.,
+            resets_at: codex::ts(1000),
+            observed_at: codex::ts(100),
+            fresh_until: codex::ts(280),
+        };
+        record_source(
+            SourceEvent::Weekly(Ok(quota)),
+            &mut latest,
+            &mut weekly,
+            &status,
+            100,
+        );
+        record_source(
+            SourceEvent::Weekly(Err(codex::WeeklyError::new("request", "timeout"))),
+            &mut latest,
+            &mut weekly,
+            &status,
+            400,
+        );
+        let observation = |now| wire::CodexObservation {
+            observed_at: codex::ts(now),
+            ..Default::default()
+        };
+        record_source(
+            SourceEvent::Codex(Ok(observation(400))),
+            &mut latest,
+            &mut weekly,
+            &status,
+            400,
+        );
+        let Some(Payload::Codex(value)) = &latest[1] else {
+            panic!("missing codex observation")
+        };
+        assert_eq!(value.weekly_limit, Some(quota)); // No renewal of original timestamps.
+        record_source(
+            SourceEvent::Codex(Ok(observation(1000))),
+            &mut latest,
+            &mut weekly,
+            &status,
+            1000,
+        );
+        let Some(Payload::Codex(value)) = &latest[1] else {
+            panic!("missing codex observation")
+        };
+        assert!(value.weekly_limit.is_none());
+        let recovered = wire::CodexWeeklyLimit {
+            remaining_percent: 99.,
+            resets_at: codex::ts(2000),
+            observed_at: codex::ts(1001),
+            fresh_until: codex::ts(1181),
+        };
+        record_source(
+            SourceEvent::Weekly(Ok(recovered)),
+            &mut latest,
+            &mut weekly,
+            &status,
+            1001,
+        );
+        let Some(Payload::Codex(value)) = &latest[1] else {
+            panic!("missing codex observation")
+        };
+        assert_eq!(value.weekly_limit, Some(recovered));
+        assert_eq!(value.observed_at.unwrap().seconds, 1000); // Do not renew the session scan.
+    }
+
+    #[test]
+    fn weekly_diagnostics_survive_recovery_without_renewing_last_success_on_failure() {
+        let status = Arc::new(Mutex::new(Status::default()));
+        let quota = wire::CodexWeeklyLimit {
+            observed_at: codex::ts(100),
+            ..Default::default()
+        };
+        record_weekly_attempt(&status, &Ok(quota), 100, 102, 2000, Duration::from_secs(60));
+        let failure = Err(codex::WeeklyError::new("request", "timeout"));
+        record_weekly_attempt(&status, &failure, 162, 177, 15000, Duration::from_secs(5));
+        let current = snapshot(&status);
+        assert_eq!(current.weekly_diagnostics.last_success, Some(100));
+        assert_eq!(current.weekly_diagnostics.last_failure, Some(177));
+        assert_eq!(current.weekly_diagnostics.next_attempt, Some(182));
+        assert_eq!(current.weekly_diagnostics.consecutive_failures, 1);
+        assert!(!current.weekly_error.is_empty());
+        record_weekly_attempt(
+            &status,
+            &Ok(wire::CodexWeeklyLimit {
+                observed_at: codex::ts(182),
+                ..quota
+            }),
+            182,
+            184,
+            2000,
+            Duration::from_secs(60),
+        );
+        let current = snapshot(&status);
+        assert!(current.weekly_error.is_empty());
+        assert_eq!(current.weekly_diagnostics.consecutive_failures, 0);
+        assert_eq!(current.weekly_diagnostics.last_success, Some(182));
+        assert_eq!(current.weekly_diagnostics.last_failure, Some(177));
+        assert_eq!(current.weekly_diagnostics.failure_duration_ms, 15000);
+        assert_eq!(
+            current.weekly_diagnostics.last_error.unwrap().code,
+            "timeout"
+        );
+    }
+
     #[test]
     fn facts_ignore_bookkeeping() {
         let a = wire::CodexObservation {

@@ -447,6 +447,53 @@ function App() {
                     {status?.weeklyError && (
                       <p className="inline-error">周限：{status.weeklyError}</p>
                     )}
+                    {settings.config.codex.enabled &&
+                      settings.config.codex.rateLimits &&
+                      status?.weeklyDiagnostics?.lastError && (
+                        <details>
+                          <summary>周限诊断</summary>
+                          <p>
+                            最近失败：
+                            {new Date(
+                              status.weeklyDiagnostics.lastFailure! * 1000,
+                            ).toLocaleString("zh-CN")}{" "}
+                            · 耗时 {status.weeklyDiagnostics.failureDurationMs}{" "}
+                            ms
+                          </p>
+                          <p>
+                            阶段：{status.weeklyDiagnostics.lastError.stage} ·
+                            错误：{status.weeklyDiagnostics.lastError.code}
+                            {status.weeklyDiagnostics.lastError.rpcCode !==
+                              null &&
+                              ` · RPC ${status.weeklyDiagnostics.lastError.rpcCode}`}
+                            {status.weeklyDiagnostics.lastError.httpStatus !==
+                              null &&
+                              ` · HTTP ${status.weeklyDiagnostics.lastError.httpStatus}`}
+                          </p>
+                          <p>
+                            最近成功：
+                            {status.weeklyDiagnostics.lastSuccess === null
+                              ? "尚未成功"
+                              : new Date(
+                                  status.weeklyDiagnostics.lastSuccess * 1000,
+                                ).toLocaleString("zh-CN")}
+                          </p>
+                          <p>
+                            最近请求耗时：{status.weeklyDiagnostics.durationMs}{" "}
+                            ms · 连续失败：
+                            {status.weeklyDiagnostics.consecutiveFailures}
+                          </p>
+                          {status.running &&
+                            status.weeklyDiagnostics.nextAttempt !== null && (
+                              <p>
+                                下次采集：
+                                {new Date(
+                                  status.weeklyDiagnostics.nextAttempt * 1000,
+                                ).toLocaleTimeString("zh-CN")}
+                              </p>
+                            )}
+                        </details>
+                      )}
                     {status?.clockError && (
                       <p className="muted">
                         时间校准暂不可用，当前使用系统时间。

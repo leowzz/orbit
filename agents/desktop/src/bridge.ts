@@ -73,6 +73,16 @@ const status: Status = {
   codex: empty,
   usage: empty,
   weeklyError: "",
+  weeklyDiagnostics: {
+    lastAttempt: null,
+    lastSuccess: null,
+    lastFailure: null,
+    durationMs: 0,
+    failureDurationMs: 0,
+    consecutiveFailures: 0,
+    nextAttempt: null,
+    lastError: null,
+  },
   clockError: "",
   lastAck: null,
   inference: {
