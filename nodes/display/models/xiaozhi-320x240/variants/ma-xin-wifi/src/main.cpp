@@ -96,15 +96,11 @@ void render() {
     const auto details = orbit_display::weeklyDetails(
         retained ? snapshot.view.secondary.value : nullptr,
         retained ? snapshot.view.footer.value : nullptr);
-    drawSmoothText(canvas, FontFace::Small, "RESET", 16, 174, 176, 15, kMuted);
-    drawSmoothText(canvas, FontFace::Secondary, details.reset, 16, 194, 176, 26, 0xFFFF);
-    drawSmoothText(canvas, FontFace::Small, "REMAINING", 198, 174, 106, 15, kMuted, TextAlign::Right);
-    drawSmoothText(canvas, FontFace::Secondary, details.remaining, 198, 194, 106, 26, 0xFFFF, TextAlign::Right);
+    drawSmoothText(canvas, FontFace::Secondary, details.reset, 16, 180, 164, 40, 0xFFFF);
+    drawSmoothText(canvas, FontFace::Secondary, details.remaining, 200, 180, 104, 40, 0xFFFF, TextAlign::Right);
   } else {
-    drawSmoothText(canvas, FontFace::Small, "TOKENS", 16, 172, 130, 15, kMuted);
-    drawSmoothText(canvas, FontFace::Secondary, retained ? snapshot.view.secondary.value : "--", 16, 190, 130, 26, 0xFFFF);
-    drawSmoothText(canvas, FontFace::Small, "TPM", 174, 172, 130, 15, kMuted);
-    drawSmoothText(canvas, FontFace::Secondary, retained ? snapshot.view.footer.value : "--", 174, 190, 130, 26, 0xFFFF);
+    drawSmoothText(canvas, FontFace::Secondary, retained ? snapshot.view.secondary.value : "--", 16, 180, 164, 40, 0xFFFF);
+    drawSmoothText(canvas, FontFace::Secondary, retained ? snapshot.view.footer.value : "--", 200, 180, 104, 40, 0xFFFF, TextAlign::Right);
   }
   const char* state = nullptr;
   if (snapshot.state == orbit_display::RuntimeState::kWifi) state = "CONNECTING WI-FI";

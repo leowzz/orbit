@@ -73,6 +73,15 @@ void drawSmoothText(GFXcanvas16& canvas, FontFace face, const char* value,
     pen += advance(*g, spacing);
   }
   if (first || right <= left || bottom <= top) return;
+  if (face == FontFace::Secondary) {
+    // Keep both detail columns and pages on the same baseline, even with '/'.
+    for (size_t i = 0; i < font.count; ++i) {
+      const Glyph& g = font.glyphs[i];
+      if (!g.width || !g.height) continue;
+      top = std::min(top, static_cast<float>(g.top));
+      bottom = std::max(bottom, static_cast<float>(g.top + g.height));
+    }
+  }
   const float scale = std::min(1.0f, std::min(width / (right-left), height / (bottom-top)));
   const float remaining = width - (right-left) * scale;
   const float originX = x - left * scale + (align == TextAlign::Center ? remaining / 2 : align == TextAlign::Right ? remaining : 0);
