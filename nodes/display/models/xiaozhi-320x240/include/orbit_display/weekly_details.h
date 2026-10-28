@@ -1,7 +1,23 @@
 #pragma once
+#include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 namespace orbit_display {
+inline uint16_t weeklyQuotaColor(const char* primary) {
+  if (!primary) return 0xFFFF;
+  char* end = nullptr;
+  const float percent = std::strtof(primary, &end);
+  if (end == primary || *end != '%' || end[1] != '\0' || !std::isfinite(percent)) {
+    return 0xFFFF;
+  }
+  if (percent <= 10) return 0xF800;
+  if (percent <= 30) return 0xFFE0;
+  if (percent <= 90) return 0xFFFF;
+  return 0x07E0;
+}
+
 struct WeeklyDetails {
   char reset[24] = "--/-- --:--";
   char remaining[32] = "--d --h";

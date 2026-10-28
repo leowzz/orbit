@@ -72,8 +72,9 @@ inputs:
 
 Usage shows USD cost rounded to one decimal by Core (for example `$20.2`), token
 count and TPM. Larger amounts retain all integer digits. Weekly view shows remaining percent,
-with reset date/time (UTC+8) grouped at the bottom left and remaining days/hours
-grouped at the bottom right (for example `5d 14h`). Missing data displays `--`;
+colored red at 10% or below, yellow above 10% through 30%, white above 30% through
+90%, and green above 90%. Reset date/time (UTC+8) is grouped at the bottom left
+and remaining days/hours at the bottom right (for example `5d 14h`). Missing data displays `--`;
 expired observations are marked `STALE` and retained values disappear after their
 retention deadline. Wi-Fi/time/MQTT failures have distinct connection messages.
 Battery percent uses the upstream empirical ADC algorithm, not a calibrated gauge.

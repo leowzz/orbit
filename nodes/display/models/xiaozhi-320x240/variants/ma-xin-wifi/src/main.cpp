@@ -86,8 +86,10 @@ void render() {
   const bool weekly = strcmp(snapshot.view.display_kind.value, "codex") == 0;
   const bool retained = snapshot.has_view && time(nullptr) < snapshot.view.retain_until;
   const char* primary = retained ? snapshot.view.primary.value : "--";
+  const uint16_t primaryColor = weekly ? orbit_display::weeklyQuotaColor(primary)
+                                       : snapshot.stale ? kWarning : 0xFFFF;
   drawSmoothText(canvas, FontFace::Primary, primary, 16, 32, 288, 112,
-                 snapshot.stale ? kWarning : 0xFFFF, TextAlign::Center,
+                 primaryColor, TextAlign::Center,
                  weekly ? TextSpacing::Monospace : TextSpacing::Compact);
   canvas.drawFastHLine(16, 160, 288, 0x2945);
   if (weekly) {
