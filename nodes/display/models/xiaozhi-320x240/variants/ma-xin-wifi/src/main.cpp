@@ -10,6 +10,7 @@
 #include "nanopb_protocol.h"
 #include "orbit_display/smooth_font.h"
 #include "orbit_display/weekly_details.h"
+#include "orbit_display/quota_energy_bar.h"
 
 namespace {
 using orbit_display::drawSmoothText;
@@ -79,26 +80,31 @@ void render() {
   if (batteryCount < 10) ++batteryCount;
   uint32_t sum = 0;
   for (size_t i=0; i<batteryCount; ++i) sum += battery[i];
+  const uint8_t batteryPercent = batteryLevelFromAdc(sum / batteryCount);
   char power[24];
-  snprintf(power, sizeof(power), "%s%u%%", digitalRead(board::kChargeStatus) == LOW ? "+" : "", batteryLevelFromAdc(sum/batteryCount));
+  snprintf(power, sizeof(power), "%s%u%%", digitalRead(board::kChargeStatus) == LOW ? "+" : "", batteryPercent);
   canvas.fillScreen(kBackground);
-  drawSmoothText(canvas, FontFace::Small, power, 244, 8, 60, 14, kMuted, TextAlign::Right);
+  canvas.drawRect(244, 10, 18, 10, kMuted);
+  canvas.fillRect(262, 13, 2, 4, kMuted);
+  const int batteryFill = (14 * batteryPercent + 50) / 100;
+  if (batteryFill > 0) canvas.fillRect(246, 12, batteryFill, 6, kMuted);
+  drawSmoothText(canvas, FontFace::Small, power, 270, 8, 34, 14, kMuted, TextAlign::Right);
   const bool weekly = strcmp(snapshot.view.display_kind.value, "codex") == 0;
   const bool retained = snapshot.has_view && time(nullptr) < snapshot.view.retain_until;
   const char* primary = retained ? snapshot.view.primary.value : "--";
-  const uint16_t primaryColor = weekly ? orbit_display::weeklyQuotaColor(primary)
-                                       : snapshot.stale ? kWarning : 0xFFFF;
-  drawSmoothText(canvas, FontFace::Primary, primary, 16, 32, 288, 112,
+  const uint16_t primaryColor = !weekly && snapshot.stale ? kWarning : 0xFFFF;
+  drawSmoothText(canvas, FontFace::Primary, primary, 16, 32, 288, weekly ? 104 : 112,
                  primaryColor, TextAlign::Center,
                  weekly ? TextSpacing::Monospace : TextSpacing::Compact);
-  canvas.drawFastHLine(16, 160, 288, 0x2945);
   if (weekly) {
+    orbit_display::drawQuotaEnergyBar(canvas, primary, orbit_display::weeklyQuotaColor(primary));
     const auto details = orbit_display::weeklyDetails(
         retained ? snapshot.view.secondary.value : nullptr,
         retained ? snapshot.view.footer.value : nullptr);
     drawSmoothText(canvas, FontFace::Secondary, details.reset, 16, 180, 164, 40, 0xFFFF);
     drawSmoothText(canvas, FontFace::Secondary, details.remaining, 200, 180, 104, 40, 0xFFFF, TextAlign::Right);
   } else {
+    canvas.drawFastHLine(16, 160, 288, 0x2945);
     drawSmoothText(canvas, FontFace::Secondary, retained ? snapshot.view.secondary.value : "--", 16, 180, 164, 40, 0xFFFF);
     drawSmoothText(canvas, FontFace::Secondary, retained ? snapshot.view.footer.value : "--", 200, 180, 104, 40, 0xFFFF, TextAlign::Right);
   }
