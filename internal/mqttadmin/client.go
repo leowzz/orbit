@@ -257,6 +257,22 @@ func rulesFor(kind, id string) []rule {
 	if kind == "agent" || kind == "worker" {
 		root = "orbit/v1/agents/" + id
 	}
+	if kind == "windows-agent" {
+		root = "orbit/v1/agents/" + id
+		return []rule{
+			{"allow", "publish", root + "/state"},
+			{"allow", "publish", root + "/observations/+"},
+			{"allow", "publish", root + "/results"},
+			{"allow", "publish", root + "/shortcuts"},
+			{"allow", "subscribe", root + "/commands"},
+			{"allow", "publish", root + "/audio/state"},
+			{"allow", "publish", root + "/audio/results"},
+			{"allow", "subscribe", root + "/audio/acks"},
+			{"allow", "subscribe", "orbit/v1/audio/jobs"},
+			{"deny", "all", "$SYS/#"},
+			{"deny", "all", "#"},
+		}
+	}
 	if kind == "worker" {
 		return []rule{
 			{"allow", "publish", root + "/audio/state"},
@@ -389,9 +405,9 @@ func (c *Client) Create(ctx context.Context, input CreateInput) (Result, error) 
 	return Result{Username: input.Username, Password: secret}, nil
 }
 
-// ProvisionNode provisions the Android App's Core-owned account. The exact legacy
-// node policy may gain its own audio topics; unrelated policies are never adopted.
-func (c *Client) ProvisionNode(ctx context.Context, username, nodeID, secret string) error {
+// provisionDevice creates or updates a Core-owned account. Existing policies are
+// only migrated when they are one of the explicitly supported legacy policies.
+func (c *Client) provisionDevice(ctx context.Context, username, nodeID, secret, kind string, legacyPolicies ...[]rule) error {
 	if err := c.mutable(username); err != nil {
 		return err
 	}
@@ -413,11 +429,18 @@ func (c *Client) ProvisionNode(ctx context.Context, username, nodeID, secret str
 	if exists && user.Superuser {
 		return &Error{409, "设备 MQTT 用户权限不匹配"}
 	}
-	policy := userRules{username, rulesFor("audio-node", nodeID)}
+	policy := userRules{username, rulesFor(kind, nodeID)}
 	var current userRules
 	err = c.request(ctx, "GET", rulesPath+"/"+url.PathEscape(username), nil, &current)
 	if err == nil && !slices.Equal(current.Rules, policy.Rules) {
-		if !slices.Equal(current.Rules, rulesFor("node", nodeID)) {
+		adoptable := false
+		for _, legacy := range legacyPolicies {
+			if slices.Equal(current.Rules, legacy) {
+				adoptable = true
+				break
+			}
+		}
+		if !adoptable {
 			return &Error{409, "设备 MQTT 权限规则不匹配"}
 		}
 		err = c.request(ctx, "PUT", rulesPath+"/"+url.PathEscape(username), policy, nil)
@@ -435,6 +458,25 @@ func (c *Client) ProvisionNode(ctx context.Context, username, nodeID, secret str
 		return c.request(ctx, "PUT", usersPath+"/"+url.PathEscape(username), map[string]any{"password": secret, "is_superuser": false}, nil)
 	}
 	return c.request(ctx, "POST", usersPath, map[string]any{"user_id": username, "password": secret, "is_superuser": false}, nil)
+}
+
+// ProvisionNode provisions the Android App's Core-owned account.
+func (c *Client) ProvisionNode(ctx context.Context, username, nodeID, secret string) error {
+	return c.provisionDevice(ctx, username, nodeID, secret, "audio-node", rulesFor("node", nodeID))
+}
+
+// ProvisionAgent provisions the Windows Agent account. The Agent and its local
+// ASR Worker use the same MQTT credentials while retaining separate client IDs.
+func (c *Client) ProvisionAgent(ctx context.Context, username, nodeID, secret string) error {
+	return c.provisionDevice(
+		ctx,
+		username,
+		nodeID,
+		secret,
+		"windows-agent",
+		rulesFor("audio-node", nodeID),
+		rulesFor("agent", nodeID),
+	)
 }
 
 func (c *Client) disconnect(ctx context.Context, username string) error {

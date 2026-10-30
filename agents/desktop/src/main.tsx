@@ -727,42 +727,9 @@ function App() {
                         />
                       </Field>
                     </div>
-                    <div className="two-col">
-                      <Field label="Worker 标识">
-                        <input
-                          value={settings.config.inference.agentId}
-                          onChange={(e) =>
-                            source("inference", "agentId", e.target.value)
-                          }
-                        />
-                      </Field>
-                      <Field label="Worker 用户名">
-                        <input
-                          value={settings.config.inference.username}
-                          onChange={(e) =>
-                            source("inference", "username", e.target.value)
-                          }
-                        />
-                      </Field>
-                    </div>
-                    <Field label="Worker 密码" hint="密码保存在 Windows 凭据存储中。">
-                      <input
-                        type="password"
-                        autoComplete="new-password"
-                        placeholder={
-                          settings.hasInferencePassword
-                            ? "已保存，未修改时保留"
-                            : ""
-                        }
-                        value={settings.inferencePassword ?? ""}
-                        onChange={(e) =>
-                          setSettings({
-                            ...settings,
-                            inferencePassword: e.target.value,
-                          })
-                        }
-                      />
-                    </Field>
+                    <p className="muted">
+                      Worker 会复用连接页中 Agent 从 Core 获取的 MQTT 地址和凭据，Agent 重启时按此开关自动启动。
+                    </p>
                   </Section>
                   <Section title="模型库">
                     {models.length === 0 ? (

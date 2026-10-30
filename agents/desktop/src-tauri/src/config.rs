@@ -75,8 +75,6 @@ pub struct Usage {
 pub struct Inference {
     pub enabled: bool,
     pub model_id: String,
-    pub agent_id: String,
-    pub username: String,
     pub model_path: String,
     pub runtime_path: String,
     pub device: String,
@@ -87,8 +85,6 @@ impl Default for Inference {
         Self {
             enabled: false,
             model_id: crate::inference::assets::MODEL_ID.into(),
-            agent_id: "sdt-asr".into(),
-            username: String::new(),
             model_path: crate::inference::assets::managed_model_path()
                 .to_string_lossy()
                 .into_owned(),
@@ -163,8 +159,6 @@ pub struct Secrets {
     pub mqtt: String,
     pub usage: String,
     #[serde(default)]
-    pub inference: String,
-    #[serde(default)]
     pub core: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
@@ -174,10 +168,8 @@ pub struct Settings {
     pub core_token: Option<String>,
     pub mqtt_password: Option<String>,
     pub usage_password: Option<String>,
-    pub inference_password: Option<String>,
     pub has_mqtt_password: bool,
     pub has_usage_password: bool,
-    pub has_inference_password: bool,
     pub has_core_token: bool,
 }
 impl Settings {
@@ -187,10 +179,8 @@ impl Settings {
             core_token: None,
             mqtt_password: None,
             usage_password: None,
-            inference_password: None,
             has_mqtt_password: !secrets.mqtt.is_empty(),
             has_usage_password: !secrets.usage.is_empty(),
-            has_inference_password: !secrets.inference.is_empty(),
             has_core_token: !secrets.core.is_empty(),
         }
     }
@@ -204,10 +194,6 @@ impl Settings {
                 .usage_password
                 .clone()
                 .unwrap_or_else(|| previous.usage.clone()),
-            inference: self
-                .inference_password
-                .clone()
-                .unwrap_or_else(|| previous.inference.clone()),
             core: self
                 .core_token
                 .clone()
@@ -313,9 +299,6 @@ impl Config {
             }
         }
         if self.inference.enabled {
-            if !audio_identity(&self.inference.agent_id) {
-                return Err("本地推理 Worker 标识只能包含小写字母、数字、横线和下划线".into());
-            }
             if self.inference.queue_capacity == 0 || self.inference.queue_capacity > 1000 {
                 return Err("本地推理队列容量需在 1–1000 之间".into());
             }
@@ -331,14 +314,6 @@ impl Config {
         }
         Ok(())
     }
-}
-fn audio_identity(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 64
-        && value.as_bytes()[0].is_ascii_alphanumeric()
-        && value
-            .bytes()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')
 }
 impl Usage {
     pub fn endpoints(&self) -> [String; 3] {
@@ -533,11 +508,6 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
     if c.inference.model_id.is_empty() {
         c.inference.model_id = crate::inference::assets::MODEL_ID.into();
     }
-    c.inference.agent_id = text(&["inference", "agent_id"]);
-    if c.inference.agent_id.is_empty() {
-        c.inference.agent_id = Inference::default().agent_id;
-    }
-    c.inference.username = text(&["inference", "username"]);
     c.inference.model_path = resolve(text(&["inference", "model_path"]));
     c.inference.runtime_path = resolve(text(&["inference", "runtime_path"]));
     let device = text(&["inference", "device"]);
@@ -554,7 +524,6 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
         core: secret(&["core", "credentials", "token_file"])?,
         mqtt: secret(&["mqtt", "credentials", "password_file"])?,
         usage: secret(&["sources", "sub2api", "credentials", "password_file"])?,
-        inference: secret(&["inference", "credentials", "password_file"])?,
     };
     c.ntp_interval = duration(&["ntp", "sync_interval"], 600)?;
     c.ntp_timeout = duration(&["ntp", "timeout"], 2)?;
@@ -574,10 +543,8 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
         core_token: Some(secrets.core),
         mqtt_password: Some(secrets.mqtt),
         usage_password: Some(secrets.usage),
-        inference_password: Some(secrets.inference),
         has_mqtt_password: false,
         has_usage_password: false,
-        has_inference_password: false,
         has_core_token: false,
     })
 }
@@ -674,26 +641,19 @@ pub(crate) fn replace_file(from: &Path, to: &Path) -> std::io::Result<()> {
 mod tests {
     use super::*;
     #[test]
-    fn legacy_secrets_preserve_credentials_without_inference() {
+    fn legacy_secrets_preserve_credentials() {
         let secrets: Secrets =
             serde_json::from_str(r#"{"mqtt":"mqtt-secret","usage":"usage-secret"}"#).unwrap();
         assert_eq!(secrets.mqtt, "mqtt-secret");
         assert_eq!(secrets.usage, "usage-secret");
-        assert!(secrets.inference.is_empty());
     }
     #[test]
-    fn current_secrets_preserve_inference_and_reject_invalid_fields() {
-        let secrets: Secrets = serde_json::from_str(
+    fn secrets_reject_invalid_fields() {
+        let _secrets: Secrets = serde_json::from_str(
             r#"{"mqtt":"mqtt-secret","usage":"usage-secret","inference":"asr-secret"}"#,
         )
         .unwrap();
-        assert_eq!(secrets.inference, "asr-secret");
-        for invalid in [
-            r#"{"mqtt":"mqtt-secret","usage":"usage-secret","inference":null}"#,
-            r#"{"mqtt":"mqtt-secret","usage":"usage-secret","inference":123}"#,
-            r#"{"usage":"usage-secret"}"#,
-            r#"{"mqtt":"mqtt-secret"}"#,
-        ] {
+        for invalid in [r#"{"usage":"usage-secret"}"#, r#"{"mqtt":"mqtt-secret"}"#] {
             assert!(serde_json::from_str::<Secrets>(invalid).is_err());
         }
     }
@@ -708,13 +668,11 @@ mod tests {
         let s = Secrets {
             mqtt: "secret".into(),
             usage: "other".into(),
-            inference: "asr-secret".into(),
             core: "core-token".into(),
         };
         let text = serde_json::to_string(&Settings::masked(c, &s)).unwrap();
         assert!(!text.contains("secret"));
         assert!(!text.contains("other"));
-        assert!(!text.contains("asr-secret"));
     }
     #[test]
     fn inference_can_be_the_only_enabled_capability() {

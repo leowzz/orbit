@@ -21,6 +21,7 @@ type fakeDeviceMQTT struct {
 	nodes   map[string]string
 	fail    bool
 	warning bool
+	agent   bool
 }
 
 func (f *fakeDeviceMQTT) ProvisionNode(_ context.Context, username, node, password string) error {
@@ -29,6 +30,10 @@ func (f *fakeDeviceMQTT) ProvisionNode(_ context.Context, username, node, passwo
 	}
 	f.users[username], f.nodes[username] = password, node
 	return nil
+}
+func (f *fakeDeviceMQTT) ProvisionAgent(_ context.Context, username, node, password string) error {
+	f.agent = true
+	return f.ProvisionNode(context.Background(), username, node, password)
 }
 func (f *fakeDeviceMQTT) Revoke(_ context.Context, username string) (mqttadmin.Result, error) {
 	if f.fail {
@@ -229,5 +234,8 @@ func TestDeviceRegistrationClaimsOnlyItsOwnCredentials(t *testing.T) {
 	}
 	if len(broker.users) != 2 {
 		t.Fatal("unexpected MQTT account count")
+	}
+	if !broker.agent {
+		t.Fatal("Windows device did not use Agent provisioning")
 	}
 }

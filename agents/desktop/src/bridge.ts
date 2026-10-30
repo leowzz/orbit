@@ -52,8 +52,6 @@ const settings: Settings = {
     inference: {
       enabled: false,
       modelId: "qwen3-asr-0.6b-q8_0",
-      agentId: "sdt-asr",
-      username: "",
       modelPath: "",
       runtimePath: "",
       device: "auto",
@@ -63,10 +61,8 @@ const settings: Settings = {
   mqttPassword: null,
   coreToken: null,
   usagePassword: null,
-  inferencePassword: null,
   hasMqttPassword: false,
   hasUsagePassword: false,
-  hasInferencePassword: false,
   hasCoreToken: false,
 };
 const status: Status = {

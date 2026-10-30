@@ -18,6 +18,7 @@ import (
 
 type deviceMQTTProvisioner interface {
 	ProvisionNode(context.Context, string, string, string) error
+	ProvisionAgent(context.Context, string, string, string) error
 	Revoke(context.Context, string) (mqttadmin.Result, error)
 }
 
@@ -80,7 +81,11 @@ func (s *Server) provisionMQTT(w http.ResponseWriter, r *http.Request) {
 		password := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		if err := s.mqttProvisioner.ProvisionNode(ctx, device.MQTTUsername, node, password); err != nil {
+		provision := s.mqttProvisioner.ProvisionNode
+		if device.Platform == "windows" {
+			provision = s.mqttProvisioner.ProvisionAgent
+		}
+		if err := provision(ctx, device.MQTTUsername, node, password); err != nil {
 			mqttFailure(w)
 			return
 		}

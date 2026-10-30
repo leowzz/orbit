@@ -28,6 +28,11 @@ func TestAudioCredentialIsolation(t *testing.T) {
 		{"worker", "publish", "orbit/v1/audio/jobs", false},
 		{"worker", "publish", "orbit/v1/agents/other/audio/results", false},
 		{"worker", "subscribe", "orbit/v1/agents/device1/commands", false},
+		{"windows-agent", "publish", "orbit/v1/agents/device1/state", true},
+		{"windows-agent", "subscribe", "orbit/v1/agents/device1/commands", true},
+		{"windows-agent", "subscribe", "orbit/v1/audio/jobs", true},
+		{"windows-agent", "publish", "orbit/v1/agents/device1/audio/results", true},
+		{"windows-agent", "publish", "orbit/v1/agents/other/audio/results", false},
 	} {
 		if got := allowed(tc.kind, tc.action, tc.topic); got != tc.want {
 			t.Errorf("%s %s %s: got %t, want %t", tc.kind, tc.action, tc.topic, got, tc.want)

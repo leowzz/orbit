@@ -56,8 +56,6 @@ export interface Config {
   inference: {
     enabled: boolean;
     modelId: string;
-    agentId: string;
-    username: string;
     modelPath: string;
     runtimePath: string;
     device: "auto" | "cpu" | "gpu";
@@ -69,10 +67,8 @@ export interface Settings {
   coreToken: string | null;
   mqttPassword: string | null;
   usagePassword: string | null;
-  inferencePassword: string | null;
   hasMqttPassword: boolean;
   hasUsagePassword: boolean;
-  hasInferencePassword: boolean;
   hasCoreToken: boolean;
 }
 export interface Source {

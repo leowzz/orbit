@@ -57,19 +57,7 @@ fn queue_path(agent_id: &str) -> PathBuf {
 }
 
 fn worker_mqtt_options(c: &Config, s: &Secrets) -> Result<MqttOptions, String> {
-    let mut worker = c.clone();
-    worker.mqtt.username = c.inference.username.clone();
-    let mut credentials = s.clone();
-    credentials.mqtt = if s.inference.is_empty() {
-        std::env::var("ORBIT_MQTT_PASSWORD").unwrap_or_default()
-    } else {
-        s.inference.clone()
-    };
-    let mut options = runtime::mqtt_options(
-        &worker,
-        &credentials,
-        format!("orbit-asr-{}", c.inference.agent_id),
-    )?;
+    let mut options = runtime::mqtt_options(c, s, format!("orbit-asr-{}", c.agent_id))?;
     options.set_max_packet_size(Some(256 * 1024));
     Ok(options)
 }
@@ -95,7 +83,7 @@ fn now_string() -> String {
 fn state_bytes(c: &Config, state: &str, device: &str) -> Vec<u8> {
     serde_json::to_vec(&WorkerState {
         schema_version: 1,
-        agent_id: &c.inference.agent_id,
+        agent_id: &c.agent_id,
         host_label: &c.host_label,
         model: MODEL_NAME,
         device,
@@ -239,7 +227,7 @@ async fn process_one(
         return Ok(());
     };
     update_inference(status, |v| v.status = "processing".into());
-    let worker_id = c.inference.agent_id.clone();
+    let worker_id = c.agent_id.clone();
     let job_copy = job.clone();
     let device_name = device.to_string();
     let runtime_path = c.inference.runtime_path.clone();
@@ -264,7 +252,7 @@ async fn process_one(
         .map_err(|e| e.to_string())?;
     publish(
         client,
-        format!("orbit/v1/agents/{}/audio/results", c.inference.agent_id),
+        format!("orbit/v1/agents/{}/audio/results", c.agent_id),
         false,
         payload,
     )?;
@@ -344,7 +332,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
         }
     };
     update_inference(&status, |v| v.model_ready = true);
-    let queue = queue_path(&c.inference.agent_id);
+    let queue = queue_path(&c.agent_id);
     if let Some(parent) = queue.parent() {
         if let Err(error) = std::fs::create_dir_all(parent) {
             eprintln!("Orbit native ASR queue directory error: {error}");
@@ -397,11 +385,11 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
                 _ = cancel.cancelled() => break 'reconnect,
                 _ = tick.tick(), if online => {
                     set_counts(&store, &status);
-                    let _ = publish_outbox(&store, &client, &c.inference.agent_id).await;
+                    let _ = publish_outbox(&store, &client, &c.agent_id).await;
                     let _ = process_one(&store, model.clone(), &c, &client, device, &status).await;
                 }
                 _ = heartbeat.tick(), if online => {
-                    let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.inference.agent_id), true, state_bytes(&c, "ready", device));
+                    let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(&c, "ready", device));
                 }
                 event = eventloop.poll() => match event {
                     Ok(Event::Incoming(MqttPacket::ConnAck(_))) => {
@@ -411,9 +399,9 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
                         if let Ok(mut value) = status.lock() { value.connected = true; value.message = "ASR Worker 已连接 MQTT".into(); }
                         let mut jobs = Filter::new(JOB_TOPIC, QoS::AtLeastOnce);
                         jobs.preserve_retain = true;
-                        let acks = Filter::new(format!("orbit/v1/agents/{}/audio/acks", c.inference.agent_id), QoS::AtLeastOnce);
+                        let acks = Filter::new(format!("orbit/v1/agents/{}/audio/acks", c.agent_id), QoS::AtLeastOnce);
                         if client.try_subscribe_many([jobs, acks]).is_err() { break; }
-                        let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.inference.agent_id), true, state_bytes(&c, "ready", device));
+                        let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(&c, "ready", device));
                     }
                     Ok(Event::Incoming(MqttPacket::SubAck(ack))) => {
                         if ack.return_codes.iter().any(|code| !matches!(code, SubscribeReasonCode::Success(_))) {
@@ -422,7 +410,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
                         }
                     }
                     Ok(Event::Incoming(MqttPacket::Publish(p))) => {
-                        let acks_topic = format!("orbit/v1/agents/{}/audio/acks", c.inference.agent_id);
+                        let acks_topic = format!("orbit/v1/agents/{}/audio/acks", c.agent_id);
                         if p.topic.as_ref() == acks_topic.as_bytes() {
                             if let Ok(ack) = serde_json::from_slice::<Ack>(&p.payload) {
                                 if ack.schema_version == 1 && ack.status == "stored" { let _ = store.acknowledge(&ack.job_id); }
