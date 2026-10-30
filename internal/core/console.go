@@ -30,6 +30,7 @@ import (
 type RouteStore struct {
 	db               *sql.DB
 	audioMaxSegments int
+	analysis         config.AnalysisConfig
 }
 type RouteDocument struct {
 	Revision int64                             `json:"revision"`
@@ -53,6 +54,9 @@ func OpenRouteStore(path string, seed map[string]config.ProjectionRoute, audioCo
 	}
 	db.SetMaxOpenConns(1)
 	store := &RouteStore{db: db, audioMaxSegments: maxSegments}
+	if len(audioConfig) > 0 {
+		store.analysis = audioConfig[0].Analysis
+	}
 	fail := func(err error) (*RouteStore, error) { db.Close(); return nil, err }
 	if _, err = db.Exec(`PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS routing_config (id INTEGER PRIMARY KEY CHECK (id=1), revision INTEGER NOT NULL, document TEXT NOT NULL); CREATE TABLE IF NOT EXISTS node_labels (node_id TEXT PRIMARY KEY, label TEXT NOT NULL); CREATE TABLE IF NOT EXISTS node_archives (node_id TEXT PRIMARY KEY);`); err != nil {
 		return fail(err)
@@ -61,6 +65,9 @@ func OpenRouteStore(path string, seed map[string]config.ProjectionRoute, audioCo
 		return fail(err)
 	}
 	if _, err = db.Exec(audioSchema); err != nil {
+		return fail(err)
+	}
+	if err = store.initReviews(); err != nil {
 		return fail(err)
 	}
 	tx, err := db.Begin()
@@ -258,6 +265,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	mux := http.NewServeMux()
 	mqttAdminRoutes(mux, cfg)
 	store.audioRoutes(mux)
+	store.reviewRoutes(mux)
 	admin := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" && r.URL.Path == "/api/app/devices" {
 			writeConsoleJSON(w, map[string]any{"enabled": false})

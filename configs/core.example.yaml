@@ -15,6 +15,14 @@ console:
 # pending jobs and transcripts, are deleted above this limit. Restart to apply.
 audio:
   max_segments: 10000
+  # Optional hourly analysis and daily recaps (Asia/Shanghai). The scheduler
+  # checks every 5 minutes and waits 10 minutes after an hour ends. Review text
+  # and results are retained for 30 days, independently of max_segments.
+  # analysis:
+  #   enabled: true
+  #   base_url: https://api.openai.com/v1
+  #   model: gpt-6-luna
+  #   api_key_file: secrets/analysis-api-key
 
 # Optional application-level NTP calibration. Defaults are shown below.
 # ntp:

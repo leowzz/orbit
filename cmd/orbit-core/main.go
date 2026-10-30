@@ -111,6 +111,11 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if cfg.Audio.Analysis.Enabled {
+		done := make(chan struct{})
+		go func() { defer close(done); store.RunReviews(ctx, logger) }()
+		defer func() { stop(); <-done }()
+	}
 	if cfg.Metrics.Listen != "" {
 		listener, err := net.Listen("tcp", cfg.Metrics.Listen)
 		if err != nil {

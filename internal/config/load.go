@@ -217,6 +217,21 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	if cfg.Audio.MaxSegments <= 0 {
 		return errors.New("audio.max_segments must be positive")
 	}
+	if cfg.Audio.Analysis.Enabled {
+		a := &cfg.Audio.Analysis
+		u, err := url.Parse(a.BaseURL)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return errors.New("audio.analysis.base_url must be an HTTPS API base URL")
+		}
+		a.BaseURL = strings.TrimRight(a.BaseURL, "/")
+		if strings.TrimSpace(a.Model) == "" {
+			a.Model = "gpt-6-luna"
+		}
+		a.APIKey, err = readSecret(baseDir, &a.APIKeyFile)
+		if err != nil || a.APIKey == "" {
+			return errors.New("audio.analysis.api_key_file must contain an API key")
+		}
+	}
 	if strings.TrimSpace(cfg.Console.Database) == "" {
 		return errors.New("console.database is required")
 	}

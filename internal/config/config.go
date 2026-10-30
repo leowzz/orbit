@@ -126,7 +126,17 @@ type MetricsConfig struct {
 const DefaultAudioMaxSegments = 10000
 
 type AudioConfig struct {
-	MaxSegments SegmentLimit `yaml:"max_segments"`
+	MaxSegments SegmentLimit   `yaml:"max_segments"`
+	Analysis    AnalysisConfig `yaml:"analysis"`
+}
+
+// Analysis credentials are read once on startup and never exposed to the console.
+type AnalysisConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	BaseURL    string `yaml:"base_url"`
+	Model      string `yaml:"model"`
+	APIKeyFile string `yaml:"api_key_file" json:"-"`
+	APIKey     string `yaml:"-" json:"-"`
 }
 
 type SegmentLimit int
