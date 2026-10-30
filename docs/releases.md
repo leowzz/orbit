@@ -7,8 +7,17 @@ at most 128 characters). A tag containing a hyphen becomes a prerelease.
 
 Pushing `main` runs `.github/workflows/unit-tests.yml`, covering Go/Web, scripts,
 Android, the desktop Agent, and ESP32-S3 config/native tests without packaging,
-signing, or uploading distributable artifacts. These are the only two workflows:
-`Unit Tests` on `main` pushes and `Release` on `v*` tag pushes.
+signing, or uploading distributable artifacts.
+
+`Windows Agent` (`.github/workflows/windows-agent.yml`) additionally runs on branch
+pushes and pull requests touching the desktop Agent, canonical protocol, or its
+build workflows, and supports manual dispatch. It checks TypeScript, UI tests,
+Rust formatting/clippy/tests on `windows-2022`, builds a release-mode x64 NSIS
+installer, and uploads `windows-agent-x64` (installer plus `WINDOWS-SHA256SUMS`,
+retained for 14 days). Download it from the workflow run's Artifacts section.
+The tag release calls this same workflow with the tag version and includes its
+`release-windows-agent` artifact in the final Release. No tag is needed to test
+Windows packaging. Rust compilation uses two jobs to limit linker memory use.
 
 ## Outputs
 
@@ -34,6 +43,11 @@ signing, or uploading distributable artifacts. These are the only two workflows:
   signing and notarization are not configured;
   first launch may require manual approval in System Settings → Privacy & Security.
   Cosign verifies the download but does not replace Apple signing or notarization.
+- `orbit-agent-windows-x64-TAG-setup.exe`: Windows x64 NSIS installer, with
+  embedded frontend assets and WebView2 bootstrapper support. The version is
+  injected from the tag. Authenticode signing is not configured; the Release
+  supplies SHA-256 checksums and Cosign download verification. ASR GGUF models
+  and speech.cpp/Opus DLLs are not bundled; configure them in the Agent.
 - `orbit-esp32s3-yd-oled-128x32-TAG.tar.gz`: application, bootloader, partitions,
   boot_app0, merged factory image and flash instructions for YD-ESP32-S3 / OLED
   128x32. Firmware reports the tag version. It embeds example network placeholders;

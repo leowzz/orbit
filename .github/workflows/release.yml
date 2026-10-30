@@ -269,6 +269,12 @@ jobs:
           path: dist/*.dmg
           if-no-files-found: error
 
+  windows-agent:
+    needs: preflight
+    uses: ./.github/workflows/windows-agent.yml
+    with:
+      release-tag: ${{ github.ref_name }}
+
   esp32s3:
     needs: preflight
     runs-on: ubuntu-latest
@@ -304,7 +310,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [images, android, macos-agent, esp32s3]
+    needs: [images, android, macos-agent, windows-agent, esp32s3]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -329,8 +335,8 @@ jobs:
       - name: Sign and verify downloadable artifacts
         working-directory: dist
         run: |
-          sha256sum ./*.apk ./*.dmg ./*.tar.gz > SHA256SUMS
-          for artifact in ./*.apk ./*.dmg ./*.tar.gz SHA256SUMS; do
+          sha256sum ./*.apk ./*.dmg ./*.exe ./*.tar.gz > SHA256SUMS
+          for artifact in ./*.apk ./*.dmg ./*.exe ./*.tar.gz SHA256SUMS WINDOWS-SHA256SUMS; do
             cosign sign-blob --yes --bundle "$artifact.sigstore.json" "$artifact"
             cosign verify-blob --bundle "$artifact.sigstore.json" \
               --certificate-identity "$IDENTITY" \
@@ -345,6 +351,7 @@ jobs:
             printf '\n## Downloads\n\n'
             printf -- '- Android: release-key-signed APKs for arm64-v8a (most phones), armeabi-v7a (32-bit ARM) and x86_64. The universal APK is retained for older in-app updaters.\n'
             printf -- '- macOS Agent: Universal DMG for Apple Silicon and Intel (macOS 12+). No Apple Developer ID signing or notarization; Gatekeeper may require manual approval.\n'
+            printf -- '- Windows Agent: x64 NSIS installer. WebView2 is installed if missing; no Authenticode signing is configured. ASR models and native runtime are managed separately.\n'
             printf -- '- ESP32-S3: YD-ESP32-S3 / OLED 128x32 firmware archive, including a factory image and flash instructions. Uses placeholder Wi-Fi/MQTT configuration; rebuild with private configuration for a connected device.\n'
             printf -- '- SHA256SUMS and Cosign bundles for download verification (not ESP Secure Boot).\n'
             # shellcheck disable=SC2016
