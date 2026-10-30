@@ -1,7 +1,11 @@
 .DEFAULT_GOAL := dev
 
 GO ?= go
+ifeq ($(OS),Windows_NT)
+PNPM ?= pnpm.cmd
+else
 PNPM ?= pnpm
+endif
 CONSOLE_DIR := web/core-console
 TOOLS_DIR := $(CURDIR)/.tools/bin
 BUF := $(TOOLS_DIR)/buf
@@ -171,7 +175,9 @@ build-console:
 build-core: build-console
 	$(GO) build -trimpath -o dist/orbit-core ./cmd/orbit-core
 
-.PHONY: dev-desktop-agent test-desktop-agent build-desktop-agent
+.PHONY: desktop dev-desktop-agent test-desktop-agent build-desktop-agent
+desktop: dev-desktop-agent
+
 dev-desktop-agent:
 	cd agents/desktop && $(PNPM) tauri dev
 
