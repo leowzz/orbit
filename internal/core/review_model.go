@@ -19,7 +19,7 @@ const reviewInstructions = `你是个人录音回顾分析器。输入是未经�
 区分现场对话候选 conversation、影视/游戏/广告/播放内容 media、来源不明 unknown。不能把媒体台词写成个人经历，不能因为某段以媒体为主就漏掉其中的实际技术要求。
 提取有用的需求、决定、想法、进展和待办候选，过滤口头语和重复播报。不要杜撰数字、负责人、完成状态或任务截止时间。明确的完成陈述只能标 reported_done，不等于外部验证；预计到货不等于签收。
 结合前后文更新同一事件，例如“要查快递”后出现“已查到昨天发出”，应写查询已有口述结果，收货未知。输入可能是多个分块或小时的分析，必须回到其原文证据，合并重复事项并保留冲突。
-输出一个 JSON 对象且只包含 title、summary、items。title 最多40字，summary 最多400字，均须忠于证据，不加入没有证据的事实。items 最多12项，每项包含：
+输出一个 json 对象且只包含 title、summary、items。title 最多40字，summary 最多400字，均须忠于证据，不加入没有证据的事实。items 最多12项，每项包含：
 kind: requirement|decision|idea|todo|progress|reference
 text: 简洁内容，最多300字
 source: conversation|media|unknown
@@ -43,7 +43,7 @@ func (m *reviewModel) call(ctx context.Context, input any, allowed map[string]re
 	if err != nil {
 		return result, err
 	}
-	body, _ := json.Marshal(map[string]any{"model": m.model, "instructions": reviewInstructions, "input": string(encoded), "store": false, "max_output_tokens": 6000, "text": map[string]any{"format": map[string]string{"type": "json_object"}}})
+	body, _ := json.Marshal(map[string]any{"model": m.model, "instructions": reviewInstructions, "input": "请返回 json：\n" + string(encoded), "store": false, "max_output_tokens": 6000, "text": map[string]any{"format": map[string]string{"type": "json_object"}}})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return result, errors.New("invalid model endpoint")
