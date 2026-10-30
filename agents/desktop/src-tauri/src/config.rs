@@ -25,15 +25,10 @@ pub struct Config {
     pub ntp_interval: u64,
     pub ntp_timeout: u64,
 }
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Core {
     pub url: String,
-}
-impl Default for Core {
-    fn default() -> Self {
-        Self { url: String::new() }
-    }
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -737,8 +732,10 @@ mod tests {
         let mut c = Config::default();
         c.mqtt.url.clear();
         c.core.url = "https://core.example.test".into();
-        let mut secrets = Secrets::default();
-        secrets.core = "device-token".into();
+        let mut secrets = Secrets {
+            core: "device-token".into(),
+            ..Default::default()
+        };
         assert!(c.validate(&secrets).is_ok());
         secrets.core.clear();
         assert!(c.validate(&secrets).is_err());
