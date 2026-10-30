@@ -405,6 +405,17 @@ footer > div {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.model-download-hint {
+  margin: 9px 0 0;
+  color: #718077;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.model-download-hint a {
+  color: #2b7960;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .model-actions {
   display: flex;
   gap: 8px;

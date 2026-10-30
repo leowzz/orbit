@@ -130,6 +130,31 @@ pub fn managed_runtime_path() -> PathBuf {
     managed_root().join("runtime").join("speech.dll")
 }
 
+pub fn bundled_runtime_path() -> Option<PathBuf> {
+    let path = std::env::current_exe()
+        .ok()?
+        .parent()?
+        .join("resources")
+        .join("speech-runtime")
+        .join("speech.dll");
+    path.is_file().then_some(path)
+}
+
+pub fn effective_runtime_path(selected_path: &str) -> PathBuf {
+    let managed = managed_runtime_path();
+    let selected = if selected_path.is_empty() {
+        managed.clone()
+    } else {
+        PathBuf::from(selected_path)
+    };
+    if let Some(bundled) = bundled_runtime_path() {
+        if selected == managed || !selected.is_file() {
+            return bundled;
+        }
+    }
+    selected
+}
+
 pub fn model_spec(id: &str) -> Option<AssetSpec> {
     (id == MODEL_ID).then_some(AssetKind::Qwen3Asr06bQ8.spec())
 }
@@ -145,13 +170,16 @@ pub fn model_view(
         managed_model_path()
     };
     let downloaded = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-    let installed =
-        downloaded == MODEL_SIZE && verify(&path, AssetKind::Qwen3Asr06bQ8.spec()).is_ok();
-    let runtime_path = if selected_runtime_path.is_empty() {
-        managed_runtime_path()
+    let managed = path == managed_model_path();
+    let installed = if managed {
+        downloaded == MODEL_SIZE && verify(&path, AssetKind::Qwen3Asr06bQ8.spec()).is_ok()
     } else {
-        PathBuf::from(selected_runtime_path)
+        downloaded > 0
+            && path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("gguf"))
     };
+    let runtime_path = effective_runtime_path(selected_runtime_path);
     ModelView {
         id: MODEL_ID.into(),
         name: MODEL_NAME.into(),
@@ -161,7 +189,9 @@ pub fn model_view(
         size: MODEL_SIZE,
         downloaded,
         installed,
-        active: selected_id == MODEL_ID && selected_path == path.to_string_lossy().as_ref(),
+        active: installed
+            && selected_id == MODEL_ID
+            && selected_path == path.to_string_lossy().as_ref(),
         path: path.to_string_lossy().into_owned(),
         runtime_path: runtime_path.to_string_lossy().into_owned(),
         runtime_installed: runtime_path.is_file(),
@@ -183,8 +213,18 @@ mod tests {
     #[test]
     fn model_view_keeps_configured_paths() {
         let view = model_view(MODEL_ID, r"C:\models\qwen.gguf", r"C:\runtime\speech.dll");
-        assert!(view.active);
+        assert!(!view.active);
         assert_eq!(view.path, r"C:\models\qwen.gguf");
         assert_eq!(view.runtime_path, r"C:\runtime\speech.dll");
+    }
+
+    #[test]
+    fn model_view_accepts_existing_local_gguf_without_requiring_catalog_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("local-model.gguf");
+        fs::write(&path, b"local gguf").unwrap();
+        let view = model_view(MODEL_ID, &path.to_string_lossy(), r"C:\runtime\speech.dll");
+        assert!(view.installed);
+        assert!(view.active);
     }
 }

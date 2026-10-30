@@ -230,7 +230,9 @@ async fn process_one(
     let worker_id = c.agent_id.clone();
     let job_copy = job.clone();
     let device_name = device.to_string();
-    let runtime_path = c.inference.runtime_path.clone();
+    let runtime_path = assets::effective_runtime_path(&c.inference.runtime_path)
+        .to_string_lossy()
+        .into_owned();
     let result = tokio::task::spawn_blocking(move || {
         result_for(
             &job_copy,
@@ -289,7 +291,8 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
     let device = selected_device(&c);
     eprintln!(
         "Orbit native ASR starting: device={device}, model={}, runtime={}",
-        c.inference.model_path, c.inference.runtime_path
+        c.inference.model_path,
+        assets::effective_runtime_path(&c.inference.runtime_path).display()
     );
     update_inference(&status, |v| {
         v.status = "starting".into();
@@ -302,7 +305,8 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
         v.model_ready = false;
         v.error.clear();
     });
-    let runtime = match SpeechApi::load(&c.inference.runtime_path) {
+    let runtime_path = assets::effective_runtime_path(&c.inference.runtime_path);
+    let runtime = match SpeechApi::load(&runtime_path) {
         Ok(value) => Arc::new(value),
         Err(error) => {
             eprintln!("Orbit native ASR runtime error: {error}");

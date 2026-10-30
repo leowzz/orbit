@@ -46,8 +46,9 @@ Windows packaging. Rust compilation uses two jobs to limit linker memory use.
 - `orbit-agent-windows-x64-TAG-setup.exe`: Windows x64 NSIS installer, with
   embedded frontend assets and WebView2 bootstrapper support. The version is
   injected from the tag. Authenticode signing is not configured; the Release
-  supplies SHA-256 checksums and Cosign download verification. ASR GGUF models
-  and speech.cpp/Opus DLLs are not bundled; configure them in the Agent.
+  supplies SHA-256 checksums and Cosign download verification. The fixed
+  Windows speech.cpp runtime is bundled in the installer; ASR GGUF models
+  remain in the user data directory and are downloaded separately.
 - `orbit-esp32s3-yd-oled-128x32-TAG.tar.gz`: application, bootloader, partitions,
   boot_app0, merged factory image and flash instructions for YD-ESP32-S3 / OLED
   128x32. Firmware reports the tag version. It embeds example network placeholders;

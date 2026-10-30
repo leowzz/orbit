@@ -126,7 +126,9 @@ function App() {
     try {
       await fn();
     } catch (e) {
-      setError(String(e instanceof Error ? e.message : e));
+      const message = String(e instanceof Error ? e.message : e);
+      if (message === "模型下载已暂停") setNotice(message);
+      else setError(message);
     } finally {
       setBusy(false);
     }
@@ -736,6 +738,7 @@ function App() {
                       <p className="muted">正在读取模型库…</p>
                     ) : (
                       models.map((model) => {
+                        const active = model.active && model.installed;
                         const progress =
                           inference.modelTotal > 0
                             ? Math.min(
@@ -750,8 +753,8 @@ function App() {
                                 <strong>{model.name}</strong>
                                 <small>{model.filename} · {bytes(model.size)}</small>
                               </div>
-                              <span className={`tag ${model.active && model.installed ? "good" : ""}`}>
-                                {model.active && model.installed
+                              <span className={`tag ${active ? "good" : ""}`}>
+                                {active
                                   ? "当前使用"
                                   : model.installed
                                     ? "已下载"
@@ -759,6 +762,12 @@ function App() {
                               </span>
                             </div>
                             <p className="muted">固定版本 {model.revision.slice(0, 8)} · Qwen3-ASR 原生 GGUF</p>
+                            <p className="model-download-hint">
+                              手动下载：{" "}
+                              <a href={model.url} target="_blank" rel="noreferrer">
+                                {model.url}
+                              </a>
+                            </p>
                             <p className="model-path">{model.path}</p>
                             {inference.modelDownloading && (
                               <div className="model-progress" aria-label="模型下载进度">
@@ -770,9 +779,15 @@ function App() {
                             <div className="model-actions">
                               <button
                                 className="primary"
-                                disabled={inference.modelDownloading || model.active}
+                                disabled={active}
                                 onClick={() =>
                                   void action(async () => {
+                                    if (inference.modelDownloading) {
+                                      await call("inference_cancel_download");
+                                      setStatus(await call<Status>("agent_status"));
+                                      setNotice("模型下载已暂停");
+                                      return;
+                                    }
                                     const result = await call<Settings>(
                                       model.installed
                                         ? "inference_select_model"
@@ -787,7 +802,13 @@ function App() {
                                   })
                                 }
                               >
-                                {model.active ? "当前使用" : model.installed ? "使用此模型" : "下载并使用"}
+                                {active
+                                  ? "当前使用"
+                                  : inference.modelDownloading
+                                    ? "暂停下载"
+                                    : model.installed
+                                      ? "使用此模型"
+                                      : "下载并使用"}
                               </button>
                               <button
                                 onClick={() =>
@@ -796,7 +817,17 @@ function App() {
                                       multiple: false,
                                       filters: [{ name: "GGUF 模型", extensions: ["gguf"] }],
                                     });
-                                    if (typeof p === "string") source("inference", "modelPath", p);
+                                    if (typeof p === "string") {
+                                      const result = await call<Settings>(
+                                        "inference_select_local_model",
+                                        { path: p },
+                                      );
+                                      setSettings(result);
+                                      setSaved(JSON.stringify(result));
+                                      setModels(await call<InferenceModel[]>("inference_models"));
+                                      setStatus(await call<Status>("agent_status"));
+                                      setNotice("本地 GGUF 已选择并应用");
+                                    }
                                   })
                                 }
                               >
@@ -809,37 +840,10 @@ function App() {
                     )}
                   </Section>
                   <Section title="运行库">
-                    <Field
-                      label="speech.cpp 运行库"
-                      hint="Windows 使用 speech.dll；运行库由 Agent 负责加载，模型与运行库可以独立替换。"
-                    >
-                      <span className="path-input">
-                        <input
-                          value={settings.config.inference.runtimePath}
-                          onChange={(e) =>
-                            source("inference", "runtimePath", e.target.value)
-                          }
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            void action(async () => {
-                              const p = await open({
-                                multiple: false,
-                                filters: [{ name: "speech runtime", extensions: ["dll", "dylib"] }],
-                              });
-                              if (typeof p === "string") source("inference", "runtimePath", p);
-                            })
-                          }
-                        >
-                          <FolderOpen size={17} />
-                        </button>
-                      </span>
-                    </Field>
                     <p className="muted">
                       {models[0]?.runtimeInstalled
-                        ? `检测到托管运行库：${models[0].runtimePath}`
-                        : "尚未检测到托管运行库；请填写已安装的 speech.dll 路径。"}
+                        ? `已加载内置 speech.cpp 运行库：${models[0].runtimePath}`
+                        : "当前安装包未包含 speech.cpp 运行库。请更新到包含内置运行库的 Windows 版本。"}
                     </p>
                   </Section>
                 </>

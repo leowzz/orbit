@@ -42,7 +42,7 @@ Windows 枚举当前桌面有可见窗口的应用进程（含最小化窗口）
 
 未完成设置时不会自动连接。保存的配置会在后续启动时自动运行。Core 设备令牌和 MQTT 密码使用 macOS Keychain / Windows Credential Manager 保存，普通配置位于 Tauri 的本机应用配置目录 `dev.orbit.agent/settings.json`。系统凭据不可读时会显示错误，不会将密码降级保存到 JSON。Core 下发的 MQTT 配置会缓存到本机，Core 暂时不可用时仍可使用上次成功配置。
 
-Windows 本地 ASR 模型和 speech.cpp 运行库使用固定目录 `%LOCALAPPDATA%\\Orbit\\inference\\`（macOS 为 `~/Library/Application Support/Orbit/inference/`）。模型下载完成后会校验大小和 SHA-256，重复启动直接复用已安装文件。
+Windows 发布版将固定版本的 speech.cpp 运行库内置在安装包中，Agent 优先从安装包资源加载；模型和持久队列使用固定目录 `%LOCALAPPDATA%\\Orbit\\inference\\`（macOS 为 `~/Library/Application Support/Orbit/inference/`）。模型下载完成后会校验大小和 SHA-256，重复启动直接复用已安装文件。
 
 迁移现有 Go Agent 时保持设备标识与 Core 投影路由一致。macOS 默认标识沿用 Go 的平台 UUID 派生算法；Windows 首次生成并在保存时持久化，也可指定已有标识。开始使用新 Agent 前先停止旧进程（旧 macOS launchd 服务可运行仓库根目录的 `make stop-agent`）。两个实例共享标识时，收到 MQTT Session Taken Over 的实例会停止重连。
 

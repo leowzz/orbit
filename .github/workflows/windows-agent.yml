@@ -69,6 +69,30 @@ jobs:
           cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - name: Test Windows Agent
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Bundle speech.cpp runtime
+        shell: bash
+        run: |
+          url='https://github.com/nyosegawa/speech.cpp/releases/download/v0.8.11/speech-0.8.11-windows-x64-vulkan.zip'
+          archive="$RUNNER_TEMP/speech-runtime.zip"
+          curl.exe --ssl-no-revoke --fail --location --retry 3 --output "$archive" "$url"
+          python - "$archive" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          expected = '63f4c5b5c60aeab9d4c90193298fe4ee5d2a6c931cdbdcbc8cbb126fbffc56d0'
+          digest = hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest()
+          if digest != expected:
+              raise SystemExit(f'runtime archive checksum mismatch: {digest}')
+          PY
+          extract="$RUNNER_TEMP/speech-runtime"
+          rm -rf "$extract" src-tauri/resources/speech-runtime
+          mkdir -p "$extract" src-tauri/resources/speech-runtime
+          python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$archive" "$extract"
+          dll=$(find "$extract" -type f -iname speech.dll -print -quit)
+          [[ -n "$dll" ]] || { echo 'speech.dll missing from runtime archive'; exit 1; }
+          cp -R "$(dirname "$dll")"/. src-tauri/resources/speech-runtime/
+          [[ -s src-tauri/resources/speech-runtime/speech.dll ]]
       - name: Build release-mode NSIS installer
         run: |
           args=()

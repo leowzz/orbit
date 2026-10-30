@@ -41,6 +41,7 @@ struct Agent {
     inner: AsyncMutex<Inner>,
     store: Store,
     status: runtime::SharedStatus,
+    download_cancel: AsyncMutex<Option<CancellationToken>>,
 }
 impl Agent {
     async fn stop(inner: &mut Inner) {
@@ -235,6 +236,27 @@ async fn inference_select_model(
 }
 
 #[tauri::command]
+async fn inference_select_local_model(
+    path: String,
+    agent: tauri::State<'_, Agent>,
+) -> Result<Settings, String> {
+    let path = std::path::PathBuf::from(path);
+    if !path.is_file()
+        || path
+            .extension()
+            .is_none_or(|ext| !ext.eq_ignore_ascii_case("gguf"))
+        || tokio::fs::metadata(&path)
+            .await
+            .map_err(|_| "无法读取本地模型文件")?
+            .len()
+            == 0
+    {
+        return Err("请选择有效的 GGUF 模型文件".into());
+    }
+    apply_inference_model(&agent, assets::MODEL_ID, path).await
+}
+
+#[tauri::command]
 async fn inference_download_model(
     model_id: String,
     agent: tauri::State<'_, Agent>,
@@ -255,19 +277,21 @@ async fn inference_download_model(
         status.inference.model_total = spec.expected_size.unwrap_or(0);
         status.inference.model_error.clear();
     }
+    let cancel = CancellationToken::new();
+    *agent.download_cancel.lock().await = Some(cancel.clone());
     let result = async {
         let parent = target.parent().ok_or("模型目录无效")?;
         tokio::fs::create_dir_all(parent)
             .await
             .map_err(|_| "无法创建模型目录")?;
         let partial = target.with_extension("gguf.part");
-        let response = reqwest::Client::new()
-            .get(url)
-            .send()
-            .await
-            .map_err(|_| "模型下载连接失败")?
-            .error_for_status()
-            .map_err(|_| "模型下载服务返回错误")?;
+        let response = tokio::select! {
+            _ = cancel.cancelled() => return Err("模型下载已暂停".to_string()),
+            response = reqwest::Client::new().get(url).send() => response
+                .map_err(|_| "模型下载连接失败")?
+                .error_for_status()
+                .map_err(|_| "模型下载服务返回错误")?,
+        };
         let total = response
             .content_length()
             .or(spec.expected_size)
@@ -280,7 +304,10 @@ async fn inference_download_model(
             .await
             .map_err(|_| "无法写入模型文件")?;
         let mut downloaded = 0u64;
-        while let Some(chunk) = stream.chunk().await.map_err(|_| "模型下载中断")? {
+        while let Some(chunk) = tokio::select! {
+            _ = cancel.cancelled() => return Err("模型下载已暂停".to_string()),
+            chunk = stream.chunk() => chunk.map_err(|_| "模型下载中断")?,
+        } {
             file.write_all(&chunk)
                 .await
                 .map_err(|_| "无法写入模型文件")?;
@@ -303,11 +330,16 @@ async fn inference_download_model(
         Ok::<_, String>(())
     }
     .await;
+    *agent.download_cancel.lock().await = None;
     if let Err(error) = result {
         let _ = tokio::fs::remove_file(target.with_extension("gguf.part")).await;
         if let Ok(mut status) = agent.status.lock() {
             status.inference.model_downloading = false;
-            status.inference.model_error = error.clone();
+            status.inference.model_error = if error == "模型下载已暂停" {
+                String::new()
+            } else {
+                error.clone()
+            };
         }
         return Err(error);
     }
@@ -318,6 +350,17 @@ async fn inference_download_model(
         status.inference.model_error.clear();
     }
     apply_inference_model(&agent, &model_id, target).await
+}
+#[tauri::command]
+async fn inference_cancel_download(agent: tauri::State<'_, Agent>) -> Result<(), String> {
+    let cancel = agent.download_cancel.lock().await.take();
+    match cancel {
+        Some(cancel) => {
+            cancel.cancel();
+            Ok(())
+        }
+        None => Err("当前没有正在下载的模型".into()),
+    }
 }
 #[tauri::command]
 async fn settings_import(path: String) -> Result<Settings, String> {
@@ -427,7 +470,9 @@ pub fn run() {
             core_provision_mqtt,
             inference_models,
             inference_select_model,
+            inference_select_local_model,
             inference_download_model,
+            inference_cancel_download,
             autostart_get,
             autostart_set,
             update_status,
@@ -471,6 +516,7 @@ pub fn run() {
                 }),
                 store,
                 status,
+                download_cancel: AsyncMutex::new(None),
             });
             let settings = MenuItem::with_id(app, "settings", "打开设置", true, None::<&str>)?;
             let pause = MenuItem::with_id(app, "toggle", "启动 / 暂停采集", true, None::<&str>)?;
