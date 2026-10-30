@@ -104,8 +104,9 @@ type CodexPrivacyConfig struct {
 }
 
 type CoreConfig struct {
-	App   AppConfig   `yaml:"app"`
-	Audio AudioConfig `yaml:"audio"`
+	Metrics MetricsConfig `yaml:"metrics"`
+	App     AppConfig     `yaml:"app"`
+	Audio   AudioConfig   `yaml:"audio"`
 
 	Console             ConsoleConfig                `yaml:"console"`
 	Core                CoreIdentity                 `yaml:"core"`
@@ -115,6 +116,11 @@ type CoreConfig struct {
 	ProjectionRoutes    map[string]ProjectionRoute   `yaml:"projection_routes"`
 	ObservationPolicies map[string]ObservationPolicy `yaml:"observation_policies"`
 	Logging             LoggingConfig                `yaml:"logging"`
+}
+
+// Metrics uses a separate private listener; empty disables it.
+type MetricsConfig struct {
+	Listen string `yaml:"listen"`
 }
 
 const DefaultAudioMaxSegments = 10000

@@ -74,6 +74,9 @@ class AudioCaptureService : Service() {
             val saved = desiredSettings(context)
             return mapOf(
                 "active" to active, "state" to state, "transfer" to AudioUploadService.transfer, "pending" to AudioUploadService.pending,
+                "transferState" to AudioUploadService.transferState, "inFlight" to AudioUploadService.inFlight,
+                "sentPackets" to AudioUploadService.sentPackets, "sentBytes" to AudioUploadService.sentBytes,
+                "lastSentAt" to AudioUploadService.lastSentAt,
                 "enabled" to enabled(context), "settings" to saved.map(),
                 "settingsPending" to (processingSettings?.let { it.copy(uploadConcurrency = saved.uploadConcurrency) != saved } ?: false),
                 "notifications" to context.getSystemService(NotificationManager::class.java).areNotificationsEnabled(),

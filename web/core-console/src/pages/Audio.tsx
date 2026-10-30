@@ -1,13 +1,20 @@
 import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import AudioWorkers from "../AudioWorkers";
 import { ChevronLeft, ChevronRight, RefreshCw, Search } from "lucide-react";
-import { api, date, errorText, type NetworkState } from "../api";
+import {
+  api,
+  date,
+  errorText,
+  type AppDevice,
+  type NetworkState,
+} from "../api";
 import { Badge, Empty } from "../components";
 import {
   type AudioPage,
   type AudioDetail,
   type AudioWorker,
   audioStatus,
-  workerStatus,
   audioDevice,
   seconds,
 } from "../audio";
@@ -15,8 +22,40 @@ import { Modal } from "./Apps";
 
 const pageSize = 25;
 export default function Audio({ state }: { state: NetworkState }) {
-  const [draft, setDraft] = useState({ node_id: "", status: "", q: "" });
-  const [filter, setFilter] = useState(draft);
+  const [params, setParams] = useSearchParams();
+  const nodeFilter = params.get("node_id") ?? "";
+  const agentFilter = params.get("agent_id") ?? "";
+  const statusFilter = params.get("status") ?? "";
+  const textFilter = params.get("q") ?? "";
+  const [draft, setDraft] = useState({
+    node_id: nodeFilter,
+    agent_id: agentFilter,
+    status: statusFilter,
+    q: textFilter,
+  });
+  useEffect(() => {
+    setDraft({
+      node_id: nodeFilter,
+      agent_id: agentFilter,
+      status: statusFilter,
+      q: textFilter,
+    });
+    setOffset(0);
+  }, [nodeFilter, agentFilter, statusFilter, textFilter]);
+  const [devices, setDevices] = useState<AppDevice[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void api<{ devices?: AppDevice[] }>("/app/devices", {
+      signal: controller.signal,
+    })
+      .then((result) => {
+        if (!controller.signal.aborted) setDevices(result.devices ?? []);
+      })
+      .catch(() => {
+        /* Device names are optional; IDs remain usable. */
+      });
+    return () => controller.abort();
+  }, []);
   const [hideEmpty, setHideEmpty] = useState(true);
   const [sort, setSort] = useState("started_at:desc");
   const [offset, setOffset] = useState(0);
@@ -35,7 +74,10 @@ export default function Audio({ state }: { state: NetworkState }) {
       setBusy(true);
       const [sortBy, order] = sort.split(":");
       const query = new URLSearchParams({
-        ...filter,
+        node_id: nodeFilter,
+        agent_id: agentFilter,
+        status: statusFilter,
+        q: textFilter,
         hide_empty: String(hideEmpty),
         sort_by: sortBy,
         order,
@@ -52,6 +94,14 @@ export default function Audio({ state }: { state: NetworkState }) {
       ]);
       if (controller.signal.aborted) return;
       if (records.status === "fulfilled") {
+        if (offset > 0 && offset >= records.value.total) {
+          setOffset(
+            Math.max(
+              0,
+              Math.floor((records.value.total - 1) / pageSize) * pageSize,
+            ),
+          );
+        }
         setPage(records.value);
         setError("");
       } else setError(errorText(records.reason));
@@ -67,8 +117,24 @@ export default function Audio({ state }: { state: NetworkState }) {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [filter, hideEmpty, sort, offset, refresh]);
-  const label = (id: string) => state.node_labels?.[id] || id;
+  }, [
+    nodeFilter,
+    agentFilter,
+    statusFilter,
+    textFilter,
+    hideEmpty,
+    sort,
+    offset,
+    refresh,
+  ]);
+  const label = (id: string) =>
+    state.node_labels?.[id] || devices.find((d) => d.id === id)?.label || id;
+  const deviceIDs = [
+    ...new Set([
+      ...state.nodes.map((n) => n.nodeId),
+      ...devices.map((d) => d.id),
+    ]),
+  ];
   return (
     <>
       <div className="page-head">
@@ -102,56 +168,36 @@ export default function Audio({ state }: { state: NetworkState }) {
           </div>
         </section>
       )}
-      {workerError && (
-        <div className="banner error" role="alert">
-          识别服务状态读取失败：{workerError}
-        </div>
-      )}
-      {workers && workers.length > 0 && (
-        <section className="panel audio-workers" aria-label="语音识别服务">
-          {workers.map((worker) => (
-            <div className="audio-worker" key={worker.agent_id}>
-              <div>
-                <strong>{worker.host_label || worker.agent_id}</strong>
-                <span className="audio-worker-model">
-                  {worker.model} · {audioDevice(worker.device)}
-                </span>
-              </div>
-              <div>
-                <Badge
-                  tone={
-                    worker.online && worker.status === "ready"
-                      ? "good"
-                      : worker.status === "error"
-                        ? "warn"
-                        : "neutral"
-                  }
-                >
-                  {workerStatus(worker)}
-                </Badge>
-                <span className="audio-worker-time">
-                  {date(worker.received_at)}
-                </span>
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
-      {workers?.length === 0 && (
-        <div className="banner">
-          尚未连接语音识别服务。已收到的音频会保留，等待 worker 上线。
-        </div>
+      <AudioWorkers workers={workers} error={workerError} />
+      {!workerError &&
+        workers &&
+        !workers.some(
+          (w) =>
+            w.online && (w.status === "ready" || w.status === "processing"),
+        ) &&
+        !!page?.metrics.pending && (
+          <div className="banner" role="status">
+            当前没有就绪的识别主机，{page.metrics.pending}{" "}
+            条音频等待处理。主机恢复后会自动继续识别。
+          </div>
+        )}
+      {agentFilter && (
+        <p className="app-note">
+          仅显示所选主机已返回结果的记录；等待识别的音频尚未归属具体主机。
+        </p>
       )}
       <form
         className="audio-filters"
         onSubmit={(event) => {
           event.preventDefault();
           setOffset(0);
-          setFilter({
-            ...draft,
-            node_id: draft.node_id.trim(),
-            q: draft.q.trim(),
-          });
+          setParams(
+            Object.fromEntries(
+              Object.entries(draft)
+                .map(([key, value]) => [key, value.trim()])
+                .filter(([, value]) => value),
+            ),
+          );
         }}
       >
         <input
@@ -162,12 +208,28 @@ export default function Audio({ state }: { state: NetworkState }) {
           onChange={(e) => setDraft({ ...draft, node_id: e.target.value })}
         />
         <datalist id="audio-device-ids">
-          {state.nodes.map((node) => (
-            <option key={node.nodeId} value={node.nodeId}>
-              {label(node.nodeId)}
+          {deviceIDs.map((id) => (
+            <option key={id} value={id}>
+              {label(id)}
             </option>
           ))}
         </datalist>
+        <select
+          aria-label="识别主机"
+          value={draft.agent_id}
+          onChange={(e) => setDraft({ ...draft, agent_id: e.target.value })}
+        >
+          <option value="">全部识别主机</option>
+          {draft.agent_id &&
+            !workers?.some((w) => w.agent_id === draft.agent_id) && (
+              <option value={draft.agent_id}>{draft.agent_id}</option>
+            )}
+          {workers?.map((w) => (
+            <option key={w.agent_id} value={w.agent_id}>
+              {w.host_label || w.agent_id}
+            </option>
+          ))}
+        </select>
         <select
           aria-label="识别状态"
           value={draft.status}
@@ -187,8 +249,8 @@ export default function Audio({ state }: { state: NetworkState }) {
             setHideEmpty(event.target.value === "true");
           }}
         >
-          <option value="true">忽略未识别到文字</option>
-          <option value="false">查看所有</option>
+          <option value="true">隐藏空转写结果</option>
+          <option value="false">显示全部结果</option>
         </select>
         <input
           aria-label="搜索转写文字"
@@ -218,6 +280,17 @@ export default function Audio({ state }: { state: NetworkState }) {
           <option value="speech_ms:asc">人声时长：从短到长</option>
         </select>
       </form>
+      {(nodeFilter || agentFilter || statusFilter || textFilter) && (
+        <button
+          className="text-link"
+          onClick={() => {
+            setParams({});
+            setOffset(0);
+          }}
+        >
+          清除筛选
+        </button>
+      )}
       {error && (
         <div className="banner error" role="alert">
           音频记录读取失败：{error}
@@ -238,10 +311,10 @@ export default function Audio({ state }: { state: NetworkState }) {
         >
           {page.items.length === 0 ? (
             <Empty title="暂无音频记录">
-              {filter.q || filter.node_id || filter.status
+              {textFilter || nodeFilter || agentFilter || statusFilter
                 ? "试试其他筛选条件。"
                 : hideEmpty
-                  ? "未识别到文字的记录已隐藏，可切换为“查看所有”。"
+                  ? "未识别到文字的记录已隐藏，可切换为“显示全部结果”。"
                   : "设备检测到语音并上传后，记录会显示在这里。"}
             </Empty>
           ) : (
@@ -257,6 +330,13 @@ export default function Audio({ state }: { state: NetworkState }) {
                     {date(record.started_at)}
                   </time>
                   <span>{seconds(record.duration_ms)}</span>
+                  {record.agent_id && (
+                    <span>
+                      识别主机：
+                      {workers?.find((w) => w.agent_id === record.agent_id)
+                        ?.host_label || record.agent_id}
+                    </span>
+                  )}
                   {sort.startsWith("speech_ms:") && (
                     <span>人声 {seconds(record.speech_ms)}</span>
                   )}
@@ -318,6 +398,9 @@ export default function Audio({ state }: { state: NetworkState }) {
         <AudioRecordDetail
           id={selected}
           label={label}
+          workerLabel={(id) =>
+            workers?.find((w) => w.agent_id === id)?.host_label || id
+          }
           onClose={() => setSelected(null)}
         />
       )}
@@ -328,10 +411,12 @@ export default function Audio({ state }: { state: NetworkState }) {
 function AudioRecordDetail({
   id,
   label,
+  workerLabel,
   onClose,
 }: {
   id: string;
   label: (id: string) => string;
+  workerLabel: (id: string) => string;
   onClose: () => void;
 }) {
   const [detail, setDetail] = useState<AudioDetail | null>(null);
@@ -378,17 +463,42 @@ function AudioRecordDetail({
         <div className="audio-detail">
           <dl>
             <dt>设备</dt>
-            <dd>{label(detail.segment.node_id)}</dd>
+            <dd>
+              <Link
+                className="text-link"
+                to={`/nodes/${encodeURIComponent(detail.segment.node_id)}`}
+              >
+                {label(detail.segment.node_id)}
+              </Link>
+            </dd>
             <dt>录制时间</dt>
             <dd>
               {new Date(detail.segment.started_at).toLocaleString("zh-CN")}
             </dd>
             <dt>时长</dt>
             <dd>{seconds(detail.segment.duration_ms)}</dd>
+            <dt>人声时长</dt>
+            <dd>{seconds(detail.segment.speech_ms)}</dd>
+            <dt>任务派发次数</dt>
+            <dd>{detail.job.attempts}</dd>
+            <dt>最近派发</dt>
+            <dd>{date(detail.job.last_dispatched_at)}</dd>
             <dt>状态</dt>
             <dd>{audioStatus(detail.job.status)}</dd>
             {detail.result && (
               <>
+                <dt>识别主机</dt>
+                <dd>
+                  <Link
+                    className="text-link"
+                    to={`/audio?agent_id=${encodeURIComponent(detail.result.agent_id)}`}
+                    onClick={onClose}
+                  >
+                    {workerLabel(detail.result.agent_id)}
+                  </Link>
+                </dd>
+                <dt>完成时间</dt>
+                <dd>{date(detail.result.completed_at)}</dd>
                 <dt>模型</dt>
                 <dd>
                   {detail.result.model} · {audioDevice(detail.result.device)}

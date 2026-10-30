@@ -116,7 +116,11 @@ class Worker:
             self.events.emit(self.snapshot())
 
     def state(self, status=None):
-        return dict(schema_version=1, agent_id=self.agent_id, host_label=self.config.get("host_label",socket.gethostname()), model=self.config["model"], device=self.device, status=status or ("error" if self.subscription_error and self.status != "offline" else self.status), updated_at=now())
+        state = dict(schema_version=1, agent_id=self.agent_id, host_label=self.config.get("host_label",socket.gethostname()), model=self.config["model"], device=self.device, status=status or ("error" if self.subscription_error and self.status != "offline" else self.status), updated_at=now())
+
+        if state["status"] != "offline":
+            state["queue"] = dict(self.store.counts(), capacity=self.store.capacity)
+        return state
 
     @staticmethod
     def json_properties(will=False):

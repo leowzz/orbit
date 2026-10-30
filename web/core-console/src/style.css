@@ -2,10 +2,7 @@
 
 .audio-filters {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 130px 190px minmax(
-      140px,
-      2fr
-    ) auto 190px;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
   align-items: center;
   gap: 10px;
   margin-bottom: 18px;
@@ -57,6 +54,34 @@
 .audio-workers {
   margin-bottom: 20px;
   padding: 0 20px;
+}
+.audio-workers h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.audio-worker-entry {
+  border-top: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+.audio-worker-entry .audio-worker {
+  padding-bottom: 6px;
+}
+.audio-worker-description,
+.audio-worker-footer {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.audio-worker-description {
+  margin: 4px 0 10px;
+}
+.audio-worker-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+.audio-worker strong {
+  overflow-wrap: anywhere;
 }
 .audio-worker {
   display: flex;

@@ -7,6 +7,36 @@ import java.io.File
 import java.util.UUID
 
 class AudioUploadPumpTest {
+    @Test fun metricsCountCompletedPacketsOnlyAndIgnoreDuplicateOrLateCallbacks() {
+        val directory = Files.createTempDirectory("orbit-upload-metrics").toFile()
+        try {
+            val box = AudioOutbox(directory)
+            box.put(UUID.randomUUID().toString(), byteArrayOf(1, 2, 3))
+            var now = 0L
+            var done: ((Boolean) -> Unit)? = null
+            val sentSizes = mutableListOf<Int>()
+            val pump = AudioUploadPump(box, { 1 }, { _, _, complete -> done = complete },
+                {}, { now }, { sentSizes.add(it) })
+            pump.pump()
+            assertTrue(sentSizes.isEmpty())
+            done!!(false)
+            assertTrue(pump.retrying)
+            assertTrue(sentSizes.isEmpty())
+            now = 2000
+            pump.pump()
+            assertFalse(pump.retrying)
+            done!!(true)
+            done!!(true)
+            assertEquals(listOf(3), sentSizes)
+            box.put(UUID.randomUUID().toString(), byteArrayOf(4, 5))
+            pump.pump()
+            pump.close()
+            done!!(true)
+            assertEquals(listOf(3), sentSizes)
+            assertEquals(1, box.count())
+        } finally { directory.deleteRecursively() }
+    }
+
     @Test fun drainsMoreThanFiveHundredWithoutCoreAcksOrTimerAndRespectsLiveLimit() {
         val directory = Files.createTempDirectory("orbit-upload").toFile()
         try {

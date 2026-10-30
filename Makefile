@@ -3,8 +3,10 @@
 GO ?= go
 ifeq ($(OS),Windows_NT)
 PNPM ?= pnpm.cmd
+PYTHON ?= python
 else
 PNPM ?= pnpm
+PYTHON ?= python3
 endif
 CONSOLE_DIR := web/core-console
 TOOLS_DIR := $(CURDIR)/.tools/bin
@@ -175,10 +177,14 @@ build-console:
 build-core: build-console
 	$(GO) build -trimpath -o dist/orbit-core ./cmd/orbit-core
 
-.PHONY: desktop dev-desktop-agent test-desktop-agent build-desktop-agent
+.PHONY: desktop prepare-desktop-runtime dev-desktop-agent test-desktop-agent build-desktop-agent
 desktop: dev-desktop-agent
 
+prepare-desktop-runtime:
+	$(PYTHON) scripts/prepare-desktop-runtime.py
+
 dev-desktop-agent:
+	$(MAKE) prepare-desktop-runtime
 	cd agents/desktop && $(PNPM) tauri dev
 
 test-desktop-agent:
@@ -187,4 +193,5 @@ test-desktop-agent:
 	cargo clippy --locked --manifest-path agents/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings
 
 build-desktop-agent:
+	$(MAKE) prepare-desktop-runtime
 	cd agents/desktop && $(PNPM) tauri build

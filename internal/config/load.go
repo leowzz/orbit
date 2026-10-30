@@ -205,6 +205,12 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	if strings.TrimSpace(cfg.Console.Password) == "" {
 		return errors.New("console.password is required")
 	}
+	if cfg.Metrics.Listen != "" {
+		host, port, err := net.SplitHostPort(cfg.Metrics.Listen)
+		if err != nil || host == "" || port == "" {
+			return errors.New("metrics.listen must be a host:port address")
+		}
+	}
 	if cfg.Console.SessionHours <= 0 || cfg.Console.SessionHours > int((1<<63-1)/time.Hour) {
 		return errors.New("console.session_hours must be between 1 and 2562047 hours")
 	}

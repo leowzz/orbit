@@ -61,6 +61,8 @@ certs/
 
 # Local native ASR runtime, model files, and downloaded binaries
 /runtime/
+agents/desktop/src-tauri/resources/speech-runtime/*
+!agents/desktop/src-tauri/resources/speech-runtime/placeholder.txt
 
 /data/
 # Core console local database

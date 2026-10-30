@@ -111,6 +111,21 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if cfg.Metrics.Listen != "" {
+		listener, err := net.Listen("tcp", cfg.Metrics.Listen)
+		if err != nil {
+			return fmt.Errorf("listen metrics: %w", err)
+		}
+		metrics := &http.Server{Handler: store.MetricsHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
+		defer metrics.Close()
+		go func() {
+			if err := metrics.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Error("metrics server stopped", zap.Error(err))
+				stop()
+			}
+		}()
+		logger.Info("metrics listening", zap.String("listen", cfg.Metrics.Listen))
+	}
 	synchronizedClock, err := appclock.New(appclock.Config{
 		Server:       cfg.NTP.Server,
 		SyncInterval: cfg.NTP.SyncInterval.Duration,

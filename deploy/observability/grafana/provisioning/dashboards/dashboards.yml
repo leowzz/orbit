@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Orbit
+    orgId: 1
+    folder: Orbit
+    type: file
+    disableDeletion: true
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

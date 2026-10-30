@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS audio_jobs(job_id TEXT PRIMARY KEY,status TEXT NOT NU
 CREATE INDEX IF NOT EXISTS audio_jobs_pending ON audio_jobs(status,last_dispatched_at);
 CREATE TABLE IF NOT EXISTS audio_results(job_id TEXT PRIMARY KEY,agent_id TEXT NOT NULL,text TEXT NOT NULL,language TEXT NOT NULL,payload TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS audio_workers(agent_id TEXT PRIMARY KEY,payload TEXT NOT NULL,received_at TEXT NOT NULL,live INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS audio_counters(name TEXT NOT NULL,agent_id TEXT NOT NULL,status TEXT NOT NULL,value REAL NOT NULL,PRIMARY KEY(name,agent_id,status));
+INSERT OR IGNORE INTO audio_counters VALUES('received_total','','',0);
 `
 const AudioMaxMessageBytes = 128 * 1024
 
@@ -74,13 +76,22 @@ type AudioResult struct {
 	ErrorMessage  string             `json:"error_message"`
 }
 type AudioWorkerState struct {
-	SchemaVersion int    `json:"schema_version"`
-	AgentID       string `json:"agent_id"`
-	HostLabel     string `json:"host_label"`
-	Model         string `json:"model"`
-	Device        string `json:"device"`
-	Status        string `json:"status"`
-	UpdatedAt     string `json:"updated_at"`
+	SchemaVersion int               `json:"schema_version"`
+	AgentID       string            `json:"agent_id"`
+	HostLabel     string            `json:"host_label"`
+	Model         string            `json:"model"`
+	Device        string            `json:"device"`
+	Status        string            `json:"status"`
+	UpdatedAt     string            `json:"updated_at"`
+	Queue         *AudioWorkerQueue `json:"queue,omitempty"`
+}
+
+// Optional so older workers remain compatible without reporting false zeros.
+type AudioWorkerQueue struct {
+	Queued     int64 `json:"queued"`
+	Processing int64 `json:"processing"`
+	Outbox     int64 `json:"outbox"`
+	Capacity   int64 `json:"capacity"`
 }
 
 func audioDevice(value string) bool {
@@ -172,6 +183,9 @@ func (s *RouteStore) storeAudioSegment(ctx context.Context, segment AudioSegment
 	if e = s.pruneAudio(ctx, tx); e != nil {
 		return e
 	}
+	if e = addAudioCounter(ctx, tx, "received_total", "", "", 1); e != nil {
+		return e
+	}
 	return tx.Commit()
 }
 
@@ -243,8 +257,20 @@ func (s *RouteStore) storeAudioResult(ctx context.Context, r AudioResult) error 
 		}
 	}
 	raw, _ := json.Marshal(r)
-	if _, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO audio_results VALUES(?,?,?,?,?)`, r.JobID, r.AgentID, r.Text, r.Language, string(raw)); e != nil {
+	inserted, e := tx.ExecContext(ctx, `INSERT OR IGNORE INTO audio_results VALUES(?,?,?,?,?)`, r.JobID, r.AgentID, r.Text, r.Language, string(raw))
+	if e != nil {
 		return e
+	}
+	n, e := inserted.RowsAffected()
+	if e != nil {
+		return e
+	}
+	if n == 1 {
+		for name, value := range map[string]float64{"results_total": 1, "processed_audio_seconds_total": float64(duration) / 1000, "processing_seconds_total": float64(r.ProcessingMS) / 1000} {
+			if e = addAudioCounter(ctx, tx, name, r.AgentID, r.Status, value); e != nil {
+				return e
+			}
+		}
 	}
 	if _, e = tx.ExecContext(ctx, `UPDATE audio_jobs SET status=(SELECT json_extract(payload,'$.status') FROM audio_results WHERE job_id=?) WHERE job_id=?`, r.JobID, r.JobID); e != nil {
 		return e
@@ -333,6 +359,9 @@ func (r *AudioRunner) handle(ctx context.Context, m mqtt.Message) error {
 			return errors.New("invalid audio worker state")
 		}
 		raw, _ := json.Marshal(w)
+		if q := w.Queue; q != nil && (q.Queued < 0 || q.Processing < 0 || q.Outbox < 0 || q.Capacity < 1 || q.Capacity > 4294967295 || q.Queued > 4294967295 || q.Processing > 4294967295 || q.Outbox > 4294967295) {
+			return errors.New("invalid audio worker queue")
+		}
 		_, e := r.store.db.ExecContext(ctx, `INSERT INTO audio_workers VALUES(?,?,?,?) ON CONFLICT(agent_id) DO UPDATE SET payload=excluded.payload,received_at=excluded.received_at,live=excluded.live`, w.AgentID, string(raw), r.now().UTC().Format(time.RFC3339Nano), !m.Retain)
 		return e
 	}

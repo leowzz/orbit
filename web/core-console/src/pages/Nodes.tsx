@@ -20,6 +20,7 @@ import DeviceContent from "./DeviceContent";
 import DeviceName from "../DeviceName";
 import DeviceSummary from "../DeviceSummary";
 import DeviceStatus from "../DeviceStatus";
+import AudioWorkers, { useAudioWorkers } from "../AudioWorkers";
 import Apps, { DeviceForm, TokenDialog } from "./Apps";
 import DeviceShortcuts from "./DeviceShortcuts";
 
@@ -45,6 +46,7 @@ export default function Nodes({
   onLabelChange: (id: string, label: string) => void;
   onArchiveChange: (id: string, archived: boolean) => void;
 }) {
+  const { workers, error: workerError } = useAudioWorkers();
   const { nodeId } = useParams<{ nodeId: string }>();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -376,7 +378,7 @@ export default function Nodes({
         <>
           <PageHead
             title="设备"
-            description="选择设备，管理显示内容和快捷操作。"
+            description="查看识别主机连接状态，管理设备内容和快捷操作。"
             action={
               <>
                 <button
@@ -390,6 +392,9 @@ export default function Nodes({
               </>
             }
           />
+          {filter === "all" && (
+            <AudioWorkers workers={workers} error={workerError} query={query} />
+          )}
           <div className="toolbar">
             <div className="tabs">
               {[
@@ -450,6 +455,14 @@ export default function Nodes({
                   agents={state.agents}
                   app={!!device.app}
                 />
+                {device.app && (
+                  <Link
+                    className="text-link"
+                    to={`/audio?node_id=${encodeURIComponent(device.id)}`}
+                  >
+                    查看音频记录
+                  </Link>
+                )}
                 <Link
                   className="node-link"
                   to={`/nodes/${encodeURIComponent(device.id)}`}

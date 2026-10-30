@@ -7,11 +7,13 @@ class AudioUploadPump(
     private val send: (String, ByteArray, (Boolean) -> Unit) -> Unit,
     private val changed: () -> Unit,
     private val now: () -> Long,
+    private val sent: (Int) -> Unit = {},
 ) {
     private val sending = mutableMapOf<String, Long>()
     private val retryAt = mutableMapOf<String, Long>()
     private var closed = false
     val inFlight: Int get() = sending.size
+    val retrying: Boolean get() = retryAt.isNotEmpty()
     val timedOut: Boolean get() = sending.values.any { now() - it >= 15000 }
 
     fun pump() {
@@ -23,15 +25,18 @@ class AudioUploadPump(
         // Reserve the entire window before invoking any potentially synchronous callbacks.
         batch.forEach { (id, _) -> sending[id] = now() }
         batch.forEach { (id, payload) ->
-            try { send(id, payload) { success -> complete(id, success) } }
-            catch (_: Exception) { complete(id, false) }
+            try { send(id, payload) { success -> complete(id, success, payload.size) } }
+            catch (_: Exception) { complete(id, false, payload.size) }
         }
     }
 
-    private fun complete(id: String, success: Boolean) {
+    private fun complete(id: String, success: Boolean, bytes: Int) {
         if (closed || sending.remove(id) == null) return
         if (success) {
-            try { outbox.sent(id) }
+            try {
+                outbox.sent(id)
+                sent(bytes)
+            }
             catch (_: Exception) { retryAt[id] = now() + 2000 }
         } else retryAt[id] = now() + 2000
         changed() // The owner queues another pump immediately, without a batch timer.

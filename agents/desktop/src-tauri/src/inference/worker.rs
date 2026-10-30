@@ -13,7 +13,7 @@ use base64::Engine as _;
 use chrono::{SecondsFormat, Utc};
 use rumqttc::v5::{
     mqttbytes::{
-        v5::{Filter, Packet as MqttPacket, PublishProperties, SubscribeReasonCode},
+        v5::{Filter, LastWill, Packet as MqttPacket, PublishProperties, SubscribeReasonCode},
         QoS,
     },
     AsyncClient, Event, MqttOptions,
@@ -39,6 +39,16 @@ struct WorkerState<'a> {
     device: &'a str,
     status: &'a str,
     updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    queue: Option<WorkerQueue>,
+}
+
+#[derive(Debug, Serialize)]
+struct WorkerQueue {
+    queued: u32,
+    processing: u32,
+    outbox: u32,
+    capacity: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +69,13 @@ fn queue_path(agent_id: &str) -> PathBuf {
 fn worker_mqtt_options(c: &Config, s: &Secrets) -> Result<MqttOptions, String> {
     let mut options = runtime::mqtt_options(c, s, format!("orbit-asr-{}", c.agent_id))?;
     options.set_max_packet_size(Some(256 * 1024));
+    options.set_last_will(LastWill::new(
+        format!("orbit/v1/agents/{}/audio/state", c.agent_id),
+        state_bytes(c, "offline", selected_device(c), None),
+        QoS::AtLeastOnce,
+        true,
+        None,
+    ));
     Ok(options)
 }
 
@@ -80,7 +97,7 @@ fn now_string() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
-fn state_bytes(c: &Config, state: &str, device: &str) -> Vec<u8> {
+fn state_bytes(c: &Config, state: &str, device: &str, store: Option<&Store>) -> Vec<u8> {
     serde_json::to_vec(&WorkerState {
         schema_version: 1,
         agent_id: &c.agent_id,
@@ -89,6 +106,10 @@ fn state_bytes(c: &Config, state: &str, device: &str) -> Vec<u8> {
         device,
         status: state,
         updated_at: now_string(),
+        queue: store.and_then(|s| s.counts().ok()).map(|counts| WorkerQueue {
+            queued: counts.queued, processing: counts.processing, outbox: counts.outbox,
+            capacity: c.inference.queue_capacity,
+        }),
     })
     .unwrap_or_default()
 }
@@ -219,7 +240,6 @@ async fn process_one(
     store: &Arc<Store>,
     model: Arc<SpeechModel>,
     c: &Config,
-    client: &AsyncClient,
     device: &str,
     status: &SharedStatus,
 ) -> Result<(), String> {
@@ -242,22 +262,23 @@ async fn process_one(
             &model,
         )
     })
-    .await
-    .map_err(|_| "inference_task_panicked".to_string())?;
+    .await;
+    let result = match result {
+        Ok(result) => result,
+        Err(_) => {
+            store.retry(&job.job_id).map_err(|e| e.to_string())?;
+            return Err("inference_task_panicked".into());
+        }
+    };
     if result.status == "failed" && attempts < 3 {
         store.retry(&job.job_id).map_err(|e| e.to_string())?;
         update_inference(status, |v| v.status = "ready".into());
         return Ok(());
     }
-    let payload = store
+    // Persist first. The independent MQTT loop sends and retries the outbox.
+    store
         .finish(&job.job_id, &result)
         .map_err(|e| e.to_string())?;
-    publish(
-        client,
-        format!("orbit/v1/agents/{}/audio/results", c.agent_id),
-        false,
-        payload,
-    )?;
     update_inference(status, |v| v.status = "ready".into());
     Ok(())
 }
@@ -285,6 +306,46 @@ fn set_counts(store: &Store, status: &SharedStatus) {
             v.outbox = counts.outbox;
         });
     }
+}
+
+async fn process_queue(
+    store: &Arc<Store>,
+    model: Arc<SpeechModel>,
+    c: &Config,
+    status: &SharedStatus,
+    cancel: &CancellationToken,
+) {
+    let mut tick = tokio::time::interval(Duration::from_millis(250));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => break,
+            _ = tick.tick() => {
+                if !runtime::snapshot(status).inference.connected { continue; }
+                if let Err(error) = process_one(store, model.clone(), c, selected_device(c), status).await {
+                    update_inference(status, |v| { v.status = "error".into(); v.error = error; });
+                }
+                set_counts(store, status);
+            }
+        }
+    }
+}
+
+// Keep polling the connection while native inference is running. On shutdown,
+// finish persisting an in-flight result before allowing the model to be reloaded.
+async fn run_with_processor(
+    network: impl std::future::Future<Output = ()>,
+    processor: impl std::future::Future<Output = ()>,
+    cancel: &CancellationToken,
+) {
+    tokio::join!(
+        async {
+            network.await;
+            cancel.cancel();
+        },
+        processor
+    );
 }
 
 pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: CancellationToken) {
@@ -362,6 +423,32 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
     if let Ok(mut value) = status.lock() {
         value.message = "ASR Worker 正在连接 MQTT".into();
     }
+    let worker_cancel = cancel.child_token();
+    run_with_processor(
+        maintain_connection(&c, &s, &store, &status, &worker_cancel),
+        process_queue(&store, model, &c, &status, &worker_cancel),
+        &worker_cancel,
+    )
+    .await;
+    update_inference(&status, |v| {
+        v.connected = false;
+        if v.status != "error" {
+            v.status = "offline".into();
+        }
+    });
+    if let Ok(mut value) = status.lock() {
+        value.connected = false;
+    }
+}
+
+async fn maintain_connection(
+    c: &Config,
+    s: &Secrets,
+    store: &Arc<Store>,
+    status: &SharedStatus,
+    cancel: &CancellationToken,
+) {
+    let device = selected_device(c);
     let mut backoff = 1u64;
     'reconnect: loop {
         if cancel.is_cancelled() {
@@ -380,6 +467,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
         };
         let (client, mut eventloop) = AsyncClient::new(options, 128);
         let mut online = false;
+        let mut last_state = String::new();
         let mut tick = tokio::time::interval(Duration::from_secs(5));
         let mut heartbeat = tokio::time::interval(Duration::from_secs(20));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -390,28 +478,33 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
                 _ = tick.tick(), if online => {
                     set_counts(&store, &status);
                     let _ = publish_outbox(&store, &client, &c.agent_id).await;
-                    let _ = process_one(&store, model.clone(), &c, &client, device, &status).await;
+                    let current = runtime::snapshot(status).inference.status;
+                    if current != last_state && publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(c, &current, device, Some(store))).is_ok() {
+                        last_state = current;
+                    }
                 }
                 _ = heartbeat.tick(), if online => {
-                    let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(&c, "ready", device));
+                    let current = runtime::snapshot(status).inference.status;
+                    let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(c, &current, device, Some(store)));
                 }
                 event = eventloop.poll() => match event {
                     Ok(Event::Incoming(MqttPacket::ConnAck(_))) => {
-                        online = true;
                         backoff = 1;
-                        update_inference(&status, |v| { v.connected = true; v.status = "ready".into(); v.error.clear(); });
-                        if let Ok(mut value) = status.lock() { value.connected = true; value.message = "ASR Worker 已连接 MQTT".into(); }
                         let mut jobs = Filter::new(JOB_TOPIC, QoS::AtLeastOnce);
                         jobs.preserve_retain = true;
                         let acks = Filter::new(format!("orbit/v1/agents/{}/audio/acks", c.agent_id), QoS::AtLeastOnce);
                         if client.try_subscribe_many([jobs, acks]).is_err() { break; }
-                        let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(&c, "ready", device));
                     }
                     Ok(Event::Incoming(MqttPacket::SubAck(ack))) => {
                         if ack.return_codes.iter().any(|code| !matches!(code, SubscribeReasonCode::Success(_))) {
                             update_inference(&status, |v| { v.status = "error".into(); v.error = "worker_acl".into(); });
                             break 'reconnect;
                         }
+                        online = true;
+                        update_inference(status, |v| { v.connected = true; if v.status != "processing" { v.status = "ready".into(); } v.error.clear(); });
+                        if let Ok(mut value) = status.lock() { value.connected = true; value.message = "语音识别服务已连接".into(); }
+                        let current = runtime::snapshot(status).inference.status;
+                        let _ = publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(c, &current, device, Some(store)));
                     }
                     Ok(Event::Incoming(MqttPacket::Publish(p))) => {
                         let acks_topic = format!("orbit/v1/agents/{}/audio/acks", c.agent_id);
@@ -422,7 +515,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
                         } else if p.topic.as_ref() == b"orbit/v1/audio/jobs" && !p.retain {
                             if let Ok(job) = decode_job(&p.payload) {
                                 match store.accept(&job) {
-                                    Ok(_) => { let _ = process_one(&store, model.clone(), &c, &client, device, &status).await; set_counts(&store, &status); }
+                                    Ok(_) => { set_counts(&store, &status); }
                                     Err(StoreError::Conflict) => {}
                                     Err(error) => update_inference(&status, |v| v.error = error.to_string()),
                                 }
@@ -445,6 +538,160 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
     }
     update_inference(&status, |v| {
         v.connected = false;
-        v.status = "offline".into();
+        if v.status != "error" {
+            v.status = "offline".into();
+        }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn heartbeat_reports_durable_queue_and_will_omits_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(&dir.path().join("queue.sqlite"), 1000).unwrap();
+        let mut config = Config::default();
+        config.inference.queue_capacity = 1000;
+        let state: serde_json::Value = serde_json::from_slice(&state_bytes(&config, "ready", "cpu", Some(&store))).unwrap();
+        assert_eq!(state["queue"], serde_json::json!({"queued":0,"processing":0,"outbox":0,"capacity":1000}));
+        let will: serde_json::Value = serde_json::from_slice(&state_bytes(&config, "offline", "cpu", None)).unwrap();
+        assert!(will.get("queue").is_none());
+    }
+
+    #[tokio::test]
+    async fn slow_inference_keeps_network_alive_and_finishes_before_shutdown() {
+        let cancel = CancellationToken::new();
+        let heartbeats = AtomicUsize::new(0);
+        let persisted = AtomicUsize::new(0);
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let (finish_tx, finish_rx) = tokio::sync::oneshot::channel();
+        let network = async {
+            started_rx.await.unwrap();
+            for _ in 0..3 {
+                tokio::task::yield_now().await;
+                heartbeats.fetch_add(1, Ordering::SeqCst);
+            }
+            finish_tx.send(()).unwrap();
+        };
+        let processor = async {
+            started_tx.send(()).unwrap();
+            // Stand in for a native request that cannot finish until after heartbeats.
+            finish_rx.await.unwrap();
+            cancel.cancelled().await;
+            persisted.fetch_add(1, Ordering::SeqCst);
+        };
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            run_with_processor(network, processor, &cancel),
+        )
+        .await
+        .unwrap();
+        assert_eq!(heartbeats.load(Ordering::SeqCst), 3);
+        assert_eq!(persisted.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn mqtt_publishes_processing_heartbeats_during_slow_inference() {
+        use bytes::BytesMut;
+        use rumqttc::v5::mqttbytes::{
+            v5::{ConnAck, ConnectReturnCode, PubAck, SubAck},
+            Error,
+        };
+        use tokio::{
+            io::{AsyncReadExt, AsyncWriteExt},
+            net::TcpListener,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut config = Config::default();
+        config.agent_id = "test-worker".into();
+        config.mqtt.url = format!("mqtt://{}", listener.local_addr().unwrap());
+        let secrets = Secrets::default();
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(&dir.path().join("queue.sqlite"), 10).unwrap());
+        let status = Arc::new(std::sync::Mutex::new(runtime::Status::default()));
+        let cancel = CancellationToken::new();
+        let (finish_tx, finish_rx) = tokio::sync::oneshot::channel();
+        let processor = async {
+            // A processing model must not prevent MQTT handshakes or heartbeats.
+            while !runtime::snapshot(&status).inference.connected {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            update_inference(&status, |v| v.status = "processing".into());
+            finish_rx.await.unwrap();
+        };
+        let broker = async {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut input = BytesMut::new();
+            let started = Instant::now();
+            let mut processing_reports = 0;
+            loop {
+                let packet = loop {
+                    match MqttPacket::read(&mut input, Some(256 * 1024)) {
+                        Ok(packet) => break packet,
+                        Err(Error::InsufficientBytes(_)) => {
+                            assert!(socket.read_buf(&mut input).await.unwrap() > 0);
+                        }
+                        Err(error) => panic!("invalid packet: {error:?}"),
+                    }
+                };
+                let reply = match packet {
+                    MqttPacket::Connect(_, will, _) => {
+                        let will = will.expect("offline last will");
+                        let state: serde_json::Value =
+                            serde_json::from_slice(&will.message).unwrap();
+                        assert_eq!(state["status"], "offline");
+                        assert!(will.retain);
+                        MqttPacket::ConnAck(ConnAck {
+                            session_present: false,
+                            code: ConnectReturnCode::Success,
+                            properties: None,
+                        })
+                    }
+                    MqttPacket::Subscribe(sub) => MqttPacket::SubAck(SubAck {
+                        pkid: sub.pkid,
+                        return_codes: vec![
+                            SubscribeReasonCode::Success(QoS::AtLeastOnce);
+                            sub.filters.len()
+                        ],
+                        properties: None,
+                    }),
+                    MqttPacket::Publish(p) => {
+                        assert_eq!(p.topic.as_ref(), b"orbit/v1/agents/test-worker/audio/state");
+                        let value: serde_json::Value = serde_json::from_slice(&p.payload).unwrap();
+                        if value["status"] == "processing" {
+                            processing_reports += 1;
+                        }
+                        // Observe the periodic 20-second heartbeat, not just a status change.
+                        if started.elapsed() >= Duration::from_secs(19) && processing_reports >= 2 {
+                            finish_tx.send(()).unwrap();
+                            cancel.cancel();
+                            break;
+                        }
+                        MqttPacket::PubAck(PubAck::new(p.pkid, None))
+                    }
+                    other => panic!("unexpected packet: {other:?}"),
+                };
+                let mut output = BytesMut::new();
+                reply.write(&mut output).unwrap();
+                socket.write_all(&output).await.unwrap();
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(25), async {
+            tokio::join!(
+                broker,
+                run_with_processor(
+                    maintain_connection(&config, &secrets, &store, &status, &cancel),
+                    processor,
+                    &cancel,
+                )
+            );
+        })
+        .await
+        .unwrap();
+        assert!(!runtime::snapshot(&status).inference.connected);
+    }
 }

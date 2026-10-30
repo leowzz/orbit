@@ -91,14 +91,18 @@ func (s *RouteStore) listAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	status, node, search := q.Get("status"), q.Get("node_id"), q.Get("q")
+	status, node, search, agent := q.Get("status"), q.Get("node_id"), q.Get("q"), q.Get("agent_id")
 	hideEmpty := q.Get("hide_empty")
-	if status != "" && status != "pending" && status != "completed" && status != "failed" || node != "" && !audioIdentity.MatchString(node) || len(search) > 1000 || hideEmpty != "" && hideEmpty != "true" && hideEmpty != "false" {
+	if status != "" && status != "pending" && status != "completed" && status != "failed" || node != "" && !audioIdentity.MatchString(node) || agent != "" && !audioIdentity.MatchString(agent) || len(search) > 1000 || hideEmpty != "" && hideEmpty != "true" && hideEmpty != "false" {
 		http.Error(w, "invalid audio filter", 400)
 		return
 	}
 	where := ` WHERE (?='' OR s.node_id=?) AND (?='' OR j.status=?) AND (?='' OR instr(lower(COALESCE(a.text,'')),lower(?))>0)`
 	args := []any{node, node, status, status, search, search}
+	if agent != "" {
+		where += ` AND a.agent_id=?`
+		args = append(args, agent)
+	}
 	if hideEmpty == "true" {
 		// Keep pending/failed jobs visible. Filter before both counting and paging.
 		where += ` AND (j.status<>'completed' OR trim(COALESCE(a.text,''),?)<>'')`
@@ -201,6 +205,7 @@ func (s *RouteStore) listAudioWorkers(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	items := []map[string]any{}
+	now := time.Now()
 	for rows.Next() {
 		var raw, received string
 		var live bool
@@ -214,9 +219,12 @@ func (s *RouteStore) listAudioWorkers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		t, _ := time.Parse(time.RFC3339Nano, received)
-		age := time.Since(t)
+		status, _ := item["status"].(string)
+		connection := audioWorkerConnection(status, live, t, now)
 		item["received_at"] = received
-		item["online"] = live && age >= 0 && age < 60*time.Second && !strings.EqualFold(item["status"].(string), "offline")
+		item["online"] = connection == "online"
+		item["connection_state"] = connection
+		item["heartbeat_timeout_seconds"] = 60
 		items = append(items, item)
 	}
 	if rows.Err() != nil {
@@ -224,4 +232,20 @@ func (s *RouteStore) listAudioWorkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeConsoleJSON(w, map[string]any{"items": items})
+}
+
+// A retained registration discovers a worker, but does not prove a live connection.
+// Use Core's receipt time so worker clock skew cannot affect presence.
+func audioWorkerConnection(status string, live bool, received, now time.Time) string {
+	if strings.EqualFold(status, "offline") {
+		return "offline"
+	}
+	if !live {
+		return "unconfirmed"
+	}
+	age := now.Sub(received)
+	if received.IsZero() || age < 0 || age >= 60*time.Second {
+		return "stale"
+	}
+	return "online"
 }

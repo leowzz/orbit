@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Search, Server, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { api, date, errorText, type NetworkState, type RouteDocument } from "../api";
-import { audioDevice, workerStatus, type AudioWorker } from "../audio";
+import { date, type NetworkState, type RouteDocument } from "../api";
+import AudioWorkers, { useAudioWorkers } from "../AudioWorkers";
 import { Badge, Empty, PageHead } from "../components";
 export default function Agents({
   state,
@@ -12,29 +12,7 @@ export default function Agents({
   document: RouteDocument;
 }) {
   const [query, setQuery] = useState("");
-  const [workers, setWorkers] = useState<AudioWorker[] | null>(null);
-  const [workerError, setWorkerError] = useState("");
-  useEffect(() => {
-    let active = true;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      try {
-        const result = await api<{ items: AudioWorker[] }>("/audio/workers");
-        if (active) {
-          setWorkers(result.items);
-          setWorkerError("");
-        }
-      } catch (e) {
-        if (active) setWorkerError(errorText(e));
-      }
-      if (active) timer = setTimeout(poll, 5000);
-    }
-    void poll();
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, []);
+  const { workers, error: workerError } = useAudioWorkers();
   const agents = state.agents.filter((a) =>
     (a.id + " " + a.state.hostLabel)
       .toLowerCase()
@@ -44,47 +22,13 @@ export default function Agents({
     <>
       <PageHead
         title="电脑与来源"
-        description="查看已连接的主机，以及各项数据的状态与更新时间。"
+        description="查看语音识别主机、数据采集来源及最近上报状态。"
       />
-      {workerError && (
-        <div className="banner error" role="alert">
-          Orbit Windows Agent 状态读取失败：{workerError}
-        </div>
-      )}
-      {workers && workers.length > 0 && (
-        <section className="panel orbit-agent-panel" aria-label="Orbit Windows Agent">
-          <div className="orbit-agent-panel-head">
-            <div>
-              <h2>Orbit Windows Agent</h2>
-              <p>本地推理 Worker 会直接接入 Core，状态每 5 秒同步。</p>
-            </div>
-            <Badge tone={workers.some((worker) => worker.online) ? "good" : "warn"}>
-              {workers.filter((worker) => worker.online).length}/{workers.length} 在线
-            </Badge>
-          </div>
-          <div className="orbit-agent-list">
-            {workers.map((worker) => (
-              <div className="orbit-agent-row" key={worker.agent_id}>
-                <div>
-                  <strong>{worker.host_label || worker.agent_id}</strong>
-                  <span className="mono">{worker.agent_id}</span>
-                </div>
-                <div>
-                  <span>{worker.model} · {audioDevice(worker.device)}</span>
-                  <Badge tone={worker.online && worker.status === "ready" ? "good" : worker.status === "error" ? "warn" : "neutral"}>
-                    {workerStatus(worker)}
-                  </Badge>
-                  <small>{date(worker.received_at)}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <AudioWorkers workers={workers} error={workerError} query={query} />
       <div className="toolbar">
         <div className="tabs">
           <span className="selected">
-            全部主机 <b>{state.agents.length}</b>
+            数据采集主机 <b>{state.agents.length}</b>
           </span>
         </div>
         <label className="search">
@@ -127,12 +71,12 @@ export default function Agents({
                 </div>
                 <div>
                   <span>接收设备</span>
-                  <strong>{targets.length} 个 Node</strong>
+                  <strong>{targets.length} 台设备</strong>
                 </div>
               </div>
               <div className="source-table">
                 <div className="source-table-head">
-                  <span>SOURCE</span>
+                  <span>数据来源</span>
                   <span>健康状态</span>
                   <span>数据新鲜度</span>
                   <span>最近成功</span>

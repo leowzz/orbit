@@ -18,9 +18,23 @@ class AudioUploadService : Service() {
             private set
         @Volatile var transfer = ""
             private set
+        @Volatile var transferState = "idle"
+            private set
+        @Volatile var inFlight = 0
+            private set
+        // Process-lifetime totals survive individual upload service restarts.
+        @Volatile var sentPackets = 0L
+            private set
+        @Volatile var sentBytes = 0L
+            private set
+        @Volatile var lastSentAt = 0L
+            private set
         fun start(context: Context) {
             try { context.startForegroundService(Intent(context, AudioUploadService::class.java)) }
-            catch (_: Exception) { transfer = "录音保存在本机，请回到应用继续上传" }
+            catch (_: Exception) {
+                transferState = "paused"
+                transfer = "录音保存在本机，请回到应用继续上传"
+            }
         }
         fun folder(context: Context, config: NodeConfig): File {
             val owner = MessageDigest.getInstance("SHA-256")
@@ -88,6 +102,7 @@ class AudioUploadService : Service() {
     private fun disconnect() {
         pump?.close()
         pump = null
+        inFlight = 0
         val client = mqtt
         mqtt = null
         runCatching { client?.disconnectForcibly(0, 0, false) }
@@ -95,7 +110,15 @@ class AudioUploadService : Service() {
     }
     private fun updateStatus() {
         pending = outbox?.count() ?: 0
-        transfer = (if (pending == 0) "本机录音已发送" else "正在发送 · 本机剩余 $pending 段 · 并发 ${pump?.inFlight ?: 0}") +
+        inFlight = pump?.inFlight ?: 0
+        transferState = when {
+            pump?.retrying == true -> "retrying"
+            pending > 0 -> "sending"
+            otherPending > 0 -> "waiting"
+            else -> "idle"
+        }
+        transfer = (if (pending == 0) "当前连接没有待发送的录音" else if (pump?.retrying == true)
+            "部分片段发送失败，保存在本机，将自动重试" else "正在发送录音片段，停止录音后也会继续发送") +
             if (otherPending > 0) "；另有 $otherPending 段属于其他连接，请切回原连接发送" else ""
     }
     private fun tick(refreshConfiguration: Boolean = false) {
@@ -124,6 +147,8 @@ class AudioUploadService : Service() {
             }
             val box = outbox
             if (next == null || box == null) {
+                pending = 0
+                transferState = "waiting"
                 transfer = "等待设备连接配置，录音保存在本机"
                 finishIdle()
                 return
@@ -148,22 +173,30 @@ class AudioUploadService : Service() {
                         if (mqtt === client) {
                             disconnect()
                             retryAt = SystemClock.elapsedRealtime() + 2000
+                            transferState = "retrying"
                             transfer = "连接断开 · 未发送的录音保存在本机，等待重试"
                         }
                     } }
                 })
+                transferState = "connecting"
+                transfer = "正在连接发送服务，录音已保存在本机"
                 client.connect(OrbitMqtt.options(next).apply { keepAliveInterval = 30; maxInflight = 64 })
                     .waitForCompletion(12000)
                 val sender = AudioMqttSender(client, "orbit/v1/nodes/${next.nodeId}/audio/segments", ::post)
                 pump = AudioUploadPump(box, { AudioCaptureService.settings(this).uploadConcurrency },
                     { _, payload, complete -> sender.send(payload, complete) },
-                    { post { tick() } }, { SystemClock.elapsedRealtime() })
+                    { post { tick() } }, { SystemClock.elapsedRealtime() }, { bytes ->
+                        sentPackets++
+                        sentBytes += bytes
+                        lastSentAt = System.currentTimeMillis()
+                    })
             }
             pump?.pump()
             updateStatus()
         } catch (error: Exception) {
             disconnect()
             retryAt = SystemClock.elapsedRealtime() + 2000
+            transferState = "retrying"
             val reason = OrbitMqtt.safeError(error)
             android.util.Log.w("OrbitAudio", "Upload failed: type=${error.javaClass.simpleName} reason=$reason")
             transfer = "无法发送 · $reason；未发送的录音保存在本机，将自动重试"
@@ -178,6 +211,7 @@ class AudioUploadService : Service() {
     }
     // Android 15 limits background dataSync foreground-service time.
     override fun onTimeout(startId: Int, fgsType: Int) {
+        transferState = "paused"
         transfer = "系统暂停了后台上传，请回到应用继续发送"
         stopSelf()
     }
