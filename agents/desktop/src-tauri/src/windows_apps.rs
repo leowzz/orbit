@@ -407,10 +407,14 @@ mod tests {
         use std::os::windows::process::CommandExt;
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("测试应用 ' 中文.lnk");
+        // WScript.Save uses the system code page on some Windows images.
+        // Create an ASCII fixture, then rename via Rust's Unicode filesystem API
+        // so the actual importer is still tested with Chinese and a quote.
+        let fixture = dir.path().join("fixture.lnk");
         let output = std::process::Command::new("powershell.exe")
             .args(["-NoProfile", "-NonInteractive", "-Command",
                 "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:ORBIT_TEST_LINK); $s.TargetPath=Join-Path $env:SystemRoot 'System32/cmd.exe'; $s.Arguments='/c echo test'; $s.IconLocation=(Join-Path $env:SystemRoot 'System32/shell32.dll')+',3'; $s.Save()"])
-            .env("ORBIT_TEST_LINK", &path)
+            .env("ORBIT_TEST_LINK", &fixture)
             .creation_flags(0x08000000)
             .output().unwrap();
         assert!(
@@ -420,6 +424,7 @@ mod tests {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+        std::fs::rename(&fixture, &path).unwrap();
         let app = crate::shortcuts::import_app(path.to_str().unwrap()).unwrap();
         assert_eq!(app.title, "测试应用 ' 中文");
         assert!(app.target.ends_with(".lnk"));
