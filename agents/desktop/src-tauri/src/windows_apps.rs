@@ -413,7 +413,13 @@ mod tests {
             .env("ORBIT_TEST_LINK", &path)
             .creation_flags(0x08000000)
             .output().unwrap();
-        assert!(output.status.success());
+        assert!(
+            output.status.success(),
+            "shortcut fixture failed ({}): stdout={} stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
         let app = crate::shortcuts::import_app(path.to_str().unwrap()).unwrap();
         assert_eq!(app.title, "测试应用 ' 中文");
         assert!(app.target.ends_with(".lnk"));
