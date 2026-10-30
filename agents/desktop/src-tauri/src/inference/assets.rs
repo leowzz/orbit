@@ -113,8 +113,11 @@ pub fn install_verified(source: &Path, target: &Path, spec: AssetSpec) -> io::Re
 }
 
 pub fn managed_root() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+    #[cfg(windows)]
+    let base = dirs::data_local_dir().or_else(dirs::data_dir);
+    #[cfg(not(windows))]
+    let base = dirs::data_dir();
+    base.unwrap_or_else(|| PathBuf::from("."))
         .join("Orbit")
         .join("inference")
 }
@@ -142,7 +145,8 @@ pub fn model_view(
         managed_model_path()
     };
     let downloaded = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-    let installed = downloaded == MODEL_SIZE;
+    let installed =
+        downloaded == MODEL_SIZE && verify(&path, AssetKind::Qwen3Asr06bQ8.spec()).is_ok();
     let runtime_path = if selected_runtime_path.is_empty() {
         managed_runtime_path()
     } else {

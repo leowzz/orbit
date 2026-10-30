@@ -185,7 +185,7 @@ func TestConfigureMQTTUsesDeviceReachableListener(t *testing.T) {
 	}
 }
 
-func TestNewAndroidRegistrationClaimsOnlyItsOwnCredentials(t *testing.T) {
+func TestDeviceRegistrationClaimsOnlyItsOwnCredentials(t *testing.T) {
 	store, err := inbox.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestNewAndroidRegistrationClaimsOnlyItsOwnCredentials(t *testing.T) {
 	}
 	broker := &fakeDeviceMQTT{users: map[string]string{}, nodes: map[string]string{}}
 	s.mqttProvisioner, s.mqttURL, s.mqttSecret = broker, "mqtts://broker.test:8883", "secret"
-	for _, platform := range []string{"android", "web"} {
+	for _, platform := range []string{"android", "windows", "web"} {
 		r := httptest.NewRequest("POST", "/api/app/devices", strings.NewReader(`{"label":"new device","platform":"`+platform+`"}`))
 		w := httptest.NewRecorder()
 		s.AdminHandler().ServeHTTP(w, r)
@@ -212,7 +212,7 @@ func TestNewAndroidRegistrationClaimsOnlyItsOwnCredentials(t *testing.T) {
 		s.Handler().ServeHTTP(w, r)
 		if platform == "web" {
 			if w.Code != 403 {
-				t.Fatal("non-Android account can provision MQTT")
+				t.Fatal("non-mobile account can provision MQTT")
 			}
 			continue
 		}
@@ -227,7 +227,7 @@ func TestNewAndroidRegistrationClaimsOnlyItsOwnCredentials(t *testing.T) {
 			t.Fatal("request escaped authenticated device scope")
 		}
 	}
-	if len(broker.users) != 1 {
+	if len(broker.users) != 2 {
 		t.Fatal("unexpected MQTT account count")
 	}
 }

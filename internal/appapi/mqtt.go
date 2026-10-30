@@ -55,7 +55,7 @@ func (s *Server) provisionMQTT(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		device := s.devices[node]
 		s.mu.Unlock()
-		if device.Platform != "android" && device.Platform != "" {
+		if device.Platform != "android" && device.Platform != "windows" && device.Platform != "" {
 			failure(w, &inbox.Fault{Code: "forbidden"})
 			return
 		}

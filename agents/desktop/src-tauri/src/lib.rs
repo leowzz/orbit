@@ -2,6 +2,7 @@ pub mod clock;
 pub mod codex;
 pub mod commands;
 pub mod config;
+pub mod core;
 pub mod inference;
 pub mod recent_apps;
 pub mod runtime;
@@ -103,25 +104,65 @@ async fn settings_get(agent: tauri::State<'_, Agent>) -> Result<Settings, String
     }
     Ok(Settings::masked(inner.config.clone(), &inner.secrets))
 }
+
+async fn provision_core_mqtt(agent: &Agent) -> Result<Settings, String> {
+    let (config, token) = {
+        let inner = agent.inner.lock().await;
+        (inner.config.clone(), inner.secrets.core.clone())
+    };
+    let provisioned = core::provision_mqtt(&config, &token).await?;
+    let mut inner = agent.inner.lock().await;
+    inner.config.mqtt = provisioned.mqtt;
+    inner.config.agent_id = provisioned.node_id;
+    inner.secrets.mqtt = provisioned.password;
+    inner.config.validate(&inner.secrets)?;
+    let was_running = runtime::snapshot(&agent.status).running;
+    agent.store.save(&inner.config, &inner.secrets)?;
+    Agent::stop(&mut inner).await;
+    inner.load_failed = false;
+    if was_running {
+        agent.launch(&mut inner);
+    }
+    Ok(Settings::masked(inner.config.clone(), &inner.secrets))
+}
 #[tauri::command]
 async fn settings_save(
     mut settings: Settings,
     agent: tauri::State<'_, Agent>,
 ) -> Result<Settings, String> {
-    let mut inner = agent.inner.lock().await;
-    let secrets = settings.secrets(&inner.secrets);
-    settings.config.shortcuts_revision = inner
-        .config
+    let (previous, previous_secrets) = {
+        let inner = agent.inner.lock().await;
+        (inner.config.clone(), inner.secrets.clone())
+    };
+    let mut secrets = settings.secrets(&previous_secrets);
+    settings.config.validate(&secrets)?;
+    if settings.config.mqtt.url.trim().is_empty() && !settings.config.core.url.trim().is_empty() {
+        let provisioned = core::provision_mqtt(&settings.config, &secrets.core).await?;
+        settings.config.mqtt = provisioned.mqtt;
+        settings.config.agent_id = provisioned.node_id;
+        secrets.mqtt = provisioned.password;
+    }
+    settings.config.shortcuts_revision = previous
         .shortcuts_revision
         .saturating_add(1)
         .max(chrono::Utc::now().timestamp_millis() as u64);
+    let mut inner = agent.inner.lock().await;
     agent.store.save(&settings.config, &secrets)?;
     Agent::stop(&mut inner).await;
     inner.load_failed = false;
     inner.config = settings.config;
     inner.secrets = secrets;
-    agent.launch(&mut inner);
+    if !inner.config.mqtt.url.trim().is_empty() {
+        agent.launch(&mut inner);
+    } else if let Ok(mut status) = agent.status.lock() {
+        status.message = "设置已保存，请从 Core 获取 MQTT 配置".into();
+    }
     Ok(Settings::masked(inner.config.clone(), &inner.secrets))
+}
+
+#[tauri::command]
+async fn core_provision_mqtt(agent: tauri::State<'_, Agent>) -> Result<Settings, String> {
+    provision_core_mqtt(&agent).await
 }
 #[tauri::command]
 async fn agent_set_running(running: bool, agent: tauri::State<'_, Agent>) -> Result<(), String> {
@@ -383,6 +424,7 @@ pub fn run() {
             agent_status,
             agent_set_running,
             connection_test,
+            core_provision_mqtt,
             inference_models,
             inference_select_model,
             inference_download_model,
@@ -476,9 +518,25 @@ pub fn run() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     let agent = handle.state::<Agent>();
+                    let needs_core_provision = {
+                        let inner = agent.inner.lock().await;
+                        !inner.config.core.url.trim().is_empty()
+                            && !inner.secrets.core.trim().is_empty()
+                    };
+                    if needs_core_provision {
+                        let _ = provision_core_mqtt(&agent).await;
+                    }
                     let mut inner = agent.inner.lock().await;
                     match inner.config.validate(&inner.secrets) {
-                        Ok(()) => agent.launch(&mut inner),
+                        Ok(()) if !inner.config.mqtt.url.trim().is_empty() => {
+                            agent.launch(&mut inner)
+                        }
+                        Ok(()) => {
+                            if let Ok(mut status) = agent.status.lock() {
+                                status.message =
+                                    "已读取 Core 设置，请打开设置重试 MQTT 下发".into();
+                            }
+                        }
                         Err(e) => {
                             if let Ok(mut status) = agent.status.lock() {
                                 status.message = e

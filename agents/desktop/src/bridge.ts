@@ -17,6 +17,7 @@ const settings: Settings = {
     shortcutsAtTop: false,
     nfcdMetricsLeftPadding: 16,
     hostLabel: "我的电脑",
+    core: { url: "" },
     allowOpen: false,
     ntpServer: "ntp.aliyun.com",
     ntpInterval: 600,
@@ -60,11 +61,13 @@ const settings: Settings = {
     },
   },
   mqttPassword: null,
+  coreToken: null,
   usagePassword: null,
   inferencePassword: null,
   hasMqttPassword: false,
   hasUsagePassword: false,
   hasInferencePassword: false,
+  hasCoreToken: false,
 };
 const status: Status = {
   running: false,

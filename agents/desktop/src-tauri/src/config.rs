@@ -15,6 +15,7 @@ pub struct Config {
     pub nfcd_metrics_left_padding: u32,
     pub agent_id: String,
     pub host_label: String,
+    pub core: Core,
     pub mqtt: Mqtt,
     pub codex: Codex,
     pub usage: Usage,
@@ -23,6 +24,16 @@ pub struct Config {
     pub ntp_server: String,
     pub ntp_interval: u64,
     pub ntp_timeout: u64,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Core {
+    pub url: String,
+}
+impl Default for Core {
+    fn default() -> Self {
+        Self { url: String::new() }
+    }
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -140,6 +151,7 @@ impl Default for Config {
             host_label: std::env::var("COMPUTERNAME")
                 .or_else(|_| std::env::var("HOSTNAME"))
                 .unwrap_or_else(|_| "我的电脑".into()),
+            core: Core::default(),
             mqtt: Mqtt::default(),
             codex: Codex::default(),
             usage: Usage::default(),
@@ -157,28 +169,34 @@ pub struct Secrets {
     pub usage: String,
     #[serde(default)]
     pub inference: String,
+    #[serde(default)]
+    pub core: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub config: Config,
+    pub core_token: Option<String>,
     pub mqtt_password: Option<String>,
     pub usage_password: Option<String>,
     pub inference_password: Option<String>,
     pub has_mqtt_password: bool,
     pub has_usage_password: bool,
     pub has_inference_password: bool,
+    pub has_core_token: bool,
 }
 impl Settings {
     pub fn masked(config: Config, secrets: &Secrets) -> Self {
         Self {
             config,
+            core_token: None,
             mqtt_password: None,
             usage_password: None,
             inference_password: None,
             has_mqtt_password: !secrets.mqtt.is_empty(),
             has_usage_password: !secrets.usage.is_empty(),
             has_inference_password: !secrets.inference.is_empty(),
+            has_core_token: !secrets.core.is_empty(),
         }
     }
     pub fn secrets(&self, previous: &Secrets) -> Secrets {
@@ -195,6 +213,10 @@ impl Settings {
                 .inference_password
                 .clone()
                 .unwrap_or_else(|| previous.inference.clone()),
+            core: self
+                .core_token
+                .clone()
+                .unwrap_or_else(|| previous.core.clone()),
         }
     }
 }
@@ -216,16 +238,39 @@ impl Config {
         if self.host_label.trim().is_empty() || self.host_label.len() > 192 {
             return Err("请填写有效的本机名称".into());
         }
-        let url = url::Url::parse(&self.mqtt.url).map_err(|_| "请填写有效的 MQTT 服务地址")?;
-        if !["mqtts", "tls", "mqtt"].contains(&url.scheme())
-            || url.host_str().is_none()
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.query().is_some()
-            || url.fragment().is_some()
-            || !["", "/"].contains(&url.path())
-        {
-            return Err("服务地址需使用 mqtts:// 或 mqtt://，凭据请填写在独立输入框中".into());
+        if self.mqtt.url.trim().is_empty() {
+            if self.core.url.trim().is_empty() {
+                return Err("请填写 MQTT 服务地址，或配置 Core 地址和设备令牌".into());
+            }
+            if secrets.core.trim().is_empty() {
+                return Err("请填写 Core 设备令牌，以自动获取 MQTT 配置".into());
+            }
+        } else {
+            let url = url::Url::parse(&self.mqtt.url).map_err(|_| "请填写有效的 MQTT 服务地址")?;
+            if !["mqtts", "tls", "mqtt"].contains(&url.scheme())
+                || url.host_str().is_none()
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.query().is_some()
+                || url.fragment().is_some()
+                || !["", "/"].contains(&url.path())
+            {
+                return Err("服务地址需使用 mqtts:// 或 mqtt://，凭据请填写在独立输入框中".into());
+            }
+        }
+        if !self.core.url.trim().is_empty() {
+            let url = url::Url::parse(&self.core.url).map_err(|_| "Core 地址无效")?;
+            let local_http = url.scheme() == "http"
+                && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "::1"));
+            if url.scheme() != "https" && !local_http
+                || url.host_str().is_none()
+                || !url.username().is_empty()
+                || url.password().is_some()
+                || url.query().is_some()
+                || url.fragment().is_some()
+            {
+                return Err("Core 地址需使用 HTTPS，凭据请填写在独立输入框中".into());
+            }
         }
         if self.mqtt.cert_file.is_empty() != self.mqtt.key_file.is_empty() {
             return Err("客户端证书和私钥需要同时填写".into());
@@ -436,6 +481,7 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
         c.agent_id = id;
     }
     c.host_label = text(&["agent", "host_label"]);
+    c.core.url = text(&["core", "url"]);
     c.mqtt.url = text(&["mqtt", "url"]);
     c.mqtt.username = secret(&["mqtt", "credentials", "username_file"])?;
     c.mqtt.ca_file = resolve(text(&["mqtt", "tls", "ca_file"]));
@@ -510,6 +556,7 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
         c.ntp_server = ntp;
     }
     let secrets = Secrets {
+        core: secret(&["core", "credentials", "token_file"])?,
         mqtt: secret(&["mqtt", "credentials", "password_file"])?,
         usage: secret(&["sources", "sub2api", "credentials", "password_file"])?,
         inference: secret(&["inference", "credentials", "password_file"])?,
@@ -529,12 +576,14 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
     c.validate(&secrets)?;
     Ok(Settings {
         config: c,
+        core_token: Some(secrets.core),
         mqtt_password: Some(secrets.mqtt),
         usage_password: Some(secrets.usage),
         inference_password: Some(secrets.inference),
         has_mqtt_password: false,
         has_usage_password: false,
         has_inference_password: false,
+        has_core_token: false,
     })
 }
 
@@ -665,6 +714,7 @@ mod tests {
             mqtt: "secret".into(),
             usage: "other".into(),
             inference: "asr-secret".into(),
+            core: "core-token".into(),
         };
         let text = serde_json::to_string(&Settings::masked(c, &s)).unwrap();
         assert!(!text.contains("secret"));
@@ -681,6 +731,17 @@ mod tests {
         assert!(c.validate(&Secrets::default()).is_ok());
         c.inference.device = "cuda".into();
         assert!(c.validate(&Secrets::default()).is_err());
+    }
+    #[test]
+    fn core_provisioning_can_supply_mqtt_on_first_start() {
+        let mut c = Config::default();
+        c.mqtt.url.clear();
+        c.core.url = "https://core.example.test".into();
+        let mut secrets = Secrets::default();
+        secrets.core = "device-token".into();
+        assert!(c.validate(&secrets).is_ok());
+        secrets.core.clear();
+        assert!(c.validate(&secrets).is_err());
     }
     #[test]
     fn import_resolves_secrets_and_preserves_identity() {

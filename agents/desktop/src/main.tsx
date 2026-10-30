@@ -163,7 +163,7 @@ function App() {
     );
   }
   function source(
-    group: "mqtt" | "codex" | "usage" | "inference",
+    group: "core" | "mqtt" | "codex" | "usage" | "inference",
     key: string,
     value: unknown,
   ) {
@@ -251,12 +251,13 @@ function App() {
       setPage("connection");
     }
   }
-  async function save() {
+  async function save(): Promise<Settings> {
     const result = await call<Settings>("settings_save", { settings });
     setSettings(result);
     setSaved(JSON.stringify(result));
     setNotice("设置已保存");
     setStatus(await call<Status>("agent_status"));
+    return result;
   }
   function sourceState(name: string, enabled: boolean, s: Source) {
     return (
@@ -529,6 +530,61 @@ function App() {
                         />
                       </Field>
                     </details>
+                  </Section>
+                  <Section title="Core 自动下发">
+                    <Field
+                      label="Core 地址"
+                      hint="填写 Core 的 HTTPS 地址和设备令牌，保存时会自动获取 MQTT 配置。"
+                    >
+                      <input
+                        placeholder="https://orbit.example.com"
+                        value={settings.config.core.url}
+                        onChange={(e) =>
+                          source("core", "url", e.target.value)
+                        }
+                      />
+                    </Field>
+                    <Field
+                      label="Core 设备令牌"
+                      hint="在 Core 管理台登记一个 Windows 设备后复制令牌；令牌保存在系统凭据存储中。"
+                    >
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={
+                          settings.hasCoreToken ? "已保存，未修改时保留" : "请输入设备令牌"
+                        }
+                        value={settings.coreToken ?? ""}
+                        onChange={(e) =>
+                          setSettings({ ...settings, coreToken: e.target.value })
+                        }
+                      />
+                    </Field>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void action(async () => {
+                          let result: Settings;
+                          const needsProvision =
+                            settings.config.mqtt.url.trim() === "";
+                          if (dirty) {
+                            result = await save();
+                            if (!needsProvision) {
+                              result = await call<Settings>("core_provision_mqtt");
+                            }
+                          } else {
+                            result = await call<Settings>("core_provision_mqtt");
+                          }
+                          setSettings(result);
+                          setSaved(JSON.stringify(result));
+                          setNotice("已从 Core 获取 MQTT 配置并连接");
+                          setStatus(await call<Status>("agent_status"));
+                        })
+                      }
+                    >
+                      <RefreshCw size={15} />
+                      从 Core 更新 MQTT
+                    </button>
                   </Section>
                   <Section title="服务连接">
                     <Field label="MQTT 地址">
@@ -1103,7 +1159,7 @@ function App() {
             <button
               className="primary"
               disabled={busy || updating || !dirty}
-              onClick={() => void action(save)}
+              onClick={() => void action(async () => { await save(); })}
             >
               保存并应用
             </button>

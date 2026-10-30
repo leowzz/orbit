@@ -8,7 +8,7 @@ macOS 和 Windows 使用同一套源代码。macOS 已进行本地构建及窗�
 
 ## 使用
 
-1. 打开程序，在「连接」中填写 MQTT 地址和凭据，或导入现有 `agent.local.yaml`。导入会读取 YAML 引用的凭据文件，但不会修改原文件。
+1. 打开程序，在「连接」中填写 Core 地址和设备令牌，点击保存后 Agent 会从 Core 自动获取 MQTT 地址、用户名和密码；也可以直接填写 MQTT 地址和凭据，或导入现有 `agent.local.yaml`。导入会读取 YAML 引用的凭据文件，但不会修改原文件。
 2. 在「数据来源」中启用 Codex、Sub2API。默认不上传会话标题和项目名称；需要在工作台显示时单独开启。
 3. 在「偏好设置」中按需允许工作台打开 Codex 会话，并设置登录电脑后自动启动。
 4. 点击「保存并应用」。关闭窗口后继续在托盘运行；暂停和退出使用托盘菜单。
@@ -40,7 +40,9 @@ Windows 枚举当前桌面有可见窗口的应用进程（含最小化窗口）
 应用记录使用 macOS 的 [NSWorkspace.frontmostApplication](https://developer.apple.com/documentation/appkit/nsworkspace/frontmostapplication)
 及运行应用的启动时间，不需要辅助功能或屏幕录制权限。
 
-首次启动不会自动连接。保存的配置会在后续启动时自动运行。密码使用 macOS Keychain / Windows Credential Manager 保存，普通配置位于 Tauri 的本机应用配置目录 `dev.orbit.agent/settings.json`。系统凭据不可读时会显示错误，不会将密码降级保存到 JSON。
+未完成设置时不会自动连接。保存的配置会在后续启动时自动运行。Core 设备令牌和 MQTT 密码使用 macOS Keychain / Windows Credential Manager 保存，普通配置位于 Tauri 的本机应用配置目录 `dev.orbit.agent/settings.json`。系统凭据不可读时会显示错误，不会将密码降级保存到 JSON。Core 下发的 MQTT 配置会缓存到本机，Core 暂时不可用时仍可使用上次成功配置。
+
+Windows 本地 ASR 模型和 speech.cpp 运行库使用固定目录 `%LOCALAPPDATA%\\Orbit\\inference\\`（macOS 为 `~/Library/Application Support/Orbit/inference/`）。模型下载完成后会校验大小和 SHA-256，重复启动直接复用已安装文件。
 
 迁移现有 Go Agent 时保持设备标识与 Core 投影路由一致。macOS 默认标识沿用 Go 的平台 UUID 派生算法；Windows 首次生成并在保存时持久化，也可指定已有标识。开始使用新 Agent 前先停止旧进程（旧 macOS launchd 服务可运行仓库根目录的 `make stop-agent`）。两个实例共享标识时，收到 MQTT Session Taken Over 的实例会停止重连。
 

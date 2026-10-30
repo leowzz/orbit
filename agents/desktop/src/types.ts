@@ -13,6 +13,9 @@ export interface Config {
   nfcdMetricsLeftPadding: number;
   agentId: string;
   hostLabel: string;
+  core: {
+    url: string;
+  };
   allowOpen: boolean;
   ntpServer: string;
   ntpInterval: number;
@@ -63,12 +66,14 @@ export interface Config {
 }
 export interface Settings {
   config: Config;
+  coreToken: string | null;
   mqttPassword: string | null;
   usagePassword: string | null;
   inferencePassword: string | null;
   hasMqttPassword: boolean;
   hasUsagePassword: boolean;
   hasInferencePassword: boolean;
+  hasCoreToken: boolean;
 }
 export interface Source {
   lastSuccess: number | null;
