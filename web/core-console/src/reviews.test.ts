@@ -7,8 +7,13 @@ import {
   reviewCellKey,
   validReviewDate,
   reviewStatus,
+  reviewHasCard,
+  reviewHasContent,
   type Review,
 } from "./reviews.ts";
+
+const reviewWith = (nonempty: number, items: Review["result"]["items"] = []) =>
+  ({ counts: { nonempty }, result: { items } }) as Review;
 
 test("calendar uses Shanghai independently of the browser timezone", () => {
   assert.equal(shanghaiDate(new Date("2026-10-24T16:01:00Z")), "2026-10-25");
@@ -43,5 +48,19 @@ test("stale and incomplete results stay visible as provisional", () => {
       counts: { ...review.counts, pending: 0, lost: 1 },
     }),
     "有数据缺口",
+  );
+});
+test("empty windows are hidden while text-only windows show a count", () => {
+  assert.equal(reviewHasContent(reviewWith(0)), false);
+  assert.equal(reviewHasCard(reviewWith(0)), false);
+  assert.equal(reviewHasContent(reviewWith(2)), true);
+  assert.equal(reviewHasCard(reviewWith(2)), false);
+  assert.equal(
+    reviewHasCard(
+      reviewWith(2, [
+        { source: "conversation" } as Review["result"]["items"][number],
+      ]),
+    ),
+    true,
   );
 });

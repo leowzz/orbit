@@ -71,6 +71,12 @@ export function reviewStatus(review: Review): string {
   if (review.counts.failed + review.counts.lost > 0) return "有数据缺口";
   return "已分析";
 }
+export function reviewHasContent(review: Review): boolean {
+  return review.counts.nonempty > 0;
+}
+export function reviewHasCard(review: Review): boolean {
+  return reviewHasContent(review) && review.result.items.length > 0;
+}
 export const reviewKind = {
   requirement: "需求",
   decision: "决定",

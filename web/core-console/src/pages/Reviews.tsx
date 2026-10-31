@@ -14,6 +14,8 @@ import {
   type Review,
   type ReviewPage,
   reviewCellKey,
+  reviewHasCard,
+  reviewHasContent,
   reviewKind,
   reviewSource,
   reviewItemStatus,
@@ -270,16 +272,18 @@ export default function Reviews() {
                   <strong>{day.slice(5).replace("-", "/")}</strong>
                   {day === today && <small>今天</small>}
                 </button>
-                {(buckets.get(day) ?? []).map((item) => (
-                  <button
-                    className="review-daily-link"
-                    key={item.id}
-                    onClick={() => setSelected(item.id)}
-                    title={label(item.node_id)}
-                  >
-                    每日总结{item.stale ? " · 更新中" : ""}
-                  </button>
-                ))}
+                {(buckets.get(day) ?? [])
+                  .filter(reviewHasContent)
+                  .map((item) => (
+                    <button
+                      className="review-daily-link"
+                      key={item.id}
+                      onClick={() => setSelected(item.id)}
+                      title={label(item.node_id)}
+                    >
+                      每日总结{item.stale ? " · 更新中" : ""}
+                    </button>
+                  ))}
               </div>
             ))}
           </div>
@@ -295,31 +299,42 @@ export default function Reviews() {
                 >
                   {(
                     buckets.get(`${day}T${String(hour).padStart(2, "0")}`) ?? []
-                  ).map((item) => (
-                    <button
-                      key={item.id}
-                      className={`review-slot ${item.status} ${item.result.items.length > 0 && item.result.items.every((entry) => entry.source === "media") ? "media" : ""}`}
-                      aria-label={`${day} ${hour}点 ${item.result.title || reviewStatus(item)}`}
-                      onClick={() => setSelected(item.id)}
-                    >
-                      <span className="review-slot-meta">
-                        <span>{reviewStatus(item)}</span>
-                        <span>{item.counts.nonempty} 段文字</span>
-                      </span>
-                      <strong>
-                        {item.result.title ||
-                          (item.status === "failed"
-                            ? "暂未生成回顾"
-                            : "正在整理这一小时")}
-                      </strong>
-                      {view === "day" && item.result.summary && (
-                        <p>{item.result.summary}</p>
-                      )}
-                      {!node && (page?.devices.length ?? 0) > 1 && (
-                        <small>{label(item.node_id)}</small>
-                      )}
-                    </button>
-                  ))}
+                  ).map((item) =>
+                    !reviewHasContent(item) ? null : reviewHasCard(item) ? (
+                      <button
+                        key={item.id}
+                        className={`review-slot ${item.status} ${item.result.items.length > 0 && item.result.items.every((entry) => entry.source === "media") ? "media" : ""}`}
+                        aria-label={`${day} ${hour}点 ${item.result.title || reviewStatus(item)}`}
+                        onClick={() => setSelected(item.id)}
+                      >
+                        <span className="review-slot-meta">
+                          <span>{reviewStatus(item)}</span>
+                          <span>{item.counts.nonempty} 段文字</span>
+                        </span>
+                        <strong>
+                          {item.result.title ||
+                            (item.status === "failed"
+                              ? "暂未生成回顾"
+                              : "正在整理这一小时")}
+                        </strong>
+                        {view === "day" && item.result.summary && (
+                          <p>{item.result.summary}</p>
+                        )}
+                        {!node && (page?.devices.length ?? 0) > 1 && (
+                          <small>{label(item.node_id)}</small>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        key={item.id}
+                        className={`review-slot-count ${item.status}`}
+                        aria-label={`${day} ${hour}点 ${item.counts.nonempty} 段文字`}
+                        onClick={() => setSelected(item.id)}
+                      >
+                        {item.counts.nonempty} 段文字
+                      </button>
+                    ),
+                  )}
                 </div>
               ))}
             </div>

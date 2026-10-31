@@ -76,8 +76,10 @@
   font-size: 14px;
 }
 .review-calendar {
-  max-height: 690px;
-  overflow: auto;
+  height: clamp(320px, calc(100dvh - 360px), 690px);
+  min-height: 320px;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
   scrollbar-gutter: stable;
 }
 .review-calendar-inner {
@@ -207,6 +209,23 @@
 }
 .review-slot:hover {
   border-color: var(--accent);
+}
+.review-slot-count {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px dashed var(--line);
+  background: var(--surface-soft);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.review-slot-count:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .review-slot strong {
   display: block;
@@ -369,7 +388,8 @@
     min-width: 115px;
   }
   .review-calendar {
-    max-height: 65vh;
+    height: 65vh;
+    min-height: 260px;
   }
   .review-detail {
     padding: 16px;
