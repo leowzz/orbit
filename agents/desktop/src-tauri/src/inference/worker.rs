@@ -561,6 +561,7 @@ async fn maintain_connection(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Mqtt;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
@@ -625,9 +626,14 @@ mod tests {
         };
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let mut config = Config::default();
-        config.agent_id = "test-worker".into();
-        config.mqtt.url = format!("mqtt://{}", listener.local_addr().unwrap());
+        let config = Config {
+            agent_id: "test-worker".into(),
+            mqtt: Mqtt {
+                url: format!("mqtt://{}", listener.local_addr().unwrap()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
         let secrets = Secrets::default();
         let dir = tempfile::tempdir().unwrap();
         let store = Arc::new(Store::open(&dir.path().join("queue.sqlite"), 10).unwrap());
