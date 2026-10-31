@@ -1,0 +1,13 @@
+services:
+  prometheus:
+    networks:
+      - default
+      - db_core
+  grafana:
+    volumes:
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+
+networks:
+  db_core:
+    external: true
+    name: leo_db_core

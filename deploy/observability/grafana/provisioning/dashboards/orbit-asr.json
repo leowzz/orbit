@@ -2,7 +2,7 @@
   "uid": "orbit-asr",
   "title": "Orbit ASR 消费",
   "schemaVersion": 41,
-  "version": 2,
+  "version": 4,
   "editable": true,
   "tags": [
     "orbit",
@@ -400,6 +400,95 @@
       }
     },
     {
+      "id": 19,
+      "title": "消息生产 / 消费速度",
+      "description": "全局去重消息速率，单位：条/分钟。生产 = Core 首次接收并入队的音频片段；消费 = Core 首次接收并落库的 ASR 终态结果（含成功、失败）。重复投递不计数。两条曲线均为所有 Worker 合计，不受 Worker 筛选影响，便于比较进出队速度。",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix:条/分钟",
+          "decimals": 2,
+          "noValue": "暂无数据",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "生产速度"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "消费速度"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(orbit_audio_received_total{job=\"orbit-core\"}[$__rate_interval])) * 60",
+          "legendFormat": "生产速度",
+          "refId": "A",
+          "range": true
+        },
+        {
+          "expr": "sum(rate(orbit_audio_results_total{job=\"orbit-core\"}[$__rate_interval])) * 60",
+          "legendFormat": "消费速度",
+          "refId": "B",
+          "range": true
+        }
+      ],
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
       "id": 9,
       "title": "Core 保留任务状态",
       "description": "Gauge：随保留策略淘汰而减少，不能用 rate() 推算吞吐。",
@@ -410,7 +499,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 8,
+        "y": 16,
         "w": 12,
         "h": 8
       },
@@ -459,7 +548,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 8,
+        "y": 16,
         "w": 12,
         "h": 8
       },
@@ -508,7 +597,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 16,
+        "y": 24,
         "w": 12,
         "h": 8
       },
@@ -557,7 +646,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 16,
+        "y": 24,
         "w": 12,
         "h": 8
       },
@@ -612,7 +701,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 24,
+        "y": 32,
         "w": 12,
         "h": 7
       },
@@ -661,7 +750,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 24,
+        "y": 32,
         "w": 12,
         "h": 7
       },
@@ -710,7 +799,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 7
       },
@@ -727,7 +816,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (agent_id) (orbit_audio_worker_jobs{job=\"orbit-core\",agent_id=~\"$worker\"}) / orbit_audio_worker_queue_capacity{job=\"orbit-core\",agent_id=~\"$worker\"}",
+          "expr": "sum by (agent_id) (orbit_audio_worker_jobs{job=\"orbit-core\",agent_id=~\"$worker\"}) / on (agent_id) orbit_audio_worker_queue_capacity{job=\"orbit-core\",agent_id=~\"$worker\"}",
           "legendFormat": "{{agent_id}}",
           "refId": "A",
           "range": true
@@ -759,7 +848,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 31,
+        "y": 39,
         "w": 12,
         "h": 7
       },
@@ -814,7 +903,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 46,
         "w": 24,
         "h": 6
       },
@@ -872,7 +961,7 @@
       "type": "text",
       "gridPos": {
         "x": 0,
-        "y": 44,
+        "y": 52,
         "w": 24,
         "h": 4
       },

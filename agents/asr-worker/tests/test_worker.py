@@ -282,3 +282,16 @@ def test_pending_counts_ignore_done_history_and_existing_database_gets_index(tmp
     # than scanning permanent tombstones for every one-second GUI snapshot.
     plans = list(store.db.execute("EXPLAIN QUERY PLAN SELECT status,count(*) FROM jobs WHERE status IN ('queued','processing','outbox') GROUP BY status"))
     assert any("SEARCH jobs USING COVERING INDEX jobs_status" in row[3] for row in plans)
+
+def test_worker_state_reports_durable_queue(tmp_path):
+    w,c = worker(tmp_path)
+    item = fixture_job()
+    deliver(w,c,item)
+    assert w.state()['queue'] == dict(queued=1,processing=0,outbox=0,capacity=1)
+    assert w.store.claim()
+    assert w.state()['queue']['processing'] == 1
+    w.store.finish(item['job_id'],dict(job_id=item['job_id'],status='completed'))
+    assert w.state()['queue'] == dict(queued=0,processing=0,outbox=1,capacity=1)
+    assert 'queue' not in w.state('offline')
+    w.store.acknowledge(item['job_id'])
+    assert w.state()['queue']['outbox'] == 0

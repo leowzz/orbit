@@ -106,10 +106,14 @@ fn state_bytes(c: &Config, state: &str, device: &str, store: Option<&Store>) -> 
         device,
         status: state,
         updated_at: now_string(),
-        queue: store.and_then(|s| s.counts().ok()).map(|counts| WorkerQueue {
-            queued: counts.queued, processing: counts.processing, outbox: counts.outbox,
-            capacity: c.inference.queue_capacity,
-        }),
+        queue: store
+            .and_then(|s| s.counts().ok())
+            .map(|counts| WorkerQueue {
+                queued: counts.queued,
+                processing: counts.processing,
+                outbox: counts.outbox,
+                capacity: c.inference.queue_capacity,
+            }),
     })
     .unwrap_or_default()
 }
@@ -242,6 +246,7 @@ async fn process_one(
     c: &Config,
     device: &str,
     status: &SharedStatus,
+    result_tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
 ) -> Result<(), String> {
     let Some((job, attempts)) = store.claim().map_err(|e| e.to_string())? else {
         return Ok(());
@@ -276,9 +281,12 @@ async fn process_one(
         return Ok(());
     }
     // Persist first. The independent MQTT loop sends and retries the outbox.
-    store
+    let payload = store
         .finish(&job.job_id, &result)
         .map_err(|e| e.to_string())?;
+    // First delivery is immediate, even while older outbox entries are retried.
+    // A full channel is safe: the durable outbox will retry the result.
+    let _ = result_tx.try_send(payload);
     update_inference(status, |v| v.status = "ready".into());
     Ok(())
 }
@@ -314,6 +322,7 @@ async fn process_queue(
     c: &Config,
     status: &SharedStatus,
     cancel: &CancellationToken,
+    result_tx: &tokio::sync::mpsc::Sender<Vec<u8>>,
 ) {
     let mut tick = tokio::time::interval(Duration::from_millis(250));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -323,7 +332,7 @@ async fn process_queue(
             _ = cancel.cancelled() => break,
             _ = tick.tick() => {
                 if !runtime::snapshot(status).inference.connected { continue; }
-                if let Err(error) = process_one(store, model.clone(), c, selected_device(c), status).await {
+                if let Err(error) = process_one(store, model.clone(), c, selected_device(c), status, result_tx).await {
                     update_inference(status, |v| { v.status = "error".into(); v.error = error; });
                 }
                 set_counts(store, status);
@@ -424,9 +433,10 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
         value.message = "ASR Worker 正在连接 MQTT".into();
     }
     let worker_cancel = cancel.child_token();
+    let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(16);
     run_with_processor(
-        maintain_connection(&c, &s, &store, &status, &worker_cancel),
-        process_queue(&store, model, &c, &status, &worker_cancel),
+        maintain_connection(&c, &s, &store, &status, &worker_cancel, &mut result_rx),
+        process_queue(&store, model, &c, &status, &worker_cancel, &result_tx),
         &worker_cancel,
     )
     .await;
@@ -447,6 +457,7 @@ async fn maintain_connection(
     store: &Arc<Store>,
     status: &SharedStatus,
     cancel: &CancellationToken,
+    result_rx: &mut tokio::sync::mpsc::Receiver<Vec<u8>>,
 ) {
     let device = selected_device(c);
     let mut backoff = 1u64;
@@ -454,11 +465,11 @@ async fn maintain_connection(
         if cancel.is_cancelled() {
             break;
         }
-        let options = match worker_mqtt_options(&c, &s) {
+        let options = match worker_mqtt_options(c, s) {
             Ok(value) => value,
             Err(error) => {
                 eprintln!("Orbit native ASR MQTT config error: {error}");
-                update_inference(&status, |v| {
+                update_inference(status, |v| {
                     v.status = "error".into();
                     v.error = error;
                 });
@@ -475,9 +486,12 @@ async fn maintain_connection(
         loop {
             tokio::select! {
                 _ = cancel.cancelled() => break 'reconnect,
+                Some(payload) = result_rx.recv(), if online => {
+                    let _ = publish(&client, format!("orbit/v1/agents/{}/audio/results", c.agent_id), false, payload);
+                }
                 _ = tick.tick(), if online => {
-                    set_counts(&store, &status);
-                    let _ = publish_outbox(&store, &client, &c.agent_id).await;
+                    set_counts(store, status);
+                    let _ = publish_outbox(store, &client, &c.agent_id).await;
                     let current = runtime::snapshot(status).inference.status;
                     if current != last_state && publish(&client, format!("orbit/v1/agents/{}/audio/state", c.agent_id), true, state_bytes(c, &current, device, Some(store))).is_ok() {
                         last_state = current;
@@ -497,7 +511,7 @@ async fn maintain_connection(
                     }
                     Ok(Event::Incoming(MqttPacket::SubAck(ack))) => {
                         if ack.return_codes.iter().any(|code| !matches!(code, SubscribeReasonCode::Success(_))) {
-                            update_inference(&status, |v| { v.status = "error".into(); v.error = "worker_acl".into(); });
+                            update_inference(status, |v| { v.status = "error".into(); v.error = "worker_acl".into(); });
                             break 'reconnect;
                         }
                         online = true;
@@ -515,9 +529,9 @@ async fn maintain_connection(
                         } else if p.topic.as_ref() == b"orbit/v1/audio/jobs" && !p.retain {
                             if let Ok(job) = decode_job(&p.payload) {
                                 match store.accept(&job) {
-                                    Ok(_) => { set_counts(&store, &status); }
+                                    Ok(_) => { set_counts(store, status); }
                                     Err(StoreError::Conflict) => {}
-                                    Err(error) => update_inference(&status, |v| v.error = error.to_string()),
+                                    Err(error) => update_inference(status, |v| v.error = error.to_string()),
                                 }
                             }
                         }
@@ -528,7 +542,7 @@ async fn maintain_connection(
                 }
             }
         }
-        update_inference(&status, |v| v.connected = false);
+        update_inference(status, |v| v.connected = false);
         if let Ok(mut value) = status.lock() {
             value.connected = false;
             value.message = "ASR Worker 正在重连 MQTT".into();
@@ -536,7 +550,7 @@ async fn maintain_connection(
         tokio::select! { _ = cancel.cancelled() => break, _ = tokio::time::sleep(Duration::from_secs(backoff)) => {} }
         backoff = (backoff * 2).min(30);
     }
-    update_inference(&status, |v| {
+    update_inference(status, |v| {
         v.connected = false;
         if v.status != "error" {
             v.status = "offline".into();
@@ -555,9 +569,14 @@ mod tests {
         let store = Store::open(&dir.path().join("queue.sqlite"), 1000).unwrap();
         let mut config = Config::default();
         config.inference.queue_capacity = 1000;
-        let state: serde_json::Value = serde_json::from_slice(&state_bytes(&config, "ready", "cpu", Some(&store))).unwrap();
-        assert_eq!(state["queue"], serde_json::json!({"queued":0,"processing":0,"outbox":0,"capacity":1000}));
-        let will: serde_json::Value = serde_json::from_slice(&state_bytes(&config, "offline", "cpu", None)).unwrap();
+        let state: serde_json::Value =
+            serde_json::from_slice(&state_bytes(&config, "ready", "cpu", Some(&store))).unwrap();
+        assert_eq!(
+            state["queue"],
+            serde_json::json!({"queued":0,"processing":0,"outbox":0,"capacity":1000})
+        );
+        let will: serde_json::Value =
+            serde_json::from_slice(&state_bytes(&config, "offline", "cpu", None)).unwrap();
         assert!(will.get("queue").is_none());
     }
 
@@ -615,12 +634,15 @@ mod tests {
         let status = Arc::new(std::sync::Mutex::new(runtime::Status::default()));
         let cancel = CancellationToken::new();
         let (finish_tx, finish_rx) = tokio::sync::oneshot::channel();
+        let (result_tx, mut result_rx) = tokio::sync::mpsc::channel(16);
         let processor = async {
             // A processing model must not prevent MQTT handshakes or heartbeats.
             while !runtime::snapshot(&status).inference.connected {
                 tokio::time::sleep(Duration::from_millis(10)).await;
             }
             update_inference(&status, |v| v.status = "processing".into());
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            result_tx.send(b"test-result".to_vec()).await.unwrap();
             finish_rx.await.unwrap();
         };
         let broker = async {
@@ -628,6 +650,7 @@ mod tests {
             let mut input = BytesMut::new();
             let started = Instant::now();
             let mut processing_reports = 0;
+            let mut immediate_result = false;
             loop {
                 let packet = loop {
                     match MqttPacket::read(&mut input, Some(256 * 1024)) {
@@ -660,6 +683,20 @@ mod tests {
                         properties: None,
                     }),
                     MqttPacket::Publish(p) => {
+                        if p.topic.as_ref() == b"orbit/v1/agents/test-worker/audio/results" {
+                            assert_eq!(p.payload.as_ref(), b"test-result");
+                            assert!(
+                                started.elapsed() < Duration::from_secs(4),
+                                "first delivery waited for the retry timer"
+                            );
+                            immediate_result = true;
+                            let mut output = BytesMut::new();
+                            MqttPacket::PubAck(PubAck::new(p.pkid, None))
+                                .write(&mut output)
+                                .unwrap();
+                            socket.write_all(&output).await.unwrap();
+                            continue;
+                        }
                         assert_eq!(p.topic.as_ref(), b"orbit/v1/agents/test-worker/audio/state");
                         let value: serde_json::Value = serde_json::from_slice(&p.payload).unwrap();
                         if value["status"] == "processing" {
@@ -667,6 +704,7 @@ mod tests {
                         }
                         // Observe the periodic 20-second heartbeat, not just a status change.
                         if started.elapsed() >= Duration::from_secs(19) && processing_reports >= 2 {
+                            assert!(immediate_result);
                             finish_tx.send(()).unwrap();
                             cancel.cancel();
                             break;
@@ -684,7 +722,14 @@ mod tests {
             tokio::join!(
                 broker,
                 run_with_processor(
-                    maintain_connection(&config, &secrets, &store, &status, &cancel),
+                    maintain_connection(
+                        &config,
+                        &secrets,
+                        &store,
+                        &status,
+                        &cancel,
+                        &mut result_rx
+                    ),
                     processor,
                     &cancel,
                 )

@@ -83,3 +83,20 @@ WorkerState 字段：`schema_version, agent_id, host_label, model, device, statu
 ## 数据查看
 
 Core 管理页的「音频记录」默认忽略已完成但转写文字为空或仅含空白的记录，等待识别与失败记录仍显示；可切换为「查看所有」。筛选在服务端分页前执行，计数与翻页保持一致。页面提供设备、状态和文字筛选、分页、转写及结构化结果详情，同时展示 worker 最近状态。音频数据只通过已认证的管理 API 读取；不暴露 MQTT 密码或本地路径。
+
+## Prometheus / Grafana
+
+Core 可通过独立私网监听暴露 ASR 消费指标：
+
+```yaml
+metrics:
+  listen: 0.0.0.0:7623
+```
+
+默认关闭。Prometheus 与 Core 加入同一 Docker 网络，抓取 `http://orbit-core:7623/metrics`；不要映射到公网。控制台及 App API 端口不提供指标。
+
+WorkerState 新增可选 `queue: {queued, processing, outbox, capacity}`；Rust 桌面 Worker 和 Python Worker 都在约 20 秒心跳中上报，需先更新 Core 再更新 Worker。老 Worker 保持兼容，但缺少队列值不会当作 0。`outbox` 对应桌面的“待确认结果”，须收到 Core 应用层 ACK 才减少。Core 的 pending 包含已经分发但尚未收到结果的任务，与 Worker 队列不能相加。
+
+Worker up 与管理台一致：非 retained、非 offline、Core 接收心跳不足 60 秒才为 1。队列指标只在实时心跳有效且包含 queue 时导出；`queue_reported=0` 表示未知/过期。累计接收与消费 counter 在业务事务中去重更新，持久保存在 SQLite 的 `audio_counters`，从指标首次部署起计数，重启和音频清理不清零；保留数据量是 gauge，不能用其 rate 推算吞吐。
+
+部署配置、指标说明与回滚方式见 [ASR observability](../deploy/observability/README.md)。

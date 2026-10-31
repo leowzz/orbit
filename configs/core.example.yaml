@@ -88,3 +88,9 @@ observation_policies:
 # An App can use the inbox without a status route. To show usage/session,
 # add phone-01 in the Core console with profile: overview-app and explicit
 # inputs, using the same observation policies as the Web/OLED routes.
+
+# Optional private Prometheus listener, disabled when omitted.
+# In Docker: use 0.0.0.0:7623 and a shared monitoring network; do not publish
+# this port through the public reverse proxy.
+# metrics:
+#   listen: 127.0.0.1:7623
