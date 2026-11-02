@@ -438,6 +438,48 @@ Port 7620 serves the backend and any previously embedded assets, so use port
 5173 to see frontend changes. Vite fails if its port is occupied rather than
 silently selecting another port.
 
+### Workbench loading and browser checks
+
+Pages load independently. `/box` does not wait for device state, projection
+routes, or device registration; it reads a local inbox cache and catches up via
+snapshot/changes plus SSE watermarks. Matching watermarks do not refetch content.
+Offscreen thumbnails use native lazy loading. Hashed assets are precompressed
+and cached as immutable; HTML and private APIs remain uncached. A failed page
+chunk offers reload without discarding persisted inbox drafts.
+
+Measured on local Chrome against the embedded Core, with an authenticated direct
+link and a fresh browser context. Sizes are bytes, excluding HTTP headers and
+message/attachment payloads; timings depend on the host and are not a latency SLO.
+Baseline is `8485184`, where the inbox was `/messages`.
+
+| Metric | Baseline | Workbench `/box` |
+| --- | ---: | ---: |
+| JavaScript decoded size, complete route | 359,315 | 273,890 |
+| JavaScript actually transferred | 359,315 | 90,753 |
+| JavaScript + CSS actually transferred | 412,844 | 103,254 |
+| Hashed asset transfer on repeat load | 412,844 | 0 |
+| Unrelated state/routes/devices startup requests | 3 | 0 |
+
+Reproduce the current route import sizes and browser checks:
+
+```sh
+make build-console
+node scripts/console-size.mjs
+pnpm --dir web/core-console exec playwright install chromium
+pnpm --dir web/core-console test:browser
+# Or use an already installed Chrome:
+ORBIT_BROWSER_CHANNEL=chrome pnpm --dir web/core-console test:browser
+```
+
+The browser suite starts Core on loopback port 17622 with a fresh temporary
+database; it does not read deployment configuration. It exercises direct links,
+refresh/history, editing, todos, deletion/restoration, clipboard, image selection,
+paste/drop and previews, offline queues, conflicts, failed requests, expired
+sessions, cross-tab locks, draft-aware logout, and 390px layout. It also asserts
+that unrelated pages/data are not loaded and repeat loads transfer no hashed
+assets. Screenshots, failure traces and `performance.json` are written under
+`web/core-console/test-results/`; CI retains failure artifacts for seven days.
+
 ## Automated checks
 
 Run these from the repository root. A passing check exits with status 0; any

@@ -32,6 +32,16 @@ jobs:
         run: |
           make test
           pnpm --dir web/core-console format:check
+      - name: Test workbench in Chromium
+        run: |
+          pnpm --dir web/core-console exec playwright install --with-deps chromium
+          pnpm --dir web/core-console test:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: workbench-browser-results
+          path: web/core-console/test-results/
+          retention-days: 7
       - name: Test release and signing scripts
         run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
 

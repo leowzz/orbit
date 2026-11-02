@@ -76,3 +76,7 @@ web/core-console/node_modules/
 web/core-console/dist/*
 !web/core-console/dist/.gitkeep
 *.tsbuildinfo
+
+# Local browser verification artifacts
+web/core-console/test-results/
+web/core-console/playwright-report/

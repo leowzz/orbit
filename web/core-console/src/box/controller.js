@@ -552,6 +552,7 @@ export function mountBox(root) {
     $("sync-state").textContent = "正在同步…";
     try {
       await catchUp();
+      let sent = false;
       for (const entry of [...state.outbox]) {
         if (disposed) return;
         if (entry.error || pendingCommits.has(entry.op.operation_id)) continue;
@@ -565,6 +566,7 @@ export function mountBox(root) {
             await save();
           }
           const item = await api("operations", json(entry.op));
+          sent = true;
           merge([item]);
           state.outbox = state.outbox.filter((e) => e !== entry);
           await save();
@@ -580,7 +582,7 @@ export function mountBox(root) {
           } else throw e;
         }
       }
-      await catchUp();
+      if (sent) await catchUp();
       $("error").hidden = true;
       $("sync-state").textContent = state.outbox.length
         ? "有修改待处理"
@@ -633,10 +635,22 @@ export function mountBox(root) {
     clearInterval(timer);
     events?.close();
     events = new EventSource("/api/app/events");
-    events.addEventListener("sync", () => void sync());
+    events.addEventListener("sync", (event) => {
+      try {
+        const watermark = JSON.parse(event.data);
+        if (
+          watermark.generation !== state.generation ||
+          watermark.cursor !== state.cursor ||
+          state.outbox.some((e) => !e.error)
+        )
+          void sync();
+      } catch {
+        void sync();
+      }
+    });
     timer = setInterval(() => {
       if (!document.hidden) void sync();
-    }, 15000);
+    }, 30000);
     void sync();
   }
   $("composer").onsubmit = async (event) => {

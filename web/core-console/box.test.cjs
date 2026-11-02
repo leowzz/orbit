@@ -37,6 +37,7 @@ function client() {
     navigator: { locks: { request: () => new Promise(() => {}) } },
     Event,
     AbortController,
+    TextEncoder,
     fetch: () => new Promise(() => {}),
     AbortSignal,
     URL,
@@ -52,7 +53,10 @@ function client() {
     .split("// React releases")[0]
     .replace("export function mountBox(root) {", "");
   vm.runInContext(source, context);
-  vm.runInContext("render=()=>{};save=async()=>{};", context);
+  vm.runInContext(
+    'render=()=>{};save=async()=>{};$("send").disabled=false;',
+    context,
+  );
   return {
     context,
     run: (source) => vm.runInContext(source, context),

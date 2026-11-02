@@ -10,8 +10,9 @@
     "check": "tsc -b",
     "test": "node --experimental-strip-types --test src/*.test.ts box.test.cjs",
     "preview": "vite preview --host 127.0.0.1",
-    "format": "prettier --write src vite.config.ts package.json tsconfig.json",
-    "format:check": "prettier --check src vite.config.ts package.json tsconfig.json"
+    "format": "prettier --write src e2e/*.ts playwright.config.ts box.test.cjs vite.config.ts package.json tsconfig.json",
+    "format:check": "prettier --check src e2e/*.ts playwright.config.ts box.test.cjs vite.config.ts package.json tsconfig.json",
+    "test:browser": "pnpm build && playwright test"
   },
   "dependencies": {
     "lucide-react": "^0.577.0",
@@ -21,6 +22,7 @@
     "react-router-dom": "^7.9.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "^4.1.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.0",

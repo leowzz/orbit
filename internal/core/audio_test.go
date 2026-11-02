@@ -187,14 +187,20 @@ func TestAudioAcceptsNativeBackends(t *testing.T) {
 	ctx := context.Background()
 	for _, device := range []string{"vulkan", "metal"} {
 		s, e := OpenRouteStore(filepath.Join(t.TempDir(), "core.sqlite"), nil)
-		if e != nil { t.Fatal(e) }
+		if e != nil {
+			t.Fatal(e)
+		}
 		defer s.Close()
 		seg := audioFixture()
-		if e = s.storeAudioSegment(ctx, seg, time.Now()); e != nil { t.Fatal(e) }
+		if e = s.storeAudioSegment(ctx, seg, time.Now()); e != nil {
+			t.Fatal(e)
+		}
 		r, _ := NewAudioRunner(s, &audioTransport{}, nil, nil)
 		result := AudioResult{SchemaVersion: 1, JobID: seg.SegmentID, SegmentID: seg.SegmentID, NodeID: seg.NodeID, AgentID: "worker-1", Status: "completed", Device: device, CompletedAt: time.Now().UTC().Format(time.RFC3339)}
 		payload, _ := json.Marshal(result)
-		if e = r.handle(ctx, mqtt.Message{Topic: "orbit/v1/agents/worker-1/audio/results", Payload: payload}); e != nil { t.Fatalf("%s: %v", device, e) }
+		if e = r.handle(ctx, mqtt.Message{Topic: "orbit/v1/agents/worker-1/audio/results", Payload: payload}); e != nil {
+			t.Fatalf("%s: %v", device, e)
+		}
 	}
 }
 

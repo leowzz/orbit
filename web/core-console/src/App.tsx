@@ -26,6 +26,7 @@ import type { NetworkState, RouteDocument } from "./api";
 import { Mark, Loading } from "./components";
 import Login from "./pages/Login";
 import ThemeToggle from "./ThemeToggle";
+import PageBoundary from "./PageBoundary";
 const Overview = lazy(() => import("./pages/Overview"));
 const Agents = lazy(() => import("./pages/Agents"));
 const Nodes = lazy(() => import("./pages/Nodes"));
@@ -73,6 +74,7 @@ export default function App() {
   const location = useLocation();
   const independent = [
     "/box",
+    "/box/",
     "/messages",
     "/apps",
     "/inbox",
@@ -292,60 +294,62 @@ export default function App() {
               <button onClick={refresh}>重试</button>
             </div>
           )}
-          <Suspense fallback={<Loading />}>
-            {independent ? (
-              <Routes>
-                <Route path="/box" element={<Box />} />
-                <Route path="/mqtt" element={<MqttUsers />} />
-                <Route path="/reviews" element={<Reviews />} />
-                <Route path="*" element={<Navigate to="/box" replace />} />
-              </Routes>
-            ) : state && routes ? (
-              <Routes>
-                <Route
-                  path="/"
-                  element={<Overview state={state} document={routes} />}
-                />
-                <Route
-                  path="/agents"
-                  element={<Agents state={state} document={routes} />}
-                />
-                <Route
-                  path="/nodes"
-                  element={
-                    <Nodes
-                      state={state}
-                      document={routes}
-                      onChange={setRoutes}
-                      onLabelChange={updateNodeLabel}
-                      onArchiveChange={updateNodeArchive}
-                    />
-                  }
-                />
-                <Route
-                  path="/nodes/:nodeId"
-                  element={
-                    <Nodes
-                      state={state}
-                      document={routes}
-                      onChange={setRoutes}
-                      onLabelChange={updateNodeLabel}
-                      onArchiveChange={updateNodeArchive}
-                    />
-                  }
-                />
-                <Route path="/routes" element={<LegacyRoutes />} />
-                <Route
-                  path="/system"
-                  element={<System state={state} document={routes} />}
-                />
-                <Route path="/audio" element={<Audio state={state} />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            ) : (
-              <Loading />
-            )}
-          </Suspense>
+          <PageBoundary key={location.pathname}>
+            <Suspense fallback={<Loading />}>
+              {independent ? (
+                <Routes>
+                  <Route path="/box" element={<Box />} />
+                  <Route path="/mqtt" element={<MqttUsers />} />
+                  <Route path="/reviews" element={<Reviews />} />
+                  <Route path="*" element={<Navigate to="/box" replace />} />
+                </Routes>
+              ) : state && routes ? (
+                <Routes>
+                  <Route
+                    path="/"
+                    element={<Overview state={state} document={routes} />}
+                  />
+                  <Route
+                    path="/agents"
+                    element={<Agents state={state} document={routes} />}
+                  />
+                  <Route
+                    path="/nodes"
+                    element={
+                      <Nodes
+                        state={state}
+                        document={routes}
+                        onChange={setRoutes}
+                        onLabelChange={updateNodeLabel}
+                        onArchiveChange={updateNodeArchive}
+                      />
+                    }
+                  />
+                  <Route
+                    path="/nodes/:nodeId"
+                    element={
+                      <Nodes
+                        state={state}
+                        document={routes}
+                        onChange={setRoutes}
+                        onLabelChange={updateNodeLabel}
+                        onArchiveChange={updateNodeArchive}
+                      />
+                    }
+                  />
+                  <Route path="/routes" element={<LegacyRoutes />} />
+                  <Route
+                    path="/system"
+                    element={<System state={state} document={routes} />}
+                  />
+                  <Route path="/audio" element={<Audio state={state} />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              ) : (
+                <Loading />
+              )}
+            </Suspense>
+          </PageBoundary>
         </main>
       </div>
     </div>

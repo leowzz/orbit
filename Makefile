@@ -102,7 +102,7 @@ test: test-go test-console test-dev
 test-dev:
 	node --test scripts/dev-core.test.mjs
 
-test-console:
+test-console: build-console
 	$(PNPM) --dir "$(CONSOLE_DIR)" check
 	$(PNPM) --dir "$(CONSOLE_DIR)" test
 

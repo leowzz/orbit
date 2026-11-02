@@ -6,13 +6,16 @@ import "../box/box.css";
 export default function Box() {
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (root.current) return mountBox(root.current);
+    const element = root.current;
+    if (!element) return;
+    // This page owns its DOM; parent renders (e.g. viewport changes) must not
+    // replace the controller's content, draft fields or event handlers.
+    element.innerHTML = template;
+    const dispose = mountBox(element);
+    return () => {
+      dispose();
+      element.replaceChildren();
+    };
   }, []);
-  return (
-    <div
-      ref={root}
-      className="box"
-      dangerouslySetInnerHTML={{ __html: template }}
-    />
-  );
+  return <div ref={root} className="box" />;
 }
