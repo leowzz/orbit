@@ -90,7 +90,6 @@ test("direct links, refresh, history, inbox actions and responsive layout", asyn
     page.getByRole("heading", { name: "收件箱", exact: true }),
   ).toBeVisible();
   await expect(page.locator("#send")).toBeEnabled();
-  await page.getByRole("button", { name: "搜索消息", exact: true }).click();
   await page.getByRole("searchbox").fill("不会匹配的文本");
   await expect(page.getByText("没有找到匹配的消息")).toBeVisible();
   await page.getByRole("searchbox").press("Escape");
@@ -113,6 +112,10 @@ test("direct links, refresh, history, inbox actions and responsive layout", asyn
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBe(390);
+  await expect(page.getByRole("searchbox")).toBeVisible();
+  const composer = await page.locator("#composer").boundingBox();
+  const messages = await page.locator("#messages").boundingBox();
+  expect(composer!.y + composer!.height).toBeLessThan(messages!.y);
   const textarea = await page.locator("#body").boundingBox();
   const sendButton = await page.locator("#send").boundingBox();
   expect(textarea!.x).toBeGreaterThanOrEqual(0);
@@ -341,6 +344,30 @@ test("expired sessions return to login and retain the local draft", async ({
     "重新登录后继续",
   );
   await expect(page.locator("#sync-state")).toHaveText("已同步");
+});
+
+test("first inbox load failure stays distinct from empty and can retry", async ({
+  page,
+}) => {
+  await page.request.post("/api/auth/login", {
+    data: { password: "local-check-only" },
+  });
+  await page.route("**/api/app/sync/snapshot", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: '{"code":"unavailable"}',
+    }),
+  );
+  await page.goto("/box");
+  await expect(page.locator("#error")).toBeVisible();
+  await expect(page.getByText("给之后的自己留点东西")).toHaveCount(0);
+  await expect(page.locator("#sync-state")).toHaveText("等待同步");
+  await page.unroute("**/api/app/sync/snapshot");
+  await page.getByRole("button", { name: "同步消息" }).click();
+  await expect(page.locator("#sync-state")).toHaveText("已同步");
+  await expect(page.locator("#error")).toBeHidden();
+  await expect(page.getByRole("searchbox")).toBeVisible();
 });
 
 test("cold load only fetches inbox data and repeat navigation reuses assets", async ({

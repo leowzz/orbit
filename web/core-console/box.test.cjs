@@ -63,20 +63,13 @@ function client() {
     elements,
   };
 }
-test("header search opens on demand and closing clears only the query", () => {
+test("Escape clears the persistent search without changing the selected filter", () => {
   const c = client();
-  c.run('$("search-field");$("filter");');
-  const field = c.elements.get("search-field");
-  const toggle = c.elements.get("toggle-search");
+  c.run('$("filter");');
   const search = c.elements.get("search");
   const filter = c.elements.get("filter");
-  field.hidden = true;
   filter.value = "todo";
   c.run("let renders=0;render=()=>renders++;");
-  toggle.onclick();
-  assert.equal(field.hidden, false);
-  assert.equal(toggle.attributes["aria-expanded"], "true");
-  assert.equal(search.focused, true);
   search.value = "find this";
   search.oninput();
   let prevented = false;
@@ -87,11 +80,8 @@ test("header search opens on demand and closing clears only the query", () => {
     },
   });
   assert.equal(prevented, true);
-  assert.equal(field.hidden, true);
   assert.equal(search.value, "");
   assert.equal(filter.value, "todo");
-  assert.equal(toggle.attributes["aria-expanded"], "false");
-  assert.equal(toggle.focused, true);
   assert.equal(c.run("renders"), 2);
 });
 test("failed snapshot pagination keeps the previous complete cache", async () => {

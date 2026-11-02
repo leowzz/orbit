@@ -20,10 +20,7 @@ export default function Agents({
   );
   return (
     <>
-      <PageHead
-        title="电脑与来源"
-        description="查看语音识别主机、数据采集来源及最近上报状态。"
-      />
+      <PageHead title="电脑与来源" />
       <AudioWorkers workers={workers} error={workerError} query={query} />
       <div className="toolbar">
         <div className="tabs">

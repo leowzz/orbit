@@ -3,7 +3,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
 import { api, date, displayMode, modelName, sessionsEnabled } from "../api";
-import { Badge, Empty } from "../components";
+import { Badge } from "../components";
 import DeviceStatus from "../DeviceStatus";
 
 export default function Overview({
@@ -151,13 +151,7 @@ export default function Overview({
             </table>
           </div>
         ) : (
-          <div className="workbench-empty">
-            <Empty title="等待来源接入">
-              <Link className="text-link" to="/agents">
-                查看电脑与来源
-              </Link>
-            </Empty>
-          </div>
+          <div className="workbench-empty">等待来源接入</div>
         )}
       </section>
       <section aria-labelledby="device-heading">
@@ -233,23 +227,16 @@ export default function Overview({
           </div>
         ) : (
           <div className="workbench-empty">
-            <Empty
-              title={
-                state.archived_nodes?.length
-                  ? "没有未归档的设备"
-                  : "等待设备接入"
-              }
-            >
-              {state.archived_nodes?.length ? (
+            {state.archived_nodes?.length ? (
+              <>
+                <span>没有未归档的设备</span>
                 <Link className="text-link" to="/nodes?filter=archived">
                   查看已归档设备
                 </Link>
-              ) : (
-                <Link className="text-link" to="/nodes">
-                  管理设备
-                </Link>
-              )}
-            </Empty>
+              </>
+            ) : (
+              "等待设备接入"
+            )}
           </div>
         )}
       </section>

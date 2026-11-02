@@ -453,10 +453,6 @@ export function mountBox(root) {
               ? "给之后的自己留点东西"
               : "这里暂时没有消息",
         ),
-        textElement(
-          "p",
-          query ? "换个关键词试试。" : "链接、想法或截图，随手发到这里。",
-        ),
       );
       list.append(empty);
     }
@@ -767,29 +763,12 @@ export function mountBox(root) {
       storeError();
     }
   };
-  function toggleSearch(open) {
-    $("search-field").hidden = !open;
-    $("toggle-search").setAttribute("aria-expanded", String(open));
-    $("toggle-search").setAttribute(
-      "aria-label",
-      open ? "关闭搜索" : "搜索消息",
-    );
-    $("toggle-search").title = open ? "关闭搜索" : "搜索消息";
-    $("workspace").querySelector("header").classList.toggle("searching", open);
-    if (open) {
-      $("search").focus();
-    } else {
-      $("search").value = "";
-      limit = 100;
-      render();
-      $("toggle-search").focus();
-    }
-  }
-  $("toggle-search").onclick = () => toggleSearch($("search-field").hidden);
   $("search").onkeydown = (event) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      toggleSearch(false);
+      $("search").value = "";
+      limit = 100;
+      render();
     }
   };
   $("search").oninput = () => {

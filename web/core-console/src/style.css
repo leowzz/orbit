@@ -303,6 +303,7 @@
   --line: #e1e5eb;
   --surface-soft: #f6f7f9;
   --accent: #1768c5;
+  --on-accent: #fff;
   --accent-soft: #eaf2fc;
   color-scheme: light;
 }
@@ -423,11 +424,12 @@ strong {
 }
 .button.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .button.primary:hover {
-  background: #1d4ed8;
+  background: var(--accent);
+  filter: brightness(0.94);
 }
 .icon-button {
   display: inline-flex;
@@ -741,64 +743,6 @@ main {
   border-radius: 4px;
   overflow: hidden;
 }
-.overview-band {
-  display: grid;
-  grid-template-columns: 2.5fr repeat(3, 1fr);
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  margin-bottom: 37px;
-  padding: 28px 0;
-}
-.network-summary {
-  padding: 0 27px;
-}
-.network-summary h2 {
-  font-size: 18px;
-  margin: 12px 0 9px;
-}
-.network-summary p {
-  font-size: 14px;
-  color: var(--muted);
-  margin-bottom: 17px;
-  line-height: 1.7;
-}
-.network-summary .badge {
-  background: var(--line);
-}
-.stat {
-  padding: 10px 20px 0;
-  border-left: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.stat > span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.stat strong {
-  font-size: 43px;
-  letter-spacing: -2px;
-  font-weight: 500;
-  margin: 12px 0 0;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-.stat small {
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 5px;
-}
-.overview-columns {
-  display: grid;
-  grid-template-columns: 1.65fr 1fr;
-  gap: 27px;
-}
 .section-title {
   display: flex;
   justify-content: space-between;
@@ -849,34 +793,6 @@ main {
   background: var(--surface-soft);
   border-radius: 7px;
   flex-shrink: 0;
-  color: var(--muted);
-}
-.device-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 19px;
-  border-bottom: 1px solid var(--surface-soft);
-}
-.device-row:last-child {
-  border: 0;
-}
-.device-row > div {
-  flex: 1;
-  min-width: 0;
-}
-.device-row strong {
-  font-size: 14px;
-  display: block;
-  overflow-wrap: anywhere;
-}
-.device-row small {
-  display: block;
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 5px;
-}
-.device-row > svg {
   color: var(--muted);
 }
 .mini-dot {
@@ -1518,21 +1434,6 @@ dd {
   .topbar {
     padding: 0 25px;
   }
-  .overview-columns {
-    grid-template-columns: 1fr;
-  }
-  .overview-band {
-    grid-template-columns: 1.7fr repeat(3, 1fr);
-  }
-  .network-summary {
-    padding: 0 18px;
-  }
-  .stat {
-    padding: 10px 13px 0;
-  }
-  .network-summary h2 {
-    font-size: 16px;
-  }
   .route-table-head,
   .route-table-row {
     gap: 13px;
@@ -1597,33 +1498,6 @@ dd {
   }
   main {
     padding: 28px 18px 40px;
-  }
-  .overview-band {
-    grid-template-columns: repeat(3, 1fr);
-    padding: 22px 0;
-  }
-  .network-summary {
-    grid-column: 1/-1;
-    padding: 0 20px 23px;
-  }
-  .network-summary h2 {
-    font-size: 18px;
-  }
-  .stat {
-    border-top: 1px solid var(--line);
-    padding: 20px 19px 0;
-  }
-  .stat:nth-child(2) {
-    border-left: 0;
-  }
-  .stat strong {
-    font-size: 35px;
-  }
-  .stat > span {
-    font-size: 12px;
-  }
-  .overview-columns {
-    gap: 28px;
   }
   .toolbar {
     flex-wrap: wrap;
@@ -1713,16 +1587,10 @@ dd {
 .footnote {
   color: var(--muted);
 }
-.device-row small,
 .route-table-row small,
 .node-card > p,
 dt,
 .agent-details span {
-  color: var(--muted);
-}
-
-.sidebar .workspace small,
-.sidebar .nav-label {
   color: var(--muted);
 }
 
@@ -2522,6 +2390,7 @@ main.device-page {
   --line: #323b49;
   --surface-soft: #242b36;
   --accent: #9bb2ff;
+  --on-accent: #172347;
   --accent-soft: #2c3855;
 }
 :root[data-theme="dark"] .box {
@@ -2613,21 +2482,16 @@ main.device-page {
   color: var(--accent);
 }
 .workbench-empty {
-  padding: 26px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 16px;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--surface);
   color: var(--muted);
   font-size: 15px;
-}
-.workbench-empty .empty {
-  padding: 12px;
-}
-.workbench-empty .empty > svg {
-  display: none;
-}
-.workbench-empty .empty h3 {
-  font-size: 16px;
 }
 @media (max-width: 760px) {
   .topbar .sync > span {
@@ -2641,7 +2505,12 @@ main.device-page {
     padding: 11px 12px;
   }
   .devices-table thead {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .devices-table tbody,
   .devices-table tr {

@@ -378,7 +378,6 @@ export default function Nodes({
         <>
           <PageHead
             title="设备"
-            description="查看识别主机连接状态，管理设备内容和快捷操作。"
             action={
               <>
                 <button

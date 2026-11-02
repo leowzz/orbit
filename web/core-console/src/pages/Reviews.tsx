@@ -137,7 +137,7 @@ export default function Reviews() {
     <>
       <PageHead
         title="每日回顾"
-        description="按时间回看录音里的话题、进展与想法。所有时间均为北京时间。"
+        description="北京时间"
         action={
           <button
             className="button secondary"

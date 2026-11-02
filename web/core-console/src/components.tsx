@@ -24,14 +24,14 @@ export function PageHead({
   action,
 }: {
   title: string;
-  description: string;
+  description?: string;
   action?: ReactNode;
 }) {
   return (
     <div className="page-head">
       <div>
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {action}
     </div>
@@ -109,7 +109,7 @@ export function Loading() {
   return (
     <div className="loading">
       <CircleDot className="spin" size={20} />
-      正在同步网络状态…
+      正在加载…
     </div>
   );
 }

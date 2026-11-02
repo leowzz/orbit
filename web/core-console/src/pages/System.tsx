@@ -19,10 +19,7 @@ export default function System({
   }, []);
   return (
     <>
-      <PageHead
-        title="系统信息"
-        description="运行身份、数据策略与访问方式。让网络的边界清楚可见。"
-      />
+      <PageHead title="系统信息" />
       {error && (
         <div className="banner error" role="alert">
           {error}
