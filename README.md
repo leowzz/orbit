@@ -450,15 +450,21 @@ chunk offers reload without discarding persisted inbox drafts.
 Measured on local Chrome against the embedded Core, with an authenticated direct
 link and a fresh browser context. Sizes are bytes, excluding HTTP headers and
 message/attachment payloads; timings depend on the host and are not a latency SLO.
-Baseline is `8485184`, where the inbox was `/messages`.
+Baseline is `8485184`, where the inbox was `/messages`. The compact UI column
+measures the current source; the earlier workbench column records `6a9c67c`.
 
-| Metric | Baseline | Workbench `/box` |
-| --- | ---: | ---: |
-| JavaScript decoded size, complete route | 359,315 | 273,890 |
-| JavaScript actually transferred | 359,315 | 90,753 |
-| JavaScript + CSS actually transferred | 412,844 | 103,254 |
-| Hashed asset transfer on repeat load | 412,844 | 0 |
-| Unrelated state/routes/devices startup requests | 3 | 0 |
+| Metric | Baseline | Workbench `6a9c67c` | Compact UI `/box` |
+| --- | ---: | ---: | ---: |
+| JavaScript decoded size, complete route | 359,315 | 273,890 | 272,790 |
+| JavaScript actually transferred | 359,315 | 90,753 | 90,461 |
+| JavaScript + CSS actually transferred | 412,844 | 103,254 | 101,542 |
+| Hashed asset transfer on repeat load | 412,844 | 0 | 0 |
+| Unrelated state/routes/devices startup requests | 3 | 0 | 0 |
+
+The compact overview uses grouped navigation and source/device lists, with no
+additional dependencies. Its complete JS + CSS gzip size is 94,509 bytes
+(previously 97,652); the shared entry is 91,848 bytes (previously 93,271).
+These are local build measurements, not confirmation of deployment.
 
 Reproduce the current route import sizes and browser checks:
 
@@ -475,7 +481,8 @@ The browser suite starts Core on loopback port 17622 with a fresh temporary
 database; it does not read deployment configuration. It exercises direct links,
 refresh/history, editing, todos, deletion/restoration, clipboard, image selection,
 paste/drop and previews, offline queues, conflicts, failed requests, expired
-sessions, cross-tab locks, draft-aware logout, and 390px layout. It also asserts
+sessions, cross-tab locks, draft-aware logout, grouped navigation, response-driven
+overview lists, initial-load error/retry states, and 390px layout. It also asserts
 that unrelated pages/data are not loaded and repeat loads transfer no hashed
 assets. Screenshots, failure traces and `performance.json` are written under
 `web/core-console/test-results/`; CI retains failure artifacts for seven days.
