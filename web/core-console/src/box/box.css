@@ -276,7 +276,7 @@
   .compose-wrap {
     position: fixed;
     bottom: 0;
-    left: 244px;
+    left: var(--sidebar-width);
     right: 0;
     background: linear-gradient(transparent, var(--page) 14%);
     padding: 22px 40px max(20px, env(safe-area-inset-bottom));
@@ -353,7 +353,7 @@
   #toast {
     position: fixed;
     bottom: 220px;
-    left: calc(50% + 122px);
+    left: calc(50% + 104px);
     transform: translateX(-50%);
     background: var(--text);
     color: white;

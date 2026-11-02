@@ -36,14 +36,14 @@ const MqttUsers = lazy(() => import("./pages/MqttUsers"));
 const Audio = lazy(() => import("./pages/Audio"));
 const Reviews = lazy(() => import("./pages/Reviews"));
 const navigation = [
-  { path: "/", label: "总览", icon: LayoutDashboard },
-  { path: "/box", label: "收件箱", icon: Inbox },
-  { path: "/agents", label: "电脑与来源", icon: Server },
-  { path: "/nodes", label: "设备", icon: Boxes },
-  { path: "/mqtt", label: "MQTT 账号", icon: KeyRound },
-  { path: "/audio", label: "音频记录", icon: Mic },
-  { path: "/reviews", label: "每日回顾", icon: CalendarDays },
-  { path: "/system", label: "系统信息", icon: Settings2 },
+  { path: "/", label: "总览", icon: LayoutDashboard, group: "工作" },
+  { path: "/box", label: "收件箱", icon: Inbox, group: "工作" },
+  { path: "/audio", label: "音频记录", icon: Mic, group: "工作" },
+  { path: "/reviews", label: "每日回顾", icon: CalendarDays, group: "工作" },
+  { path: "/agents", label: "电脑与来源", icon: Server, group: "管理" },
+  { path: "/nodes", label: "设备", icon: Boxes, group: "管理" },
+  { path: "/mqtt", label: "MQTT 账号", icon: KeyRound, group: "管理" },
+  { path: "/system", label: "系统信息", icon: Settings2, group: "管理" },
 ];
 export default function App() {
   const [auth, setAuth] = useState<"checking" | "in" | "out" | "error">(
@@ -215,7 +215,7 @@ export default function App() {
       >
         <div className="wordmark">
           <Mark small />
-          Orbit<span>工作台</span>
+          Orbit
           <button
             className="mobile-close icon-button"
             onClick={() => setMenu(false)}
@@ -224,14 +224,25 @@ export default function App() {
             <X size={18} />
           </button>
         </div>
-        <nav>
-          {navigation.map((item) => (
-            <NavLink key={item.path} to={item.path} end={item.path === "/"}>
-              <item.icon size={17} strokeWidth={1.6} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
+        {["工作", "管理"].map((group) => (
+          <div className="nav-group" key={group}>
+            <p>{group}</p>
+            <nav aria-label={group}>
+              {navigation
+                .filter((item) => item.group === group)
+                .map((item) => (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === "/"}
+                  >
+                    <item.icon size={16} strokeWidth={1.6} />
+                    <span>{item.label}</span>
+                  </NavLink>
+                ))}
+            </nav>
+          </div>
+        ))}
         <div className="sidebar-bottom">
           <button onClick={logout}>
             <LogOut size={16} />
@@ -251,7 +262,7 @@ export default function App() {
             >
               <Menu size={20} />
             </button>
-            <span>工作空间</span>
+            <span>工作台</span>
             <span className="slash">/</span>
             <strong>{current.label}</strong>
           </div>
@@ -260,16 +271,8 @@ export default function App() {
             {!independent && (
               <div className="sync">
                 <span className={"status-dot " + (error ? "warn" : "")} />
-                <span>
-                  {error
-                    ? "连接异常"
-                    : lastSync
-                      ? "已同步 " +
-                        lastSync.toLocaleTimeString("zh-CN", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "同步中"}
+                <span title={lastSync?.toLocaleString("zh-CN")}>
+                  {error ? "连接异常" : lastSync ? "已同步" : "同步中"}
                 </span>
                 <button
                   className="icon-button"

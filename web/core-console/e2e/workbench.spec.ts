@@ -416,3 +416,152 @@ test("cold load only fetches inbox data and repeat navigation reuses assets", as
     ),
   );
 });
+
+test("compact overview renders response data, grouped navigation and readable rows", async ({
+  page,
+  context,
+  browser,
+}, testInfo) => {
+  const timestamp = new Date().toISOString();
+  const computer = "验收电脑 · 工作与语音来源";
+  const network = {
+    core_id: "local-check",
+    core_epoch: "test",
+    now: timestamp,
+    agents: [
+      {
+        id: "agent-a",
+        usage_fresh: true,
+        codex_fresh: false,
+        state: {
+          agentId: "agent-a",
+          hostLabel: computer,
+          agentVersion: "test",
+          agentEpoch: "test",
+          metadata: { producedAt: timestamp },
+        },
+      },
+      {
+        id: "agent-b",
+        usage_fresh: false,
+        codex_fresh: false,
+        state: {
+          agentId: "agent-b",
+          hostLabel: "备用电脑",
+          agentVersion: "test",
+          agentEpoch: "test",
+          metadata: { producedAt: timestamp },
+        },
+      },
+    ],
+    nodes: [
+      {
+        nodeId: "screen-a",
+        modelId: "xiaozhi-320x240",
+        seriesId: "screen",
+        variantId: "test",
+        firmwareVersion: "test",
+        nodeEpoch: "test",
+        metadata: { producedAt: timestamp },
+      },
+    ],
+    node_labels: { "screen-a": "书桌显示屏 · 较长名称也应完整换行" },
+    archived_nodes: ["archived-phone"],
+  };
+  const routes = {
+    revision: 1,
+    routes: {
+      "screen-a": {
+        profile: "metrics-xiaozhi-320x240",
+        display_mode: "usage",
+        inputs: [{ agent_id: "agent-a", observation_type: "usage" }],
+      },
+    },
+  };
+  const devices = {
+    enabled: true,
+    devices: [
+      {
+        id: "phone-a",
+        label: "验收手机",
+        platform: "android",
+        revoked: false,
+        activity: { connections: 1, last_seen: timestamp },
+      },
+      {
+        id: "archived-phone",
+        label: "已归档的验收设备",
+        platform: "web",
+        revoked: false,
+        activity: { connections: 0 },
+      },
+    ],
+  };
+  async function responses(target: Page) {
+    await target.route("**/api/state", (route) =>
+      route.fulfill({ json: network }),
+    );
+    await target.route("**/api/routes", (route) =>
+      route.fulfill({ json: routes }),
+    );
+    await target.route("**/api/app/devices", (route) =>
+      route.fulfill({ json: devices }),
+    );
+  }
+  await responses(page);
+  await login(page);
+  await page.getByRole("link", { name: "总览", exact: true }).click();
+  await expect(page.locator(".sources-table tbody tr")).toHaveCount(2);
+  await expect(page.locator(".devices-table tbody tr")).toHaveCount(2);
+  await expect(page.locator(".sources-table")).toContainText(computer);
+  await expect(page.locator(".sources-table")).toContainText("无新鲜数据");
+  await expect(page.locator(".devices-table")).toContainText("API 用量");
+  await expect(page.locator(".devices-table")).toContainText("已连接");
+  await expect(page.locator(".devices-table")).not.toContainText(
+    "已归档的验收设备",
+  );
+  await expect(
+    page
+      .getByRole("navigation", { name: "工作", exact: true })
+      .getByRole("link"),
+  ).toHaveCount(4);
+  await expect(
+    page
+      .getByRole("navigation", { name: "管理", exact: true })
+      .getByRole("link"),
+  ).toHaveCount(4);
+  const cells = await page
+    .locator(".devices-table tbody tr td:first-child")
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getBoundingClientRect().x),
+    );
+  expect(new Set(cells).size).toBe(1);
+  await page.screenshot({
+    path: testInfo.outputPath("overview-desktop.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  const mobile = await browser.newContext({
+    storageState: await context.storageState(),
+    viewport: { width: 390, height: 844 },
+  });
+  const phone = await mobile.newPage();
+  try {
+    await responses(phone);
+    await phone.goto("/");
+    await expect(phone.locator(".devices-table tbody tr")).toHaveCount(2);
+    await expect
+      .poll(() => phone.evaluate(() => document.documentElement.scrollWidth))
+      .toBe(390);
+    await expect(phone.locator(".devices-table")).toContainText(
+      "书桌显示屏 · 较长名称也应完整换行",
+    );
+    await phone.screenshot({
+      path: testInfo.outputPath("overview-mobile.png"),
+      fullPage: true,
+      animations: "disabled",
+    });
+  } finally {
+    await mobile.close();
+  }
+});

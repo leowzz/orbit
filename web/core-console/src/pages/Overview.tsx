@@ -1,18 +1,11 @@
-import { useEffect, useState } from "react";
-import {
-  ArrowUpRight,
-  GitBranch,
-  Server,
-  Radio,
-  Inbox,
-  Mic,
-  CalendarDays,
-} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
-import { api, modelName, visibleDeviceRoutes } from "../api";
-import RouteFlow from "../RouteFlow";
-import { Badge, DeviceIcon, Empty, SectionTitle } from "../components";
+import { api, date, displayMode, modelName, sessionsEnabled } from "../api";
+import { Badge, Empty } from "../components";
+import DeviceStatus from "../DeviceStatus";
+
 export default function Overview({
   state,
   document,
@@ -20,181 +13,246 @@ export default function Overview({
   state: NetworkState;
   document: RouteDocument;
 }) {
-  const fresh = state.agents.filter(
-    (a) => a.usage_fresh || a.codex_fresh,
-  ).length;
-  const [apps, setApps] = useState<AppDevice[]>([]),
-    [deviceError, setDeviceError] = useState("");
+  const [apps, setApps] = useState<AppDevice[] | null>(null);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    const result = await api<{ devices?: AppDevice[] }>("/app/devices");
+    setApps(result.devices ?? []);
+    setError("");
+  }, []);
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       try {
-        const result = await api<{ devices?: AppDevice[] }>("/app/devices");
-        if (active) {
-          setApps(result.devices ?? []);
-          setDeviceError("");
-        }
+        await load();
       } catch {
-        if (active)
-          setDeviceError("App 设备列表未能加载，设备数量可能不完整。");
+        if (active) setError("设备列表未能完整加载，请重试。");
       }
-      if (active) timer = setTimeout(poll, 5000);
+      if (active)
+        timer = setTimeout(poll, window.document.hidden ? 30000 : 5000);
     }
     void poll();
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, []);
-  const devices = new Map(
-    state.nodes.map((n) => [
-      n.nodeId,
-      {
-        id: n.nodeId,
-        label: state.node_labels?.[n.nodeId] || n.nodeId,
-        model: n.modelId,
-        description: modelName(n.modelId),
-      },
-    ]),
-  );
-  for (const app of apps)
+  }, [load]);
+  const devices = new Map<
+    string,
+    {
+      id: string;
+      label: string;
+      description: string;
+      discovered: boolean;
+      reportedAt?: string;
+      app?: AppDevice;
+    }
+  >();
+  for (const node of state.nodes)
+    devices.set(node.nodeId, {
+      id: node.nodeId,
+      label: state.node_labels?.[node.nodeId] || node.nodeId,
+      description: modelName(node.modelId),
+      discovered: true,
+      reportedAt: node.metadata?.producedAt,
+    });
+  for (const app of apps ?? [])
     devices.set(app.id, {
       id: app.id,
       label: app.label || app.id,
-      model: app.platform === "web" ? "web" : "android",
       description:
-        app.platform === "web" ? "Web 浏览器" : `Orbit App · ${app.platform}`,
+        app.platform === "web" ? "浏览器" : `Orbit App · ${app.platform}`,
+      discovered: false,
+      app,
     });
   for (const [id, route] of Object.entries(document.routes))
     if (!devices.has(id))
       devices.set(id, {
         id,
         label: state.node_labels?.[id] || id,
-        model:
+        description:
           route.profile === "metrics-xiaozhi-320x240"
-            ? "xiaozhi-320x240"
+            ? "小智彩屏"
             : route.profile.endsWith("-oled-128x32")
-              ? "oled-128x32"
-              : "web",
-        description: "预配置设备",
+              ? "OLED 显示屏"
+              : "预配置设备",
+        discovered: false,
       });
   for (const id of state.archived_nodes ?? []) devices.delete(id);
-  const visibleDocument = visibleDeviceRoutes(document, state);
-  const unassigned = [...devices.keys()].filter(
-    (id) => !document.routes[id],
-  ).length;
   return (
-    <>
-      {deviceError && (
-        <p className="banner error" role="alert">
-          {deviceError}
-        </p>
-      )}
-      <header className="overview-header">
+    <div className="workbench-overview">
+      <header className="workbench-heading">
         <h1>工作台</h1>
-        <div className="overview-metrics" aria-label="网络指标">
-          <Link to="/agents">
-            <Server size={17} />
-            <span>数据来源</span>
-            <strong>{state.agents.length}</strong>
-          </Link>
-          <Link to="/nodes">
-            <Radio size={17} />
-            <span>设备</span>
-            <strong>{devices.size}</strong>
-          </Link>
-          <Link to="/nodes">
-            <GitBranch size={17} />
-            <span>数据配置</span>
-            <strong>{Object.keys(visibleDocument.routes).length}</strong>
-          </Link>
-        </div>
-        <div className="overview-header-actions">
-          <Badge tone={fresh ? "good" : "neutral"}>
-            {fresh ? `${fresh} 个来源数据新鲜` : "等待来源数据"}
-          </Badge>
-          <Link to="/nodes" className="button">
-            管理设备 <ArrowUpRight size={16} />
-          </Link>
-        </div>
+        <Link to="/nodes" className="button primary">
+          管理设备 <ArrowUpRight size={15} />
+        </Link>
       </header>
-      <div className="workbench-launchers">
-        {[
-          { path: "/box", label: "收件箱", icon: Inbox },
-          { path: "/audio", label: "音频记录", icon: Mic },
-          { path: "/reviews", label: "每日回顾", icon: CalendarDays },
-        ].map((item) => (
-          <Link key={item.path} to={item.path}>
-            <item.icon size={22} strokeWidth={1.6} />
-            <strong>{item.label}</strong>
-            <ArrowUpRight size={17} />
+      {error && (
+        <div className="banner error" role="alert">
+          {error}
+          <button
+            onClick={() =>
+              void load().catch(() =>
+                setError("设备列表未能完整加载，请重试。"),
+              )
+            }
+          >
+            重试
+          </button>
+        </div>
+      )}
+      <section aria-labelledby="source-heading">
+        <div className="workbench-section">
+          <h2 id="source-heading">电脑与来源</h2>
+          <Link className="text-link" to="/agents">
+            管理来源 <ArrowUpRight size={14} />
           </Link>
-        ))}
-      </div>
-      <div className="overview-columns">
-        <section>
-          <SectionTitle title="数据流向" link="/nodes" />
-          <RouteFlow
-            state={state}
-            document={visibleDocument}
-            labels={Object.fromEntries(
-              [...devices].map(([id, device]) => [id, device.label]),
-            )}
-          />
-        </section>
-        <section className="overview-devices">
-          <SectionTitle
-            title="设备一览"
-            meta={String(devices.size)}
-            link="/nodes"
-          />
-          <div className="panel device-list">
-            {[...devices.values()].slice(0, 5).map((n) => (
-              <Link
-                to={`/nodes/${encodeURIComponent(n.id)}`}
-                className="device-row"
-                key={n.id}
-              >
-                <DeviceIcon model={n.model} />
-                <div>
-                  <strong>{n.label}</strong>
-                  <small>{n.description}</small>
-                </div>
-                <span
-                  className={
-                    "mini-dot " + (document.routes[n.id] ? "active" : "")
-                  }
-                />
-                <ArrowUpRight size={14} />
-              </Link>
-            ))}
-            {!devices.size && (
-              <Empty
-                title={
-                  state.archived_nodes?.length
-                    ? "没有未归档的设备"
-                    : "等待设备接入"
-                }
-              >
-                {state.archived_nodes?.length ? (
-                  <Link className="text-link" to="/nodes?filter=archived">
-                    查看已归档设备
-                  </Link>
-                ) : (
-                  "设备发布自描述后会出现在这里。"
-                )}
-              </Empty>
-            )}
+        </div>
+        {state.agents.length ? (
+          <div className="workbench-table-wrap">
+            <table className="workbench-table sources-table">
+              <thead>
+                <tr>
+                  <th scope="col">电脑</th>
+                  <th scope="col">数据新鲜度</th>
+                  <th scope="col">最近上报</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.agents.map((agent) => (
+                  <tr key={agent.id}>
+                    <td>
+                      <Link className="table-name" to="/agents">
+                        {agent.state.hostLabel || agent.id}
+                      </Link>
+                    </td>
+                    <td>
+                      <Badge
+                        tone={
+                          agent.usage_fresh || agent.codex_fresh
+                            ? "good"
+                            : "warn"
+                        }
+                      >
+                        {agent.usage_fresh || agent.codex_fresh
+                          ? "有新鲜数据"
+                          : "无新鲜数据"}
+                      </Badge>
+                    </td>
+                    <td>
+                      <time dateTime={agent.state.metadata?.producedAt}>
+                        {date(agent.state.metadata?.producedAt)}
+                      </time>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <p className="overview-status-note">
-            {unassigned
-              ? `${unassigned} 个设备未设置状态摘要（不影响收件箱和快捷操作）。`
-              : ""}
-            已发现不等于在线，请结合来源数据新鲜度判断状态。
-          </p>
-        </section>
-      </div>
-    </>
+        ) : (
+          <div className="workbench-empty">
+            <Empty title="等待来源接入">
+              <Link className="text-link" to="/agents">
+                查看电脑与来源
+              </Link>
+            </Empty>
+          </div>
+        )}
+      </section>
+      <section aria-labelledby="device-heading">
+        <div className="workbench-section">
+          <h2 id="device-heading">设备</h2>
+        </div>
+        {devices.size ? (
+          <div className="workbench-table-wrap">
+            <table className="workbench-table devices-table">
+              <thead>
+                <tr>
+                  <th scope="col">设备名称</th>
+                  <th scope="col">显示内容</th>
+                  <th scope="col">数据来源</th>
+                  <th scope="col">状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...devices.values()].map((device) => {
+                  const route = document.routes[device.id];
+                  const mode = route ? displayMode(route) : "";
+                  const content = route
+                    ? {
+                        usage: "API 用量",
+                        codex: "账号周限",
+                        rotating: "循环显示",
+                        sessions: "Codex 会话",
+                        "": "状态摘要",
+                      }[mode] + (sessionsEnabled(route) ? " · 会话" : "")
+                    : device.app
+                      ? "收件箱"
+                      : "未配置";
+                  const names = [
+                    ...new Set(
+                      route?.inputs.map(
+                        (input) =>
+                          state.agents.find(
+                            (agent) => agent.id === input.agent_id,
+                          )?.state.hostLabel || input.agent_id,
+                      ) ?? [],
+                    ),
+                  ];
+                  return (
+                    <tr key={device.id}>
+                      <td>
+                        <Link
+                          className="table-name"
+                          to={`/nodes/${encodeURIComponent(device.id)}`}
+                        >
+                          {device.label}
+                          <ArrowUpRight size={14} />
+                        </Link>
+                        <small>{device.description}</small>
+                      </td>
+                      <td>{content}</td>
+                      <td>{names.join("、") || "—"}</td>
+                      <td>
+                        <DeviceStatus
+                          app={device.app}
+                          discovered={device.discovered}
+                          reportedAt={device.reportedAt}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : apps === null ? (
+          <div className="workbench-empty" role="status">
+            {error ? "设备列表未能加载" : "正在读取设备…"}
+          </div>
+        ) : (
+          <div className="workbench-empty">
+            <Empty
+              title={
+                state.archived_nodes?.length
+                  ? "没有未归档的设备"
+                  : "等待设备接入"
+              }
+            >
+              {state.archived_nodes?.length ? (
+                <Link className="text-link" to="/nodes?filter=archived">
+                  查看已归档设备
+                </Link>
+              ) : (
+                <Link className="text-link" to="/nodes">
+                  管理设备
+                </Link>
+              )}
+            </Empty>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
