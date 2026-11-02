@@ -594,6 +594,8 @@ strong {
   z-index: 40;
 }
 .sidebar .wordmark {
+  gap: 10px;
+  white-space: nowrap;
   padding: 0 11px;
   margin-bottom: 32px;
 }

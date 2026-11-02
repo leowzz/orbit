@@ -15,7 +15,6 @@ import (
 	orbitv1 "orbit/gen/go/orbit/v1"
 	"orbit/internal/config"
 	"orbit/internal/mqtt"
-	webnode "orbit/nodes/web"
 )
 
 func seedRoutes() map[string]config.ProjectionRoute {
@@ -86,14 +85,6 @@ func TestRouteReplacementAtomicAndClearsCachedData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the Web Node's previously cached sections as well as OLED slots.
-	cost := int64(12345000)
-	views[0].Usage = &orbitv1.UsageView{ActualCostMicros: &cost, CurrencyCode: "USD", Freshness: orbitv1.Freshness_FRESHNESS_FRESH, FreshUntil: views[0].FreshUntil}
-	views[0].Codex = &orbitv1.CodexView{Sessions: []*orbitv1.CodexSessionView{{SessionId: "old-session"}}, Freshness: orbitv1.Freshness_FRESHNESS_FRESH, FreshUntil: views[0].FreshUntil}
-	cache := webnode.NewStore()
-	if err := cache.Update(views[0], now); err != nil {
-		t.Fatal(err)
-	}
 	oldRevision := engine.viewRevision["node-a"]
 	failure := errors.New("disk unavailable")
 	if _, err := engine.replaceRoutes(now, nil, func() error { return failure }); !errors.Is(err, failure) {
@@ -110,12 +101,8 @@ func TestRouteReplacementAtomicAndClearsCachedData(t *testing.T) {
 	if view.Usage == nil || view.Codex == nil || view.Primary == nil || view.Freshness != orbitv1.Freshness_FRESHNESS_STALE || view.Metadata.Revision <= oldRevision {
 		t.Fatalf("incomplete clearing view: %v", view)
 	}
-	if err := cache.Update(view, now); err != nil {
-		t.Fatal(err)
-	}
-	snapshot, err := cache.Snapshot()
-	if err != nil || snapshot.Usage.ActualCostMicros != 0 || len(snapshot.Codex.Sessions) != 0 {
-		t.Fatalf("old upstream data survived clearing: %+v %v", snapshot, err)
+	if view.Usage.GetActualCostMicros() != 0 || len(view.Codex.Sessions) != 0 {
+		t.Fatalf("clearing payload retained old upstream data: %v", view)
 	}
 	if views, err := engine.ApplyObservation(now.Add(time.Second), testObservationRevision(now.Add(time.Second), 2)); err != nil || len(views) != 0 {
 		t.Fatalf("deleted route still forwards: %v %v", views, err)

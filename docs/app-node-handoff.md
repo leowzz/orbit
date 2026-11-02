@@ -1,5 +1,8 @@
 # Orbit App Node 与个人收件箱：实现交接
 
+> 下文保留既有交接与发布历史。当前唯一网页入口是 Core 工作台 `/box`；旧独立网页服务已退役。现行配置、授权与升级步骤见 [个人收件箱](personal-inbox.md)。
+
+
 - 日期：2026-10-07（Asia/Shanghai）
 - 代码核对基线：`87ed76ffcbdd8b505d8170259fdaf6b0836220d6`（`v0.1.7`）
 - 交接分支：`feat/app`
@@ -36,8 +39,8 @@
 | Core 维护内存 canonical state，生成有限的 DeviceView | [engine.go](../internal/core/engine.go) | 用量和 session 可复用；没有用户消息历史 |
 | 只接受 OLED/Web 产品与对应 profile；同一路由每种 observation type 最多一个 Agent | [engine.go](../internal/core/engine.go)、[ADR-0018](adr/0018-core-owns-node-data-routing.md) | App 产品和投影需扩展；多主机 session 聚合另行设计 |
 | DeviceView 包含 UsageView、CodexView、freshness/expiry | [view.proto](../proto/orbit/v1/view.proto) | 适合固定状态摘要，不适合无限增长的消息列表 |
-| Web 缓存最新快照，提供 `/api/state`、SSE `/api/events` | [store.go](../nodes/web/store.go)、[server.go](../nodes/web/server.go) | 可参考实现，当前 SSE 没有持久增量回放 |
-| Web 服务使用配置中的一个 node_id；登录令牌未绑定独立客户端设备身份 | [runner.go](../nodes/web/runner.go)、[auth.go](../nodes/web/auth.go) | 不能直接把所有 App 当成同一个 Web Node |
+| Web 缓存最新快照，提供 `/api/state`、SSE `/api/events` | [store.go](https://github.com/leowzz/orbit/blob/8485184/nodes/web/store.go)、[server.go](https://github.com/leowzz/orbit/blob/8485184/nodes/web/server.go) | 可参考实现，当前 SSE 没有持久增量回放 |
+| Web 服务使用配置中的一个 node_id；登录令牌未绑定独立客户端设备身份 | [runner.go](https://github.com/leowzz/orbit/blob/8485184/nodes/web/runner.go)、[auth.go](https://github.com/leowzz/orbit/blob/8485184/nodes/web/auth.go) | 不能直接把所有 App 当成同一个 Web Node |
 | MQTT clean start，session expiry 为 0 | [client.go](../internal/mqtt/client.go)、[ADR-0008](adr/0008-use-ephemeral-idempotent-v1-commands.md) | 不提供业务消息离线补收或跨重启去重 |
 | Intent/Command 仅实现 OpenCodexSession；Web Intent TTL 20 秒，Core 限制最多 30 秒 | [command.proto](../proto/orbit/v1/command.proto)、[commands.go](../internal/core/commands.go) | 不能套用到需要持久保存的消息创建、编辑与完成 |
 | Agent 发布 CommandResult；Core 当前未订阅 results 并反馈给 Web | [runner.go](../internal/core/runner.go)、[Agent commands](../internal/agent/commands.go) | UI 的 HTTP 202 不表示主机动作成功 |

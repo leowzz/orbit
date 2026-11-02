@@ -18,11 +18,10 @@ RUN go mod download
 COPY cmd ./cmd
 COPY gen ./gen
 COPY internal ./internal
-COPY nodes/web ./nodes/web
 COPY web/core-console/embed.go ./web/core-console/embed.go
 COPY --from=console /console/dist ./web/core-console/dist
 
-RUN case "$BINARY" in orbit-agent|orbit-core|orbit-web) ;; *) exit 2 ;; esac \
+RUN case "$BINARY" in orbit-agent|orbit-core) ;; *) exit 2 ;; esac \
     && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
         -o /out/orbit "./cmd/$BINARY"
 

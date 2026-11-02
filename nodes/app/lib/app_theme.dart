@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Dark colors match nodes/web/static/app.css; keep broad surfaces near black.
+/// Keep broad surfaces near black for the App dark theme.
 class OrbitColors {
   final bool dark;
   const OrbitColors(this.dark);

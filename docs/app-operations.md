@@ -1,5 +1,8 @@
 # App API 运行与备份
 
+> 下文保留既有交接与发布历史。当前唯一网页入口是 Core 工作台 `/box`；旧独立网页服务已退役。现行配置、授权与升级步骤见 [个人收件箱](personal-inbox.md)。
+
+
 Core 启用 app 后仍只需一个进程。`app.data_dir` 相对 Core YAML 文件目录解析，内部保存
 inbox.sqlite（WAL/SHM）与 attachments/。不要把可写数据放进只读配置挂载。
 

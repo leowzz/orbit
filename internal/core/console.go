@@ -281,6 +281,9 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	mux.Handle("PUT /api/app/", admin)
 	mux.Handle("DELETE /api/app/", admin)
 	mux.Handle("GET /", coreconsole.Handler())
+	for _, path := range []string{"GET /inbox", "GET /inbox/"} {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusSeeOther) })
+	}
 	mux.HandleFunc("POST /api/auth/login", auth.login)
 	mux.HandleFunc("POST /api/auth/logout", auth.logout)
 	mux.HandleFunc("GET /api/auth/session", func(w http.ResponseWriter, r *http.Request) {
@@ -384,7 +387,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 		}
 		// Personal routes retain their own device authorization. A console session
 		// never grants inbox API access, and device cookies never grant admin access.
-		if len(app) > 1 && app[1] != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/") || strings.HasPrefix(r.URL.Path, "/inbox/") || r.URL.Path == "/inbox") {
+		if len(app) > 1 && app[1] != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/")) {
 			app[1].ServeHTTP(w, r)
 			return
 		}

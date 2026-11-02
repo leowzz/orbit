@@ -50,14 +50,9 @@ func TestNTPConfigurationDefaultsAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	web, err := LoadWebNode(writeConfig(t, dir, "web.yaml", validWebNodeYAML))
-	if err != nil {
-		t.Fatal(err)
-	}
 	for name, ntp := range map[string]NTPConfig{
 		"agent": agent.NTP,
 		"core":  core.NTP,
-		"web":   web.NTP,
 	} {
 		if ntp.Server != "ntp.aliyun.com" || ntp.SyncInterval.Duration != 10*time.Minute || ntp.Timeout.Duration != 2*time.Second {
 			t.Errorf("%s NTP defaults = %#v", name, ntp)
@@ -302,45 +297,6 @@ func TestLoadCoreAcceptsWebProjection(t *testing.T) {
 	}
 }
 
-func TestLoadWebNode(t *testing.T) {
-	dir := t.TempDir()
-	writeFixtureFiles(t, dir, false)
-	path := writeConfig(t, dir, "web.yaml", validWebNodeYAML)
-	cfg, err := LoadWebNode(path)
-	if err != nil {
-		t.Fatalf("LoadWebNode() error = %v", err)
-	}
-	if cfg.Node.ID != "desk-web-01" || cfg.Web.Listen != "127.0.0.1:8080" || cfg.MQTT.Credentials.Username != "agent-user" {
-		t.Fatalf("unexpected web config: %#v", cfg)
-	}
-	if cfg.Web.Auth.Password != "web-secret" || cfg.Web.Auth.SessionTTL.Duration != 12*time.Hour {
-		t.Fatalf("unexpected web auth config: %#v", cfg.Web.Auth)
-	}
-}
-
-func TestLoadWebNodeRejectsInvalidAuthConfiguration(t *testing.T) {
-	tests := []struct {
-		name    string
-		replace string
-		with    string
-		want    string
-	}{
-		{name: "missing password", replace: "password: web-secret", with: "password: \"\"", want: "web.auth.password"},
-		{name: "non-positive session ttl", replace: "session_ttl: 12h", with: "session_ttl: 0s", want: "web.auth.session_ttl"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			writeFixtureFiles(t, dir, false)
-			yaml := strings.Replace(validWebNodeYAML, tt.replace, tt.with, 1)
-			path := writeConfig(t, dir, "web.yaml", yaml)
-			if _, err := LoadWebNode(path); err == nil || !strings.Contains(err.Error(), tt.want) {
-				t.Fatalf("LoadWebNode() error = %v, want containing %q", err, tt.want)
-			}
-		})
-	}
-}
-
 func writeFixtureFiles(t *testing.T, dir string, includeSub2API bool) {
 	t.Helper()
 	files := map[string]string{
@@ -494,27 +450,6 @@ logging:
   level: info
 `
 
-const validWebNodeYAML = `node:
-  id: desk-web-01
-mqtt:
-  url: mqtts://broker.example.com:8883
-  tls:
-    enabled: true
-    ca_file: ca.pem
-    cert_file: client.pem
-    key_file: client.key
-  credentials:
-    username_file: mqtt-username
-    password_file: mqtt-password
-web:
-  listen: 127.0.0.1:8080
-  auth:
-    password: web-secret
-    session_ttl: 12h
-logging:
-  level: info
-`
-
 func TestLoadCoreAcceptsAndroidProjection(t *testing.T) {
 	dir := t.TempDir()
 	writeFixtureFiles(t, dir, false)
@@ -633,40 +568,6 @@ func TestAppDeviceConfiguration(t *testing.T) {
 	cfg.ProjectionRoutes = map[string]ProjectionRoute{"phone-01": {Profile: "overview-web"}}
 	if err = cfg.validate(dir); err == nil {
 		t.Fatal("App reused MQTT product route")
-	}
-}
-
-func TestInboxOnlyWebConfiguration(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "token"), []byte(strings.Repeat("a", 64)), 0600); err != nil {
-		t.Fatal(err)
-	}
-	text := `web:
-  listen: 127.0.0.1:8080
-  auth:
-    password: example-password
-  inbox:
-    url: https://orbit.example.com
-    token_file: token
-`
-	cfg, err := LoadWebNode(writeConfig(t, dir, "web.yaml", text))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.MQTT.URL != "" || cfg.Web.Inbox.Token != strings.Repeat("a", 64) {
-		t.Fatal("unexpected inbox connection")
-	}
-	// A configured HTTP device must not load old MQTT credentials or require a
-	// second identity, even when stale deployment settings remain in the file.
-	legacy := "node:\n  id: old-web\nmqtt:\n  url: mqtts://old.example.com:8883\n  credentials:\n    username_file: missing-old-username\n    password_file: missing-old-password\n"
-	if _, err := LoadWebNode(writeConfig(t, dir, "legacy-web.yaml", legacy+text)); err != nil {
-		t.Fatal("unified HTTP device still depended on legacy MQTT settings", err)
-	}
-	for _, url := range []string{"http://remote.example.com", "https://user:password@example.com", "https://example.com?token=secret", "https://example.com/path", "https://example.com#fragment"} {
-		_, err := LoadWebNode(writeConfig(t, dir, "invalid.yaml", strings.Replace(text, "https://orbit.example.com", url, 1)))
-		if err == nil {
-			t.Fatal("accepted unsafe URL", url)
-		}
 	}
 }
 

@@ -1,5 +1,8 @@
 # Orbit 总体设计
 
+当前浏览器统一使用 Core 工作台，收件箱入口为 `/box`。工作台通过管理会话访问 `/api/app/`；原生 App 继续使用独立设备令牌及 `/api/v1/`。`overview-web` 只保留旧协议兼容，不再对应独立网页进程；MQTT 的通用 Node/Intent 契约仍保留。
+
+
 > 状态：Draft  
 > 更新时间：2026-09-04<br>
 > 依据：[项目交接说明](../HANDOFF.md)
@@ -12,7 +15,7 @@
 
 ## 2. 背景与目标
 
-Orbit 是个人设备与能力网络。它连接可信主机、云端消息通道以及 OLED、TFT、Web 等节点，使主机能够发布经过整理的状态，并执行协议明确允许的命令。
+Orbit 是个人设备与能力网络。它连接可信主机、云端消息通道以及 OLED、TFT、App 等节点，使主机能够发布经过整理的状态，并执行协议明确允许的命令。
 
 首个版本需要证明一条完整闭环：
 
@@ -22,7 +25,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 4. Node 或可信客户端发送受限 Intent，由 Core 生成类型化命令。
 5. Agent 尝试执行短生命周期、可重复的 Capability，并在进程仍存活时返回可关联结果。
 
-工程验证里程碑 M0 可以使用合成 Observation 和无副作用的 `PingAgent` Capability 验证完整消息闭环；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，并在 OLED 128x32 上展示用量。当前 Web Node 还实现了首个真实动作 `OpenCodexSession`：Node 发送受限 Intent，Core 路由类型化 Command，Agent 在可信主机打开本地 Codex 会话；OLED 输入与 Codex OLED 展示不属于本里程碑。
+工程验证里程碑 M0 可以使用合成 Observation 和无副作用的 `PingAgent` Capability 验证完整消息闭环；首个可用版本 V1 必须接入真实、脱敏的 UsageObservation，并在 OLED 128x32 上展示用量。App API 还提供首个真实动作 `OpenCodexSession`：Node 发送受限 Intent，Core 路由类型化 Command，Agent 在可信主机打开本地 Codex 会话；OLED 输入与 Codex OLED 展示不属于本里程碑。
 
 ### 2.1 设计目标
 
@@ -50,7 +53,7 @@ Orbit 是个人设备与能力网络。它连接可信主机、云端消息通�
 | V1 Agent 平台 | macOS；Windows 和 Linux 不在 V1 支持范围 |
 | V1 Core 平台 | 长期在线的 Linux 主机；开发时允许在 macOS 本地运行 |
 | 结构化协议 | Protocol Buffers，包名从 `orbit.v1` 开始 |
-| 消息传输 | EMQX Cloud Serverless 公网 Broker；Go Agent/Core/Web 使用 MQTT 5，当前 OLED 固件使用 MQTT 3.1.1 兼容接入；默认 TLS，允许配置显式关闭，禁止自动降级 |
+| 消息传输 | EMQX Cloud Serverless 公网 Broker；Go Agent/Core 使用 MQTT 5，当前 OLED 固件使用 MQTT 3.1.1 兼容接入；默认 TLS，允许配置显式关闭，禁止自动降级 |
 | 网络边界 | 一个专用 Broker 部署对应一个 Orbit Network；V1 不增加 `tenant_id` 或 `network_id` |
 | 命令模型 | `oneof` 类型化动作，禁止 `google.protobuf.Any` 和任意命令字符串 |
 | 设备数据 | 只发送语义视图，不发送提示词、正文、终端输出、凭据或任意本地路径 |
@@ -77,7 +80,7 @@ flowchart TB
     NodeState["MQTT NodeState<br/>retained · epoch + product"] -->|"node prerequisite"| Projector
     Projector -->|"QoS 1 · retained"| View["MQTT DeviceView<br/>nodes/{node_id}/view"]
     View -->|"usage-oled-128x32"| OLED["OLED Node<br/>local pixel rendering"]
-    View -->|"overview-web"| Web["Web Node<br/>cached view + HTTP/SSE"]
+    Projector -->|"HTTPS · overview-app"| Web["App Node<br/>cached view"]
 
     classDef host fill:#eaf2ff,stroke:#2563eb,color:#172033
     classDef topic fill:#fff4e8,stroke:#c2410c,color:#172033
@@ -90,7 +93,7 @@ flowchart TB
 ```
 
 Usage 与 Codex 只在 canonical state 汇合。Projection Route 和 NodeState 是生成
-View 的前置输入，不进入 DeviceView。OLED 只选 Usage；Web 可同时选择 Usage 与
+View 的前置输入，不进入 DeviceView。OLED 只选 Usage；App 可同时选择 Usage 与
 Codex。
 
 **命令数据流：Intent → CommandResult**
@@ -99,7 +102,7 @@ Codex。
 flowchart TB
     subgraph Request["1 · Request and route"]
         direction LR
-        Web["Web Node<br/>fresh cached view"] -->|"TTL 20s"| Intent["MQTT Intent<br/>nodes/{node_id}/intents"]
+        Web["App Node<br/>fresh cached view"] -->|"authenticated HTTPS"| Intent["Core internal Intent<br/>identity / revision / TTL"]
         Intent --> Router["Core validation + routing<br/>epoch · revision · session"]
         Context["Current Core context<br/>Route + Codex state"] --> Router
         Router -->|"typed · TTL ≤ 30s"| Command["MQTT Command<br/>agents/{agent_id}/commands"]
@@ -114,7 +117,7 @@ flowchart TB
     subgraph Observe["3 · Observe result"]
         direction LR
         ResultTopic["MQTT CommandResult<br/>agents/{agent_id}/results"] --> Observer["Test/admin subscriber<br/>current endpoint"]
-        ResultTopic -. "planned" .-> Feedback["Core → Web feedback<br/>not implemented"]
+        ResultTopic -. "planned" .-> Feedback["Core → App feedback<br/>not implemented"]
     end
 
     Command --> Agent
@@ -135,11 +138,11 @@ flowchart TB
     style Observe fill:#ffffff,stroke:#cbd5e1,color:#475569
 ```
 
-当前命令闭环止于 Agent 发布可关联的 CommandResult；Core → Web 最终反馈仍未
+当前命令闭环止于 Agent 发布可关联的 CommandResult；Core → App 最终反馈仍未
 实现。Node 始终只收到自己的 DeviceView，不收到 Projection Route、上游
 `agent_id`、Source 原始响应或主机路径。
 
-MQTT 协议版本差异只存在于传输层：Go Agent/Core/Web 使用 MQTT 5，OLED 当前
+MQTT 协议版本差异只存在于传输层：Go Agent/Core 使用 MQTT 5，OLED 当前
 使用 MQTT 3.1.1；两者消费同一 Protobuf、QoS 1 和 retained DeviceView。OLED
 当前不能使用 MQTT 5 CONNECT、No Local 或 Message Expiry 属性。
 
@@ -175,7 +178,7 @@ Core 是状态与策略模块，接口是“接收观测或 Intent，发布 cano
 
 #### Orbit Node
 
-Node 是设备接入 Orbit 网络后承担的运行时角色，不是硬件产品名称。带 OLED/TFT 的物理 Node 归入 Device Series；Web 等软件 Node 也可以使用同一协议，但不强制套用硬件型号体系。
+Node 是设备接入 Orbit 网络后承担的运行时角色，不是硬件产品名称。带 OLED/TFT 的物理 Node 归入 Device Series；App 等软件 Node 也可以使用同一协议，但不强制套用硬件型号体系。
 
 职责：
 
@@ -324,7 +327,7 @@ Codex observation 使用独立的非 retained topic 和独立 revision 序列；
 Usage Source 各自立即采集、各自 ticker、各自维护 health/last_success。
 Agent 先发布一条包含全部 enabled sources 且 health 为 `UNSPECIFIED` 的
 retained AgentState，再启动这些采集循环。Core 订阅并校验 CodexObservation，
-将脱敏字段投影到 Web 的 retained DeviceView；OLED 当前只消费 Usage 投影，
+将脱敏字段投影到 App 的 DeviceView；OLED 当前只消费 Usage 投影，
 不消费或渲染 CodexObservation。
 
 上述 V1 字段全部必填；不增加窗口时区字段，日期边界和上游时区语义由 Source 在采集时处理。数值 `0` 是有效业务值，不能表示“未提供”，因此 Protobuf schema 必须保留数值字段的 presence。成本数值与币种必须组成有效组合，且 `window_start < window_end`。任何必填字段缺失、币种无效或窗口无效都会拒绝整条 UsageObservation，不做部分 canonical state 更新或部分投影，之前接受的 canonical state 保持不变并按原 `expires_at` 自然过期。
@@ -374,7 +377,7 @@ OLED 128x32 的 DeviceView 固定为 Primary、Secondary 和 Footer 三个槽位
 
 ### 6.4 Command 与 CommandResult
 
-Command 使用 `oneof action` 形成能力白名单。首个真实动作是 `OpenCodexSession`；它只接受 session UUID，由 Core 从 Web Node Intent 和当前 Codex 投影路由生成，Agent 不接受任意 URL 或 shell 命令。
+Command 使用 `oneof action` 形成能力白名单。首个真实动作是 `OpenCodexSession`；它只接受 session UUID，由 Core 从授权 App 请求和当前 Codex 投影路由生成，Agent 不接受任意 URL 或 shell 命令。
 
 每个 Command 同时包含：
 
@@ -423,7 +426,7 @@ Core Runner 尚未订阅 Result Topic，`DeviceView` 也没有 Command Feedback 
 
 Node 不直接决定主机命令参数，而是发送受限 Intent。Core 根据发起者权限、当前 view revision 与投影上下文解析 Intent，并生成具体 Command。
 
-Intent 必须携带发起者生成且不可复用的 `intent_id`，以及触发时所见的 `view_revision`。Core 将发起者身份和 Intent ID 固化为 Command 的 `intent_ref`；当选择对象已经变化或过期时拒绝 Intent，避免按钮操作命中新的对象。当前 Web Node 已实现 `OpenCodexSessionIntent`，但 HTTP `202 Accepted` 只表示 Intent 已成功发布，不表示 Capability 已执行成功；最终结果必须以 Agent Result Topic 上具有相同 `intent_ref` 的 CommandResult 为准。V1 的 OLED Node 没有输入能力，也不参与命令链路。
+Intent 必须携带发起者生成且不可复用的 `intent_id`，以及触发时所见的 `view_revision`。Core 将发起者身份和 Intent ID 固化为 Command 的 `intent_ref`；当选择对象已经变化或过期时拒绝 Intent，避免按钮操作命中新的对象。当前 App API 已接入 `OpenCodexSessionIntent`，但 HTTP `202 Accepted` 只表示请求已接受，不表示 Capability 已执行成功；最终结果必须以 Agent Result Topic 上具有相同 `intent_ref` 的 CommandResult 为准。V1 的 OLED Node 没有输入能力，也不参与命令链路。
 
 ### 6.6 协议演进
 
@@ -466,9 +469,9 @@ orbit/v1/cores/{core_id}/presence
 | NodeState | 1 | 是 | 已实现；包含 Node Epoch、Node ID、Series、Model、Variant 和固件版本，不包含上游 Agent |
 | DeviceView | 1 | 是 | 已实现；Node 重连后获得 Broker 中的最新 retained View |
 | Command | 1 | 否 | 已实现；应用层时效与进程内去重 |
-| CommandResult | 1 | 否 | 已实现发布，Core/Web 尚未消费；不保证跨重启恢复 |
+| CommandResult | 1 | 否 | 已实现发布，Core/App 尚未消费；不保证跨重启恢复 |
 | Presence | 1 | 是 | 未实现；目标使用 LWT 发布离线状态 |
-| Intent | 1 | 否 | Web Node 已实现；必须带时效与 view revision |
+| Intent | 1 | 否 | App Node 已实现；必须带时效与 view revision |
 
 所有线协议 payload 都是 Protobuf。Go MQTT 5 客户端额外设置
 `application/protobuf` Content Type；OLED 的 MQTT 3.1.1 PUBLISH 不携带该 MQTT 5
@@ -526,7 +529,7 @@ sequenceDiagram
     participant Agent as Orbit Agent
     participant MQTT as MQTT Broker
     participant Core as Orbit Core
-    participant Node as OLED / Web Node
+    participant Node as OLED / App Node
 
     Core->>MQTT: SUBSCRIBE AgentState / NodeState / Observations / Intents
     MQTT-->>Core: SUBACK
@@ -596,7 +599,7 @@ Node 每次启动生成新的 `node_epoch`，并在同一 Epoch 内递增 NodeSt
 sequenceDiagram
     autonumber
     actor User as Browser user
-    participant Web as Web Node
+    participant Web as App Node
     participant MQTT as MQTT Broker
     participant Core as Orbit Core
     participant Agent as Orbit Agent
@@ -632,7 +635,7 @@ sequenceDiagram
         end
     end
 
-    Note over Core,Web: 当前 Core 不订阅 Result，Web 不展示最终反馈；HTTP 202 不是执行成功信号
+    Note over Core,Web: 当前 Core 不订阅 Result，App 不展示最终反馈；HTTP 202 不是执行成功信号
 ```
 
 Agent 收到命令后依次执行：
@@ -847,17 +850,17 @@ Makefile 是开发者的稳定入口，内部通过 `uv run` 调用固定版本�
 | 已执行 | 仓库自动化 | `make verify` | 命令退出码为 0；format、vet、Go tests、Buf lint、Node tests、Go/firmware builds 全部完成 | 不证明真实 Broker、账号或硬件 |
 | 已执行 | 状态数据流 | `go test ./internal/integration -run TestSub2APIToRetainedDeviceView -count=1` | 测试 PASS；内存 Broker 中出现 retained DeviceView，三槽内容与预期一致 | 不证明公网 TLS、ACL、真实 Sub2API 或 OLED |
 | 已执行 | Codex 隐私 | `go test ./internal/integration -run TestCodexAgentPublishesSanitizedObservation -count=1` | 测试 PASS；初始 AgentState 先发布，默认隐私字段为空，Observation 非 retained | 不证明本机真实 Codex projection 数据 |
-| 已执行 | 命令数据流 | `go test ./internal/integration -run TestWebIntentOpensCodexSessionThroughCoreAndAgent -count=1` 和 `go test ./internal/agent -run TestOpenCodexCommandExecutesOnceAndPublishesResult -count=1` | 两条测试 PASS；Capability 只执行一次，重复消息返回同一可关联结果 | 不证明 Core/Web 已消费或展示 CommandResult |
-| 需私有配置 | 本地真实链路 | 分别运行 `make dev-core`、`make dev-agent`、`make dev-web` | 日志依次出现 `usage observation published`、`usage observation accepted`、`node state accepted`、`device view published`；Web 收到 fresh View | 不证明公网 ACL 或 OLED 真机 |
-| 需私有配置 | Web 产品动作 | 在 fresh Web View 中点击 session，并用临时管理员或 test-only 凭据订阅 Agent Result Topic | HTTP 返回 202；Core 出现 `command published`；Agent 出现 `command completed`；Result 的 `intent_ref.intent_id` 与 HTTP 返回值一致，状态为最终状态；目标 Codex 会话实际打开 | HTTP 202 本身不表示动作成功；当前 Web 不展示最终结果 |
+| 已执行 | 命令数据流 | `go test ./internal/integration -run TestAppAPIOpensCodexSessionThroughCoreAndAgent -count=1` 和 `go test ./internal/agent -run TestOpenCodexCommandExecutesOnceAndPublishesResult -count=1` | 两条测试 PASS；Capability 只执行一次，重复消息返回同一可关联结果 | 不证明 Core/App 已消费或展示 CommandResult |
+| 需私有配置 | 本地真实链路 | 分别运行 `make dev-core`、`make dev-agent` 与 App | 日志依次出现 `usage observation published`、`usage observation accepted`、`node state accepted`、`device view published`；App 收到 fresh View | 不证明公网 ACL 或 OLED 真机 |
+| 需私有配置 | App 产品动作 | 在 fresh App View 中点击 session，并用临时管理员或 test-only 凭据订阅 Agent Result Topic | HTTP 返回 202；Core 出现 `command published`；Agent 出现 `command completed`；Result 的 `intent_ref.intent_id` 与 HTTP 返回值一致，状态为最终状态；目标 Codex 会话实际打开 | HTTP 202 本身不表示动作成功；当前 App 不展示最终结果 |
 | 需公网环境 | Broker TLS/ACL | 使用 Agent、Core、Node 各自凭据逐项执行 [MQTT Topic 矩阵](mqtt-topics.md)，并用错误凭据或越权 Topic 做反向测试 | TLS 证书校验成功；合法 Topic 获得成功 SUBACK/PUBACK；越权操作被 Broker 拒绝 | 不证明 LWT、Message Expiry 或 OLED 渲染 |
 | 未实现 | 连接生命周期 | 实现 Presence、LWT、完整重连屏障后，断开网络、恢复连接并观察 State/Presence/View | retained LWT OFFLINE、无伪造 `changed_at`；恢复后 Epoch 不变且只补发最新状态 | 当前代码无法产生这些信号 |
 | 未实现 | Broker 保存边界 | Publish DeviceView 时接入 Message Expiry 后，等待超过 `retain_until` 再订阅该 Topic | Broker 不再返回过期 retained View | 当前 `retain_until` 只有应用层语义 |
-| 未实现 | 命令反馈 | Core 订阅 Result 并定义 requester-scoped feedback 后，执行 Web Intent | Web 收到与 `intent_id` 关联的最终状态，且其他 Node 不可见 | 当前终点只是 Agent Result Topic |
+| 未实现 | 命令反馈 | Core 订阅 Result 并定义 requester-scoped feedback 后，执行 App 请求 | App 收到与 `intent_id` 关联的最终状态，且其他 Node 不可见 | 当前终点只是 Agent Result Topic |
 | 需实体设备 | OLED 真机 | 在 `nodes/display/models/oled-128x32/variants/yd-esp32-s3` 运行 `make check`、`make build CONFIG=config.local.yaml`、`make upload ...` 和 `make monitor ...`，再执行断网与重连 | 串口出现 boot、I2C `0x3C`、OLED ready；屏幕显示三槽且无错误标签；过期后保留内容并显示 stale；重连后收到 retained View | 只对本次硬件、配置和 Broker 环境成立 |
 
 首版目标完成要求所有“需私有配置”“需公网环境”“需实体设备”项通过，并将
-纳入首版范围的“未实现”项实现后验收。若某个部署不启用 Web 产品动作，必须明确
+纳入首版范围的“未实现”项实现后验收。若某个部署不启用 App 产品动作，必须明确
 记录该层为不适用，不能用自动化测试代替。固件、DeviceView、日志和 Result 中均
 不得出现 Codex、Sub2API 或主机登录凭据、原始提示词、完整路径及 PID。
 

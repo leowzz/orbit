@@ -123,7 +123,7 @@ func TestInboxConsoleWithoutMQTTKeepsAuthorizationBoundaries(t *testing.T) {
 	if w := call("DELETE", "/api/app/devices/"+device["id"], "", cookie, ""); w.Code != 404 {
 		t.Fatal("missing device deletion", w.Code)
 	}
-	if w := call("GET", "/inbox/", "", nil, ""); w.Code != 200 {
+	if w := call("GET", "/inbox/", "", nil, ""); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/box" {
 		t.Fatal(w.Code)
 	}
 	if w := call("PUT", "/api/routes", `{"revision":1,"routes":{"node-a":{"profile":"overview-app","inputs":[]}}}`, cookie, ""); w.Code != 409 {
