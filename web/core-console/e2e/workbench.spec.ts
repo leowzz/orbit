@@ -5,6 +5,15 @@ import { writeFileSync } from "node:fs";
 const pixel =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==";
 
+// Close the page-owned SSE before Playwright finalizes network traces.
+// Browser disposal alone can leave a streaming response pending in tracing.
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed())
+    await page
+      .evaluate(() => window.dispatchEvent(new Event("orbit:logout")))
+      .catch(() => {});
+});
+
 async function login(page: Page, path = "/box") {
   await page.goto(path);
   await page.getByLabel("工作台密码").fill("local-check-only");
