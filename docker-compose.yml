@@ -16,10 +16,3 @@ services:
       <<: *orbit-build
       args:
         BINARY: orbit-core
-
-  orbit-web:
-    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-web:${version:?set version in .env}
-    build:
-      <<: *orbit-build
-      args:
-        BINARY: orbit-web

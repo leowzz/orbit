@@ -50,7 +50,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        binary: [orbit-agent, orbit-core, orbit-web]
+        binary: [orbit-agent, orbit-core]
     env:
       TAG: ${{ github.ref_name }}
       BINARY: ${{ matrix.binary }}

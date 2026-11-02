@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Copy, Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
 import { api } from "../api";
 import { Badge, Empty } from "../components";
-import { Modal } from "./Apps";
+import Modal from "../Modal";
 
 type User = {
   username: string;
@@ -300,7 +300,8 @@ function CreateDialog({
         </label>
         <p>
           新账号仅能发布和订阅此 ID 所需的 Orbit Topic。请在连接端使用相同 ID。
-          {kind === "worker" && " Windows Agent 的普通采集账号与语音识别账号需要分开创建。"}
+          {kind === "worker" &&
+            " Windows Agent 的普通采集账号与语音识别账号需要分开创建。"}
         </p>
         {error && (
           <p className="banner error" role="alert">

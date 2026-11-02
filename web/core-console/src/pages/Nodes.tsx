@@ -21,7 +21,7 @@ import DeviceName from "../DeviceName";
 import DeviceSummary from "../DeviceSummary";
 import DeviceStatus from "../DeviceStatus";
 import AudioWorkers, { useAudioWorkers } from "../AudioWorkers";
-import Apps, { DeviceForm, TokenDialog } from "./Apps";
+import DeviceAccess, { DeviceForm, TokenDialog } from "./DeviceAccess";
 import DeviceShortcuts from "./DeviceShortcuts";
 
 type Device = {
@@ -320,7 +320,7 @@ export default function Nodes({
                   >
                     <h2>连接与访问</h2>
                     {current.app && (
-                      <Apps
+                      <DeviceAccess
                         key={current.id}
                         deviceId={current.id}
                         onChanged={() => void load()}

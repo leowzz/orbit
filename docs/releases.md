@@ -22,7 +22,7 @@ Windows packaging. Rust compilation uses two jobs to limit linker memory use.
 ## Outputs
 
 - Linux amd64 images: `ghcr.io/leowzz/orbit-agent:TAG`,
-  `ghcr.io/leowzz/orbit-core:TAG`, `ghcr.io/leowzz/orbit-web:TAG`.
+  `ghcr.io/leowzz/orbit-core:TAG`. The Core image includes the workbench.
   The workflow derives the lowercase owner from the repository. Each image is
   signed by digest using GitHub OIDC and Cosign. Existing Aliyun mirror publishing
   and signing runs when both Aliyun registry secrets are present.

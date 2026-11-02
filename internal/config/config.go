@@ -168,35 +168,6 @@ type AppDevice struct {
 	MQTTUsername string `yaml:"-" json:"mqtt_username,omitempty"`
 }
 
-type WebNodeConfig struct {
-	Node    WebNodeIdentity `yaml:"node"`
-	NTP     NTPConfig       `yaml:"ntp"`
-	MQTT    MQTTConfig      `yaml:"mqtt"`
-	Web     WebConfig       `yaml:"web"`
-	Logging LoggingConfig   `yaml:"logging"`
-}
-
-type WebNodeIdentity struct {
-	ID string `yaml:"id"`
-}
-
-type InboxGatewayConfig struct {
-	URL       string `yaml:"url"`
-	TokenFile string `yaml:"token_file"`
-	Token     string `yaml:"-"`
-}
-
-type WebConfig struct {
-	Inbox  InboxGatewayConfig `yaml:"inbox"`
-	Listen string             `yaml:"listen"`
-	Auth   WebAuthConfig      `yaml:"auth"`
-}
-
-type WebAuthConfig struct {
-	Password   string   `yaml:"password"`
-	SessionTTL Duration `yaml:"session_ttl"`
-}
-
 type ConsoleConfig struct {
 	Listen       string `yaml:"listen"`
 	Database     string `yaml:"database"`

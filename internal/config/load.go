@@ -86,22 +86,6 @@ func LoadCore(path string) (*CoreConfig, error) {
 	return &cfg, nil
 }
 
-func LoadWebNode(path string) (*WebNodeConfig, error) {
-	cfg := WebNodeConfig{
-		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
-		NTP:     defaultNTPConfig(),
-		Web:     WebConfig{Listen: "127.0.0.1:8080", Auth: WebAuthConfig{SessionTTL: Duration{24 * time.Hour}}},
-		Logging: LoggingConfig{Level: "info"},
-	}
-	if err := decodeStrict(path, &cfg); err != nil {
-		return nil, err
-	}
-	if err := cfg.validate(filepath.Dir(path)); err != nil {
-		return nil, fmt.Errorf("validate web node config: %w", err)
-	}
-	return &cfg, nil
-}
-
 func decodeStrict(path string, dst any) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -341,48 +325,6 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		}
 	}
 	return nil
-}
-
-func (cfg *WebNodeConfig) validate(baseDir string) error {
-	if err := cfg.NTP.validate(); err != nil {
-		return fmt.Errorf("ntp: %w", err)
-	}
-	if cfg.Web.Inbox.URL == "" {
-		if err := validateID("node.id", cfg.Node.ID); err != nil {
-			return err
-		}
-		if err := cfg.MQTT.validate(baseDir); err != nil {
-			return fmt.Errorf("mqtt: %w", err)
-		}
-	}
-	if cfg.Web.Inbox.URL != "" {
-		u, err := url.Parse(cfg.Web.Inbox.URL)
-		local := u != nil && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1")
-		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "https" && !(local && u.Scheme == "http")) {
-			return errors.New("web.inbox.url must be an HTTPS origin (HTTP is allowed only on loopback)")
-		}
-		token, err := readSecret(baseDir, &cfg.Web.Inbox.TokenFile)
-		if err != nil {
-			return fmt.Errorf("web.inbox.token_file: %w", err)
-		}
-		if len(token) < 32 || len(token) > 512 {
-			return errors.New("web.inbox.token_file must contain a valid device token")
-		}
-		cfg.Web.Inbox.Token = token
-	} else if cfg.Web.Inbox.TokenFile != "" {
-		return errors.New("web.inbox.url is required with token_file")
-	}
-	host, port, err := net.SplitHostPort(cfg.Web.Listen)
-	if err != nil || strings.TrimSpace(host) == "" || strings.TrimSpace(port) == "" {
-		return fmt.Errorf("web.listen must be a host:port address: %q", cfg.Web.Listen)
-	}
-	if strings.TrimSpace(cfg.Web.Auth.Password) == "" {
-		return errors.New("web.auth.password is required")
-	}
-	if cfg.Web.Auth.SessionTTL.Duration <= 0 {
-		return errors.New("web.auth.session_ttl must be positive")
-	}
-	return validateLogLevel(cfg.Logging.Level)
 }
 
 func (cfg *NTPConfig) validate() error {

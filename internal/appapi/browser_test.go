@@ -38,7 +38,7 @@ func TestBrowserSessionIsolationAndRevocation(t *testing.T) {
 		handler.ServeHTTP(w, r)
 		return w
 	}
-	if w := call("GET", "/inbox/", "", "", nil); w.Code != 200 || !strings.Contains(w.Body.String(), "留给下一次") {
+	if w := call("GET", "/inbox/", "", "", nil); w.Code != http.StatusNotFound {
 		t.Fatal(w.Code)
 	}
 	if w := call("GET", "/api/v1/sync/snapshot", "", "", nil); w.Code != 401 {

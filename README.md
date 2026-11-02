@@ -2,8 +2,8 @@
 
 Orbit connects trusted host state to display nodes. The current V1 path reads
 Sub2API usage and local Codex task state in a host Agent, transports Protobuf
-observations over MQTT, and lets Core publish retained views for OLED, Web, and
-Android nodes. Core includes an authenticated React console for inspecting
+observations over MQTT, and lets Core publish retained views for OLED and
+Android nodes. Core includes an authenticated React workbench for inspecting
 Agents and Nodes and managing projection routes stored in local SQLite.
 Deployment settings remain in YAML.
 
@@ -17,8 +17,7 @@ audio-records page. See [audio setup and protocol](docs/audio-pipeline.md).
 | --- | --- |
 | Agent | Collect host usage and Codex state; execute enabled typed capabilities. |
 | ASR worker Agent | Consume queued audio on a Windows/Linux host and return structured speech recognition results; desktop controls and Windows tray support. |
-| Core + console | Validate observations, manage routes, and publish device views. The console defaults to `127.0.0.1:7620`. |
-| Web Node | Personal inbox for text, links, todos and images, with its own password and a server-side device token. |
+| Core + workbench | Validate observations, manage routes, publish device views and serve the shared inbox at `/box`. Defaults to `127.0.0.1:7620`. |
 | OLED / Android Node | Render the view assigned by Core on a physical display or Android widgets. |
 | Xiaozhi color display | ESP32-S3 / ST7789 320x240 device showing API usage or weekly quota, managed by Core. [Firmware build and USB setup](nodes/display/models/xiaozhi-320x240/variants/ma-xin-wifi/README.md). |
 
@@ -53,8 +52,9 @@ flowchart TB
     class OLED,Android node
 ```
 
-Web Node uses the Core personal API over HTTPS for inbox synchronization,
-independently of this MQTT state flow.
+The workbench is the only browser frontend. Its `/box` page uses the Core
+management session; native Apps continue using independently authorized device
+tokens over HTTPS. Neither inbox path depends on MQTT.
 
 **Command flow: Intent -> CommandResult**
 
@@ -91,7 +91,7 @@ flowchart TB
     class Agent,Capability,Result host
     class Intent,Command,ResultTopic topic
     class Router,Context core
-    class Web,Observer node
+    class Node,Observer node
     class Feedback planned
     style Request fill:#ffffff,stroke:#cbd5e1,color:#475569
     style Execute fill:#ffffff,stroke:#cbd5e1,color:#475569
@@ -99,8 +99,8 @@ flowchart TB
 ```
 
 Sub2API credentials and Codex databases stay on the Agent. OLED receives only
-formatted cost, token, TPM, and freshness text. The web node receives the rich
-usage and sanitized Codex fields selected by its Core projection. Command
+formatted cost, token, TPM, and freshness text. App devices receive the rich
+usage and sanitized Codex fields selected by their Core projection. Command
 execution is limited to the explicitly enabled `open_codex_session` capability;
 the Agent validates the session UUID and opens `codex://threads/{session_id}`
 locally. There is no arbitrary URL or shell command payload.
@@ -157,13 +157,12 @@ access.
 
 ## Configure
 
-There are four independent YAML contracts. Copy the examples to the ignored
+There are three independent YAML contracts. Copy the examples to the ignored
 local paths before starting anything:
 
 ~~~shell
 cp configs/agent.example.yaml configs/agent.local.yaml
 cp configs/core.example.yaml configs/core.local.yaml
-cp configs/web.example.yaml configs/web.local.yaml
 cp nodes/display/models/oled-128x32/variants/yd-esp32-s3/config.example.yaml \
   nodes/display/models/oled-128x32/variants/yd-esp32-s3/config.local.yaml
 ~~~
@@ -183,10 +182,6 @@ configs/secrets/core-client.pem
 configs/secrets/core-client.key
 configs/secrets/core-mqtt-username
 configs/secrets/core-mqtt-password
-configs/secrets/web-client.pem
-configs/secrets/web-client.key
-configs/secrets/web-mqtt-username
-configs/secrets/web-mqtt-password
 configs/secrets/sub2api-email
 configs/secrets/sub2api-password
 ~~~
@@ -197,14 +192,12 @@ Update the local YAML values for the selected broker and account:
   settings for each enabled source. Sub2API uses HTTPS endpoints and secret
   files; Codex uses codex_home (or the local CODEX_HOME/default) and its
   polling, filtering, and privacy settings. Enable
-  capabilities.open_codex_session to let approved Web intents open a local
+  capabilities.open_codex_session to let approved App requests open a local
   Codex task.
 - core.local.yaml: core.id, MQTT URL/TLS files, `console.password`, optional
   console listen/database paths, and `observation_policies`. Manage routes in
   the Core console; YAML `projection_routes` is deprecated and only seeds a
   database on its first initialization.
-- web.local.yaml: node.id, its MQTT credentials, the local HTTP listen address,
-  and `web.auth.password` plus `web.auth.session_ttl` for the browser login.
 
 After starting the services, log into the Core console and create a route for
 each display node. The route's node ID must equal the node configuration's
@@ -379,7 +372,7 @@ observation type:
 | `usage-oled-128x32` | Usage | OLED display |
 | `codex-weekly-oled-128x32` | Codex | Weekly remaining percent and reset date/time (Asia/Shanghai) |
 | `rotating-oled-128x32` | Usage and Codex | Alternate API usage and account weekly quota |
-| `overview-web` | Usage and/or Codex | Web Node |
+| `overview-web` | Usage and/or Codex | Legacy wire compatibility; no standalone browser service |
 | `overview-android` | Usage and/or Codex | Android widgets |
 
 For the weekly OLED view, enable `sources.codex.rate_limits: true` on the
@@ -445,6 +438,48 @@ Port 7620 serves the backend and any previously embedded assets, so use port
 5173 to see frontend changes. Vite fails if its port is occupied rather than
 silently selecting another port.
 
+### Workbench loading and browser checks
+
+Pages load independently. `/box` does not wait for device state, projection
+routes, or device registration; it reads a local inbox cache and catches up via
+snapshot/changes plus SSE watermarks. Matching watermarks do not refetch content.
+Offscreen thumbnails use native lazy loading. Hashed assets are precompressed
+and cached as immutable; HTML and private APIs remain uncached. A failed page
+chunk offers reload without discarding persisted inbox drafts.
+
+Measured on local Chrome against the embedded Core, with an authenticated direct
+link and a fresh browser context. Sizes are bytes, excluding HTTP headers and
+message/attachment payloads; timings depend on the host and are not a latency SLO.
+Baseline is `8485184`, where the inbox was `/messages`.
+
+| Metric | Baseline | Workbench `/box` |
+| --- | ---: | ---: |
+| JavaScript decoded size, complete route | 359,315 | 273,890 |
+| JavaScript actually transferred | 359,315 | 90,753 |
+| JavaScript + CSS actually transferred | 412,844 | 103,254 |
+| Hashed asset transfer on repeat load | 412,844 | 0 |
+| Unrelated state/routes/devices startup requests | 3 | 0 |
+
+Reproduce the current route import sizes and browser checks:
+
+```sh
+make build-console
+node scripts/console-size.mjs
+pnpm --dir web/core-console exec playwright install chromium
+pnpm --dir web/core-console test:browser
+# Or use an already installed Chrome:
+ORBIT_BROWSER_CHANNEL=chrome pnpm --dir web/core-console test:browser
+```
+
+The browser suite starts Core on loopback port 17622 with a fresh temporary
+database; it does not read deployment configuration. It exercises direct links,
+refresh/history, editing, todos, deletion/restoration, clipboard, image selection,
+paste/drop and previews, offline queues, conflicts, failed requests, expired
+sessions, cross-tab locks, draft-aware logout, and 390px layout. It also asserts
+that unrelated pages/data are not loaded and repeat loads transfer no hashed
+assets. Screenshots, failure traces and `performance.json` are written under
+`web/core-console/test-results/`; CI retains failure artifacts for seven days.
+
 ## Automated checks
 
 Run these from the repository root. A passing check exits with status 0; any
@@ -452,7 +487,7 @@ non-zero status is a failure even if some earlier packages passed.
 
 ~~~shell
 make test-go       # build console; run Go unit and in-memory integration tests
-make test-web      # Web Node browser-state tests
+make test-console  # workbench typecheck and browser-state tests
 pnpm --dir web/core-console check
 pnpm --dir web/core-console format:check
 go test ./internal/agent ./internal/integration
@@ -467,7 +502,7 @@ make build-node    # generate nanopb and compile the YD-ESP32-S3 firmware
 make verify        # fmt-check, lint, all tests, protocol checks, and builds
 ~~~
 
-Build the three service images with the version from `.env`:
+Build the two service images with the version from `.env`:
 
 ~~~shell
 cp .env.example .env
@@ -475,7 +510,7 @@ docker compose build
 ~~~
 
 The images are tagged as
-`registry.cn-heyuan.aliyuncs.com/leo03w/orbit-{agent,core,web}:vX.Y.Z`.
+`registry.cn-heyuan.aliyuncs.com/leo03w/orbit-{agent,core}:vX.Y.Z`.
 `make release` bumps the patch version in `.env` by default, updates the tracked
 `.env.example`, creates a `chore: release vX.Y.Z` commit, and adds an annotated
 tag. Use `make release V=v1.2.3` to choose an explicit version. The release
@@ -499,13 +534,11 @@ docker compose --env-file .env -f deploy/docker-compose.yml pull
 docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ~~~
 
-The deployment binds the Core console to host `127.0.0.1:7620` and
-Web Node to `127.0.0.1:7621`. Set these values in the respective YAML files:
-
-- Core: `console.listen: 0.0.0.0:7620`,
-  `console.database: /app/data/core.sqlite`, and a `console.password`.
-- Web Node: `web.listen: 0.0.0.0:7621`, `web.auth.password`, and the
-  `web.inbox` server URL and device token file.
+The deployment binds the Core workbench to host `127.0.0.1:7620` and the native
+App API to `127.0.0.1:7622`. Set `console.listen: 0.0.0.0:7620`,
+`console.database: /app/data/core.sqlite`, and `console.password` in the Core YAML.
+When enabling App synchronization, persist `app.data_dir` under `/app/data` too.
+Only Core serves browser pages; `/box` supports direct links and refresh.
 
 Files under `configs/` are mounted read-only and must be readable by UID 65532.
 The `orbit-core-data` volume persists SQLite across container replacements;
@@ -610,25 +643,11 @@ make uninstall-agent
 Uninstalling preserves `~/Library/Logs/Orbit/` for diagnostics and never
 removes the source YAML or secret files.
 
-Start the web node in a third terminal:
-
-~~~shell
-make dev-web WEB_CONFIG=configs/web.local.yaml
-~~~
-
-The startup log prints its local URL (127.0.0.1:8080 in the example). The root
-opens the personal inbox at `/inbox/`. Configure `web.inbox.url`,
-`web.inbox.token_file`, and a long, unique `web.auth.password`; see
-[personal inbox](docs/personal-inbox.md). Web Node no longer connects to MQTT or
-exposes display status or Codex session actions.
-
-Authentication uses an HttpOnly cookie, random server-side sessions and a shared
-budget of five login attempts per minute. Logout revokes the session; sessions
-also expire when the server restarts. Browser drafts remain saved locally.
-
-`make dev-web` serves `nodes/web/inboxui/static` directly from disk. Refresh the
-page after editing HTML, CSS or JavaScript. Go changes require restarting the
-process. Without `-static-dir`, the binary serves embedded production assets.
+Open the Core workbench at `http://127.0.0.1:7620/box` for the personal inbox.
+Use the workbench password; browser access does not need a device token or
+separate process. `make dev-core` runs the same frontend with Vite during
+local development. See [personal inbox](docs/personal-inbox.md) for upgrades,
+offline behavior and native App authorization.
 
 Agent and MQTT-enabled Core exit non-zero on a configuration, TLS,
 authentication, ACL, or initial MQTT connection error. A successful startup emits an "orbit core
@@ -673,7 +692,7 @@ security requirements.
 1. Copy `configs/agent.example.yaml` to a local file, enable
    `sources.codex`, set `sources.codex.codex_home` when the projections are not
    under the default `~/.codex`, enable `capabilities.open_codex_session` when
-   Web clicks should open Codex, and disable `sources.sub2api`.
+   App requests should open Codex, and disable `sources.sub2api`.
 2. Start the Agent with a reachable broker:
 
 ~~~shell
@@ -696,15 +715,10 @@ make dev-agent AGENT_CONFIG=configs/agent.codex.local.yaml
 The in-memory integration test is the deterministic Agent-side version of this
 sequence; the broker command additionally proves deployment TLS, credentials,
 ACLs, and MQTT delivery. Core consumes the observation and projects sanitized
-Codex data to the Web node. OLED intentionally does not consume or render
-Codex data in this milestone.
-
-On the Web node, click a session row. The HTTP endpoint accepts only JSON for a
-session present in the cached fresh view, then publishes a 20-second Intent.
-Core revalidates the Node epoch, view revision, current Codex snapshot, and
-projection route before publishing `OpenCodexSession` to the selected Agent.
-The Agent accepts only a non-retained, at-most-30-second command containing a
-lowercase UUID and invokes `/usr/bin/open codex://threads/{session_id}`.
+Codex data to authorized App devices. The deterministic App API integration test
+also verifies that a session in the current view can generate a typed command
+and reach the selected Agent. The Agent accepts only a non-retained,
+at-most-30-second command containing a lowercase session UUID.
 
 ## Build, flash, and inspect the OLED node
 
@@ -785,15 +799,14 @@ non-zero exit require investigation.
 ## Layout
 
 ~~~text
-cmd/                    Agent, Core, and Web Node process assembly
+cmd/                    Agent and Core process assembly
 internal/               config, source, transport, Agent, and Core logic
 proto/orbit/v1/         versioned wire schemas
 gen/go/                 generated Go Protobuf bindings
 nodes/display/          shared display firmware and model/variant delivery units
-nodes/web/              browser display node, HTTP/SSE server, and static UI
 nodes/app/              Unified Flutter inbox and Android widgets app
 nodes/android/          Shared Android widget service, settings UI, and tests
-web/core-console/       independent React/TypeScript console and Go embed bridge
+web/core-console/       unified workbench, /box inbox and Go embed bridge
 deploy/                 published-image Compose deployment
 configs/                non-sensitive host configuration examples
 docs/                   architecture, security, MQTT, and ADR documentation
@@ -808,8 +821,9 @@ are also kept in
 
 For messages only, start with `configs/core.inbox.example.yaml`: no MQTT broker,
 Agent, node identity, or projection route is required. Core serves the browser
-inbox at `/inbox/` on both the console and App listeners. Add a device in the
-console, then paste its connection information into the App or browser.
+inbox at `/box` on the workbench listener. Log in with the workbench password;
+add independent devices for native Apps in the device settings. The separate
+App listener serves only the device API.
 See [个人收件箱：连接、使用与部署](docs/personal-inbox.md).
 
 
@@ -823,7 +837,7 @@ Enable the optional `app` section in `configs/core.example.yaml`, then run
 `make build-app` creates debug Android APKs for `arm64-v8a`, `armeabi-v7a`, and
 `x86_64` in `nodes/app/build/app/outputs/flutter-apk/app-<abi>-debug.apk`.
 The App API starts even when the MQTT broker is unreachable. Existing
-Agent/OLED/Web MQTT contracts are unchanged.
+Agent/OLED MQTT contracts and existing device data are retained.
 
 See [API v1](docs/app-api.md), [HTTPS/deployment/backup](docs/app-operations.md),
 and the [implementation handoff](docs/app-node-handoff.md) for verified scope and

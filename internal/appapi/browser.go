@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"orbit/internal/inbox"
-	"orbit/nodes/web/inboxui"
 )
 
 const browserCookie = "orbit_inbox"
@@ -27,8 +26,6 @@ func browserOriginAllowed(r *http.Request) bool {
 }
 
 func (s *Server) browserRoutes(mux *http.ServeMux) {
-	mux.Handle("GET /inbox/", inboxui.Handler())
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/inbox/", http.StatusSeeOther) })
 	mux.HandleFunc("GET /api/v1/browser", func(w http.ResponseWriter, r *http.Request) {
 		write(w, 200, map[string]string{"mode": "device"})
 	})

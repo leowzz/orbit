@@ -1,5 +1,8 @@
 # App API 运行与备份
 
+> 下文保留既有交接与发布历史。当前唯一网页入口是 Core 工作台 `/box`；旧独立网页服务代码已退役，旧线上入口暂留供未同步草稿恢复。现行配置、授权与升级步骤见 [个人收件箱](personal-inbox.md)。
+
+
 Core 启用 app 后仍只需一个进程。`app.data_dir` 相对 Core YAML 文件目录解析，内部保存
 inbox.sqlite（WAL/SHM）与 attachments/。不要把可写数据放进只读配置挂载。
 
@@ -215,3 +218,16 @@ App 对缺失接口的 404/405 改为明确提示更新 Core。工作台测试 7
 - 发布源码、差异、二进制和验证记录：`/srv/orbit-deploy/releases/core-console-20261024-147116b`；停机配置与完整 Core 数据备份：`/srv/orbit-deploy/backups/core-console-20261024-147116b`。旧镜像保留。回滚仅切回旧镜像，保留升级后新写入的数据。
 - Core/config/App API/MQTT/嵌入资源 Go 测试、管理台构建及 14 项前端测试通过。线上 HTTPS 静态资源哈希、二进制哈希、指标接口、未认证访问 401、原管理会话、原路由和设备授权均验证通过；两份 SQLite 完整性为 ok，Web 容器未变。本次未执行浏览器交互或 Windows Agent 真机验收。
 - 上线验证时共有 3338 条音频记录：待处理 399、已完成 2939、失败 0。此数值为部署时快照。运行二进制 SHA-256：`9d0a25209bf5cf600c8712c83ef1198b0ee099653510c72aacc41eacbebce9c4`。
+
+
+### 2026-11-02 — 统一 Core 工作台与 `/box` 上线
+
+- 新工作台入口：`https://orbit-core.wleo.cn/box`。发布代码固定为 `6a9c67ccdabb1e37b253892b236e630c08608d04`，未包含待选择的新 UI 方案，也未合并 main 或触发无关平台发布。
+- tx Core 已更新为服务器本地镜像 `orbit-core:workbench-6a9c67c-20261102T100413Z`，镜像 ID `sha256:9a24c3a312cf259cf204495cd604888aab4a20510c8acfc1e7c4009172e4f7c0`。二进制 SHA-256 为 `16066b1dd0605b4ddb3602e221d4438e4909b9e27698994a73fb3531b2289684`，Go 构建信息确认源码修订和 `vcs.modified=false`。
+- 发布源码归档、已构建前端、二进制、校验清单、部署与回滚脚本及验证证据保存在 `/srv/orbit-deploy/releases/workbench-6a9c67c-20261102T100413Z/`。只更新 Core 镜像，保留原挂载、网络、端口、凭据、配置及反向代理。
+- 一致停机备份位于 `/srv/orbit-deploy/backups/workbench-6a9c67c-20261102T100413Z/`，包含完整 Core 数据、附件、配置、Compose 和代理配置备份；归档 SHA-256 为 `21478311973e50c2447e43065579a114a78d0ac40642719d8cf0775ea7c7fc9b`。归档中的两份 SQLite 与停机源文件摘要一致，数据库完整性均为 `ok`；收件箱 schema 仍为 3，无迁库。
+- 升级保留路由修订 191 的 6 条路由、5 个设备登记及原有 39 条收件箱记录。音频保留上限及既有数据继续沿用；工作台设置、设备登记和同步 generation 未变。现有管理会话和原设备令牌仍可使用。
+- 公网验证了首页、`/box` 与直链刷新；JS/CSS 与构建产物摘要一致，gzip 与哈希资源缓存生效，HTML/私有 API 不缓存。未认证 API 返回 401，原设备 JSON/Protobuf 状态与快照接口正常，Prometheus `up{job="orbit-core"}=1`，容器无重启循环。
+- 真实 Chrome 验证了现有图片原图、新增待办、复制、完成、编辑、删除恢复、刷新、工作台导航/返回、旧工作台链接和 390px 布局。仅为验收创建一条明确标记的专用记录，已软删除，未修改原有内容；临时验证会话在验收后撤销。
+- `https://orbit-web.wleo.cn/inbox/` 及原容器保持原样，保留同源 IndexedDB 和现有会话的恢复路径，仍可同步到同一份 Core。此入口仅作为旧浏览器草稿的临时兼容：先同步并处理未发送内容，再停用旧进程；不能根据服务端数据判断每个浏览器是否还有未同步草稿。本次没有切换旧域名、清理浏览器缓存或删除旧镜像/数据卷。
+- 代码回滚点为 `orbit-core:audio-review-f11da94-linux`（镜像 ID `sha256:b28c3856bb094d2043df93fd3e94e7cf6667658e9916fb3f1009cd7500cacf2c`）。在 tx 执行 `python3 /srv/orbit-deploy/releases/workbench-6a9c67c-20261102T100413Z/apply.py --rollback`，会校验当前镜像后仅回滚 Core 代码，保留新写入的数据；不要为了回滚代码恢复旧数据库快照。

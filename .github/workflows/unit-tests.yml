@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   services:
-    name: Go, Web and scripts
+    name: Go, workbench and scripts
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -28,10 +28,20 @@ jobs:
           node-version: '24'
       - name: Install build tools
         run: npm install --global pnpm@11.9.0
-      - name: Test Go services and Web
+      - name: Test Go services and workbench
         run: |
           make test
-          pnpm --dir web/core-console test
+          pnpm --dir web/core-console format:check
+      - name: Test workbench in Chromium
+        run: |
+          pnpm --dir web/core-console exec playwright install --with-deps chromium
+          pnpm --dir web/core-console test:browser
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: workbench-browser-results
+          path: web/core-console/test-results/
+          retention-days: 7
       - name: Test release and signing scripts
         run: python3 -B -m unittest discover -s scripts -p 'test_*.py'
 

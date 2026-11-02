@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { api, APIError } from "../api";
 import { Mark } from "../components";
+import ThemeToggle from "../ThemeToggle";
 export default function Login({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState(""),
     [visible, setVisible] = useState(false),
@@ -38,11 +39,11 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
           <div className="wordmark">
             <Mark small />
             Orbit
+            <ThemeToggle />
           </div>
-          <h1>登录控制台</h1>
-          <p>管理设备、快捷操作与收件箱。</p>
+          <h1>登录工作台</h1>
           <form onSubmit={submit}>
-            <label htmlFor="password">控制台密码</label>
+            <label htmlFor="password">工作台密码</label>
             <div className="password-field">
               <input
                 id="password"
@@ -72,7 +73,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
               className="button primary login-submit"
               disabled={busy || !password}
             >
-              {busy ? "正在登录…" : "进入控制台"}
+              {busy ? "正在登录…" : "进入工作台"}
               <ArrowRight size={17} />
             </button>
           </form>

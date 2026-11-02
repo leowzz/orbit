@@ -271,6 +271,37 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request, node string) {
 		}
 	}
 }
+
+// Console streams are bounded so reconnects regularly revalidate the session.
+// They carry watermarks only; content is fetched through authenticated requests.
+func (s *Server) consoleEvents(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("X-Accel-Buffering", "no")
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+	defer cancel()
+	tick := time.NewTicker(15 * time.Second)
+	defer tick.Stop()
+	rc := http.NewResponseController(w)
+	for {
+		wake := s.subscribe()
+		generation, cursor, err := s.store.Watermark(ctx)
+		if err != nil {
+			return
+		}
+		data, _ := json.Marshal(map[string]string{"generation": generation, "cursor": cursor})
+		_ = rc.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if _, err = fmt.Fprintf(w, "event: sync\ndata: %s\n\n", data); err != nil || rc.Flush() != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-wake:
+		case <-tick.C:
+		}
+	}
+}
+
 func write(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

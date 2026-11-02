@@ -143,7 +143,7 @@ SSE 仅提示追赶，不能推进本地 applied_cursor；相同 cursor 的心�
 
 ## 网页与同域访问
 
-Core 的 App 监听器和管理台监听器均提供 `/inbox/` 网页和同一套 `/api/v1/` 设备接口；管理台会话不能代替设备授权。
+Core 的工作台监听器提供 `/box` 网页；工作台和独立 App 监听器均保留 `/api/v1/` 设备接口，管理台会话不能代替设备授权。
 
 - `GET /api/v1/browser` 返回 `{mode:"device"}`，不包含凭据。
 - `POST /api/v1/session` 接受 `{token}`，验证设备授权后写入 HttpOnly、SameSite=Strict、远程 Secure Cookie（30 天）。不在响应中返回令牌。无效令牌不会被已有 Cookie 代替。
@@ -151,7 +151,7 @@ Core 的 App 监听器和管理台监听器均提供 `/inbox/` 网页和同一�
 - Bearer 授权保持原契约；没有 Authorization 时才尝试 Cookie。Cookie 请求会校验 Origin 和 Sec-Fetch-Site，跨站请求返回 forbidden。
 - 撤销或轮换设备后，已有 Cookie 和 SSE 连接同样失效。
 
-Web Node 的可选 `web.inbox` 代理只转发消息、同步、状态和附件接口，使用自己的访问会话保护入口；不会代理管理台或上游会话接口。
+工作台是唯一网页入口，收件箱位于 `/box`，使用管理会话访问 `/api/app/`。原生设备继续使用 `/api/v1/` 和各自的设备令牌；两者的权限不能互换。独立 App 监听器不再提供 HTML 页面。
 
 ### 统一展示规则
 
@@ -213,3 +213,14 @@ Core 管理接口继续由控制台会话及 Origin 检查保护，设备令牌�
 
 快捷导航和执行请求独立于收件箱历史；点击不进入离线队列。桌面 Agent 和 App Node 的执行目标
 保存在各自本机。Node 只在应用前台连接时接收操作；切到后台不扩大为后台执行权限。
+
+## 工作台收件箱同步
+
+以下接口仅挂载于 Core 工作台，沿用管理会话及同源检查，设备令牌无法访问：
+
+- `GET /api/app/sync/snapshot`：与设备 snapshot 相同的 generation、cursor、分页边界。
+- `GET /api/app/changes`：与设备 changes 相同的增量契约。
+- `GET /api/app/events`：只发送同步水位；每分钟结束连接，让重连重新验证管理会话。
+- `/api/app/operations`、`/api/app/attachments`：沿用现有管理操作与附件权限；管理操作允许恢复已删除内容。
+
+消息、修订号和幂等操作表不迁库。网页离线队列与设备队列使用相同操作编号语义，但分别使用各自的授权入口。

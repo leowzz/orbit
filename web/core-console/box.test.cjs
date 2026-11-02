@@ -8,7 +8,8 @@ function client() {
   const header = { classList: { toggle() {} } };
   const context = vm.createContext({
     document: {
-      getElementById: (id) => {
+      querySelector: (selector) => {
+        const id = selector.slice(1);
         if (!elements.has(id))
           elements.set(id, {
             value: "",
@@ -31,7 +32,12 @@ function client() {
       },
       addEventListener() {},
     },
-    window: { addEventListener() {} },
+    window: { addEventListener() {}, removeEventListener() {} },
+    root: null,
+    navigator: { locks: { request: () => new Promise(() => {}) } },
+    Event,
+    AbortController,
+    TextEncoder,
     fetch: () => new Promise(() => {}),
     AbortSignal,
     URL,
@@ -42,11 +48,15 @@ function client() {
     clearInterval() {},
     console,
   });
+  context.root = context.document;
+  const source = readFileSync(`${__dirname}/src/box/controller.js`, "utf8")
+    .split("// React releases")[0]
+    .replace("export function mountBox(root) {", "");
+  vm.runInContext(source, context);
   vm.runInContext(
-    readFileSync(`${__dirname}/inboxui/static/inbox.js`, "utf8"),
+    'render=()=>{};save=async()=>{};$("send").disabled=false;',
     context,
   );
-  vm.runInContext("render=()=>{};save=async()=>{};", context);
   return {
     context,
     run: (source) => vm.runInContext(source, context),
@@ -123,7 +133,7 @@ test("failed local commit keeps the composer and prevents submission", async () 
   const c = client();
   c.elements.get("body").value = "do not lose this";
   c.run(
-    `state.draft='do not lose this';save=async()=>{throw Error('quota')};let submitted=false;sync=()=>{submitted=true};`,
+    `closed=false;state.draft='do not lose this';save=async()=>{throw Error('quota')};let submitted=false;sync=()=>{submitted=true};`,
   );
   await c.elements.get("composer").onsubmit({ preventDefault() {} });
   assert.equal(c.run("state.outbox.length"), 0);

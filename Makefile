@@ -15,8 +15,6 @@ PROTOC_GEN_GO := $(TOOLS_DIR)/protoc-gen-go
 NODE_DIR := nodes/display/models/oled-128x32/variants/yd-esp32-s3
 AGENT_CONFIG ?= configs/agent.local.yaml
 CORE_CONFIG ?= configs/core.local.yaml
-WEB_CONFIG ?= configs/web.local.yaml
-WEB_STATIC_DIR ?= nodes/web/inboxui/static
 AGENT_LAUNCHD_LABEL ?= com.leo.orbit.agent
 AGENT_LEGACY_LAUNCHD_LABEL ?= com.leo.orbit.agent.dev
 AGENT_INSTALL_DIR ?= $(HOME)/Library/Application Support/Orbit
@@ -25,10 +23,9 @@ AGENT_LOG_DIR ?= $(HOME)/Library/Logs/Orbit
 LAUNCHCTL ?= /bin/launchctl
 PLUTIL ?= /usr/bin/plutil
 CORE_LAUNCHD_LABEL ?= com.leo.orbit.core.dev
-WEB_LAUNCHD_LABEL ?= com.leo.orbit.web.dev
 
-.PHONY: dev dev-agent dev-core dev-core-api dev-web install-agent stop-agent uninstall-agent \
-	kill kill-agent kill-core kill-web \
+.PHONY: dev dev-agent dev-core dev-core-api install-agent stop-agent uninstall-agent \
+	kill kill-agent kill-core \
 	build build-go build-node test test-go test-node lint fmt fmt-check \
 	proto-lint generate verify release
 
@@ -44,9 +41,6 @@ dev-core:
 
 dev-core-api:
 	$(GO) run ./cmd/orbit-core -config "$(CORE_CONFIG)"
-
-dev-web:
-	$(GO) run ./cmd/orbit-web -config "$(WEB_CONFIG)" -static-dir "$(WEB_STATIC_DIR)"
 
 install-agent:
 	@ORBIT_REPO_ROOT="$(CURDIR)" \
@@ -77,7 +71,7 @@ uninstall-agent:
 		LAUNCHCTL_BIN="$(LAUNCHCTL)" PLUTIL_BIN="$(PLUTIL)" \
 		/bin/bash scripts/macos-agent.sh uninstall
 
-kill: kill-web kill-agent kill-core
+kill: kill-agent kill-core
 
 kill-agent:
 	@launchctl remove "$(AGENT_LAUNCHD_LABEL)" 2>/dev/null || true
@@ -89,11 +83,6 @@ kill-core:
 	@launchctl remove "$(CORE_LAUNCHD_LABEL)" 2>/dev/null || true
 	@pkill -TERM -f '[/][o]rbit-core([[:space:]]|$$)' 2>/dev/null || true
 	@if pgrep -f '[/][o]rbit-core([[:space:]]|$$)' >/dev/null; then sleep 1; pkill -KILL -f '[/][o]rbit-core([[:space:]]|$$)' 2>/dev/null || true; fi
-
-kill-web:
-	@launchctl remove "$(WEB_LAUNCHD_LABEL)" 2>/dev/null || true
-	@pkill -TERM -f '[/][o]rbit-web([[:space:]]|$$)' 2>/dev/null || true
-	@if pgrep -f '[/][o]rbit-web([[:space:]]|$$)' >/dev/null; then sleep 1; pkill -KILL -f '[/][o]rbit-web([[:space:]]|$$)' 2>/dev/null || true; fi
 
 build: build-go
 
@@ -107,14 +96,15 @@ build-node:
 build-xiaozhi:
 	cd nodes/display/models/xiaozhi-320x240/variants/ma-xin-wifi && uv sync --frozen && uv run python scripts/firmware.py package --config config.example.yaml
 
-test: test-go test-web test-dev
+test: test-go test-console test-dev
 
-.PHONY: test-web test-dev
+.PHONY: test-console test-dev
 test-dev:
 	node --test scripts/dev-core.test.mjs
 
-test-web:
-	node --test nodes/web/*.test.cjs
+test-console: build-console
+	$(PNPM) --dir "$(CONSOLE_DIR)" check
+	$(PNPM) --dir "$(CONSOLE_DIR)" test
 
 test-go: build-console
 	$(GO) test ./...
@@ -137,7 +127,7 @@ proto-lint: $(BUF)
 generate: $(BUF) $(PROTOC_GEN_GO)
 	PATH="$(TOOLS_DIR):$$PATH" $(BUF) generate
 
-verify: fmt-check lint test-go test-web test-dev proto-lint test-node build-go build-node
+verify: fmt-check lint test-go test-console test-dev proto-lint test-node build-go build-node
 
 # Bump patch in .env and create an annotated git tag. Override: make release V=v1.2.3
 release:

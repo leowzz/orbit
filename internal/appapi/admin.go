@@ -47,6 +47,9 @@ func (s *Server) recordSync(node, cursor string) {
 func (s *Server) AdminHandler() http.Handler {
 	mux := http.NewServeMux()
 	s.navigationAdminRoutes(mux)
+	mux.HandleFunc("GET /api/app/sync/snapshot", func(w http.ResponseWriter, r *http.Request) { s.snapshot(w, r, consoleNode) })
+	mux.HandleFunc("GET /api/app/changes", func(w http.ResponseWriter, r *http.Request) { s.changes(w, r, consoleNode) })
+	mux.HandleFunc("GET /api/app/events", s.consoleEvents)
 	mux.HandleFunc("GET /api/app/devices", s.listDevices)
 	mux.HandleFunc("POST /api/app/devices", s.createDevice)
 	mux.HandleFunc("PUT /api/app/devices/{id}", s.renameDevice)

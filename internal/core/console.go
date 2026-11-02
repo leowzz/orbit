@@ -281,6 +281,9 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	mux.Handle("PUT /api/app/", admin)
 	mux.Handle("DELETE /api/app/", admin)
 	mux.Handle("GET /", coreconsole.Handler())
+	for _, path := range []string{"GET /inbox", "GET /inbox/"} {
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusSeeOther) })
+	}
 	mux.HandleFunc("POST /api/auth/login", auth.login)
 	mux.HandleFunc("POST /api/auth/logout", auth.logout)
 	mux.HandleFunc("GET /api/auth/session", func(w http.ResponseWriter, r *http.Request) {
@@ -370,7 +373,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'")
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, err := url.Parse(origin)
 			if err != nil || u.Host != r.Host {
@@ -384,7 +387,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 		}
 		// Personal routes retain their own device authorization. A console session
 		// never grants inbox API access, and device cookies never grant admin access.
-		if len(app) > 1 && app[1] != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/") || strings.HasPrefix(r.URL.Path, "/inbox/") || r.URL.Path == "/inbox") {
+		if len(app) > 1 && app[1] != nil && (strings.HasPrefix(r.URL.Path, "/api/v1/")) {
 			app[1].ServeHTTP(w, r)
 			return
 		}
