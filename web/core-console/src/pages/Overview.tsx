@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, GitBranch, Server, Radio } from "lucide-react";
+import {
+  ArrowUpRight,
+  GitBranch,
+  Server,
+  Radio,
+  Inbox,
+  Mic,
+  CalendarDays,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
 import { api, modelName, visibleDeviceRoutes } from "../api";
@@ -84,7 +92,7 @@ export default function Overview({
         </p>
       )}
       <header className="overview-header">
-        <h1>网络总览</h1>
+        <h1>工作台</h1>
         <div className="overview-metrics" aria-label="网络指标">
           <Link to="/agents">
             <Server size={17} />
@@ -111,6 +119,19 @@ export default function Overview({
           </Link>
         </div>
       </header>
+      <div className="workbench-launchers">
+        {[
+          { path: "/box", label: "收件箱", icon: Inbox },
+          { path: "/audio", label: "音频记录", icon: Mic },
+          { path: "/reviews", label: "每日回顾", icon: CalendarDays },
+        ].map((item) => (
+          <Link key={item.path} to={item.path}>
+            <item.icon size={22} strokeWidth={1.6} />
+            <strong>{item.label}</strong>
+            <ArrowUpRight size={17} />
+          </Link>
+        ))}
+      </div>
       <div className="overview-columns">
         <section>
           <SectionTitle title="数据流向" link="/nodes" />

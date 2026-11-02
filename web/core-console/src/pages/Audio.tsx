@@ -18,7 +18,7 @@ import {
   audioDevice,
   seconds,
 } from "../audio";
-import { Modal } from "./Apps";
+import Modal from "../Modal";
 
 const pageSize = 25;
 export default function Audio({ state }: { state: NetworkState }) {

@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { api, APIError } from "../api";
 import { Mark } from "../components";
+import ThemeToggle from "../ThemeToggle";
 export default function Login({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState(""),
     [visible, setVisible] = useState(false),
@@ -38,6 +39,7 @@ export default function Login({ onLogin }: { onLogin: () => void }) {
           <div className="wordmark">
             <Mark small />
             Orbit
+            <ThemeToggle />
           </div>
           <h1>登录工作台</h1>
           <form onSubmit={submit}>

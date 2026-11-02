@@ -25,11 +25,12 @@ import { api, errorText } from "./api";
 import type { NetworkState, RouteDocument } from "./api";
 import { Mark, Loading } from "./components";
 import Login from "./pages/Login";
+import ThemeToggle from "./ThemeToggle";
 const Overview = lazy(() => import("./pages/Overview"));
 const Agents = lazy(() => import("./pages/Agents"));
 const Nodes = lazy(() => import("./pages/Nodes"));
 const System = lazy(() => import("./pages/System"));
-const Apps = lazy(() => import("./pages/Apps"));
+const Box = lazy(() => import("./pages/Box"));
 const MqttUsers = lazy(() => import("./pages/MqttUsers"));
 const Audio = lazy(() => import("./pages/Audio"));
 const Reviews = lazy(() => import("./pages/Reviews"));
@@ -161,10 +162,20 @@ export default function App() {
   }, []);
   async function logout() {
     try {
+      if (
+        !window.dispatchEvent(
+          new Event("orbit:beforelogout", { cancelable: true }),
+        )
+      )
+        return;
+      const cache = await import("./box/controller.js");
+      if (!(await cache.confirmBoxLogout())) return;
       await api("/auth/logout", { method: "POST" });
+      window.dispatchEvent(new Event("orbit:logout"));
       setState(null);
       setRoutes(null);
       setAuth("out");
+      await cache.clearBoxCache();
     } catch (e) {
       setError(errorText(e));
     }
@@ -242,30 +253,33 @@ export default function App() {
             <span className="slash">/</span>
             <strong>{current.label}</strong>
           </div>
-          {!independent && (
-            <div className="sync">
-              <span className={"status-dot " + (error ? "warn" : "")} />
-              <span>
-                {error
-                  ? "连接异常"
-                  : lastSync
-                    ? "已同步 " +
-                      lastSync.toLocaleTimeString("zh-CN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
-                    : "同步中"}
-              </span>
-              <button
-                className="icon-button"
-                onClick={refresh}
-                disabled={busy}
-                aria-label="刷新数据"
-              >
-                <RefreshCw size={15} className={busy ? "spin" : ""} />
-              </button>
-            </div>
-          )}
+          <div className="topbar-actions">
+            <ThemeToggle />
+            {!independent && (
+              <div className="sync">
+                <span className={"status-dot " + (error ? "warn" : "")} />
+                <span>
+                  {error
+                    ? "连接异常"
+                    : lastSync
+                      ? "已同步 " +
+                        lastSync.toLocaleTimeString("zh-CN", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "同步中"}
+                </span>
+                <button
+                  className="icon-button"
+                  onClick={refresh}
+                  disabled={busy}
+                  aria-label="刷新数据"
+                >
+                  <RefreshCw size={15} className={busy ? "spin" : ""} />
+                </button>
+              </div>
+            )}
+          </div>
         </header>
         <main
           className={
@@ -281,7 +295,7 @@ export default function App() {
           <Suspense fallback={<Loading />}>
             {independent ? (
               <Routes>
-                <Route path="/box" element={<Apps />} />
+                <Route path="/box" element={<Box />} />
                 <Route path="/mqtt" element={<MqttUsers />} />
                 <Route path="/reviews" element={<Reviews />} />
                 <Route path="*" element={<Navigate to="/box" replace />} />

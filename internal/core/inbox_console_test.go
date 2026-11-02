@@ -93,6 +93,14 @@ func TestInboxConsoleWithoutMQTTKeepsAuthorizationBoundaries(t *testing.T) {
 	if w := call("GET", "/api/app/devices", "", nil, device["token"]); w.Code != 401 {
 		t.Fatal("device authorized admin API", w.Code)
 	}
+	for _, path := range []string{"/api/app/sync/snapshot", "/api/app/changes?generation=missing&after=0", "/api/app/events"} {
+		if w := call("GET", path, "", nil, device["token"]); w.Code != 401 {
+			t.Fatal("device token authorized workbench sync", path, w.Code)
+		}
+	}
+	if w := call("GET", "/api/app/sync/snapshot", "", cookie, ""); w.Code != 200 {
+		t.Fatal("workbench could not synchronize", w.Code)
+	}
 	settings := call("GET", "/api/app/navigation/"+device["id"], "", cookie, "")
 	if settings.Code != 200 {
 		t.Fatal("cannot read device settings", settings.Code, settings.Body.String())

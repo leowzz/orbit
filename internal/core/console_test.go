@@ -164,7 +164,7 @@ func TestConsoleRoutesValidationConflictAuthAndHotApply(t *testing.T) {
 	if w := request("GET", "/api/state", "", "", ""); w.Code != 401 {
 		t.Fatal(w.Code)
 	}
-	if w := request("GET", "/", "", "test-password", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "Core Console") {
+	if w := request("GET", "/", "", "test-password", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "Orbit 工作台") {
 		t.Fatal(w.Code)
 	}
 	if w := request("PUT", "/api/routes", `{"revision":1,"routes":{}}`, "test-password", "https://evil.example"); w.Code != 403 {

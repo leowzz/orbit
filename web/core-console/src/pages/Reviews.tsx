@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { api, errorText } from "../api";
 import { Badge, PageHead } from "../components";
-import { Modal } from "./Apps";
+import Modal from "../Modal";
 import "../reviews.css";
 import {
   type Review,
