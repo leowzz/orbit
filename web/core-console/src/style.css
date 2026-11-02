@@ -288,19 +288,19 @@
 :root {
   font-family: var(--font-sans);
   color: var(--text);
-  background: #f6f9fc;
+  background: #f7f8fa;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   font-size: 16px;
   font-weight: 400;
   line-height: 1.6;
-  --text: #243449;
-  --muted: #62748a;
-  --line: #e3ebf3;
-  --surface-soft: #f3f7fb;
-  --accent: #2563eb;
-  --accent-soft: #edf4ff;
+  --text: #222a35;
+  --muted: #697386;
+  --line: #e5e8ee;
+  --surface-soft: #f6f7f9;
+  --accent: #345ce2;
+  --accent-soft: #eef2ff;
   color-scheme: light;
 }
 * {
@@ -587,11 +587,13 @@ strong {
   inset: 0 auto 0 0;
   display: flex;
   flex-direction: column;
-  padding: 32px 20px 18px;
+  padding: 28px 18px 18px;
+  overflow-y: auto;
   z-index: 40;
 }
 .sidebar .wordmark {
   padding: 0 11px;
+  margin-bottom: 32px;
 }
 .workspace {
   margin: 32px 0 24px;
@@ -634,7 +636,7 @@ strong {
 .sidebar nav {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 4px;
 }
 .sidebar nav a {
   display: flex;
@@ -663,7 +665,7 @@ strong {
 }
 .sidebar-bottom {
   margin-top: auto;
-  padding-top: 60px;
+  padding-top: 28px;
 }
 .sidebar-note {
   padding: 16px 10px;
@@ -708,7 +710,7 @@ strong {
 }
 .topbar {
   background: #ffffffd9;
-  height: 72px;
+  height: 64px;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;

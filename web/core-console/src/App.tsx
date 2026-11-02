@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   NavLink,
   Navigate,
@@ -8,7 +8,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import {
-  Smartphone,
+  Inbox,
   Boxes,
   LayoutDashboard,
   KeyRound,
@@ -25,20 +25,20 @@ import { api, errorText } from "./api";
 import type { NetworkState, RouteDocument } from "./api";
 import { Mark, Loading } from "./components";
 import Login from "./pages/Login";
-import Overview from "./pages/Overview";
-import Agents from "./pages/Agents";
-import Nodes from "./pages/Nodes";
-import System from "./pages/System";
-import Apps from "./pages/Apps";
-import MqttUsers from "./pages/MqttUsers";
-import Audio from "./pages/Audio";
-import Reviews from "./pages/Reviews";
+const Overview = lazy(() => import("./pages/Overview"));
+const Agents = lazy(() => import("./pages/Agents"));
+const Nodes = lazy(() => import("./pages/Nodes"));
+const System = lazy(() => import("./pages/System"));
+const Apps = lazy(() => import("./pages/Apps"));
+const MqttUsers = lazy(() => import("./pages/MqttUsers"));
+const Audio = lazy(() => import("./pages/Audio"));
+const Reviews = lazy(() => import("./pages/Reviews"));
 const navigation = [
   { path: "/", label: "总览", icon: LayoutDashboard },
+  { path: "/box", label: "收件箱", icon: Inbox },
   { path: "/agents", label: "电脑与来源", icon: Server },
   { path: "/nodes", label: "设备", icon: Boxes },
   { path: "/mqtt", label: "MQTT 账号", icon: KeyRound },
-  { path: "/messages", label: "收件箱", icon: Smartphone },
   { path: "/audio", label: "音频记录", icon: Mic },
   { path: "/reviews", label: "每日回顾", icon: CalendarDays },
   { path: "/system", label: "系统信息", icon: Settings2 },
@@ -70,6 +70,15 @@ export default function App() {
     };
   }, []);
   const location = useLocation();
+  const independent = [
+    "/box",
+    "/messages",
+    "/apps",
+    "/inbox",
+    "/inbox/",
+    "/mqtt",
+    "/reviews",
+  ].includes(location.pathname);
   useEffect(() => {
     setMenu(false);
   }, [location.pathname]);
@@ -107,7 +116,7 @@ export default function App() {
     }
   }, []);
   useEffect(() => {
-    if (auth !== "in") return;
+    if (auth !== "in" || independent) return;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
     async function poll() {
@@ -121,7 +130,7 @@ export default function App() {
       } catch (e) {
         if (active) setError(errorText(e));
       } finally {
-        if (active) timer = setTimeout(poll, 5000);
+        if (active) timer = setTimeout(poll, document.hidden ? 30000 : 5000);
       }
     }
     void refresh();
@@ -130,7 +139,7 @@ export default function App() {
       active = false;
       clearTimeout(timer);
     };
-  }, [auth, refresh]);
+  }, [auth, refresh, independent]);
   const updateNodeLabel = useCallback((id: string, label: string) => {
     setState((current) =>
       current
@@ -193,7 +202,7 @@ export default function App() {
       >
         <div className="wordmark">
           <Mark small />
-          Orbit<span>控制台</span>
+          Orbit<span>工作台</span>
           <button
             className="mobile-close icon-button"
             onClick={() => setMenu(false)}
@@ -202,14 +211,6 @@ export default function App() {
             <X size={18} />
           </button>
         </div>
-        <div className="workspace">
-          <span className="workspace-dot" />
-          <div>
-            <strong>{state?.core_id ?? "Orbit"}</strong>
-            <small>个人工作空间</small>
-          </div>
-        </div>
-        <div className="nav-label">工作空间</div>
         <nav>
           {navigation.map((item) => (
             <NavLink key={item.path} to={item.path} end={item.path === "/"}>
@@ -219,10 +220,6 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-note">
-            <span className="status-dot" />
-            Core 控制台<span>私有网络</span>
-          </div>
           <button onClick={logout}>
             <LogOut size={16} />
             退出登录
@@ -245,96 +242,97 @@ export default function App() {
             <span className="slash">/</span>
             <strong>{current.label}</strong>
           </div>
-          <div className="sync">
-            <span className={"status-dot " + (error ? "warn" : "")} />
-            <span>
-              {error
-                ? "连接异常"
-                : lastSync
-                  ? "已同步 " +
-                    lastSync.toLocaleTimeString("zh-CN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
-                  : "同步中"}
-            </span>
-            <button
-              className="icon-button"
-              onClick={refresh}
-              disabled={busy}
-              aria-label="刷新数据"
-            >
-              <RefreshCw size={15} className={busy ? "spin" : ""} />
-            </button>
-          </div>
+          {!independent && (
+            <div className="sync">
+              <span className={"status-dot " + (error ? "warn" : "")} />
+              <span>
+                {error
+                  ? "连接异常"
+                  : lastSync
+                    ? "已同步 " +
+                      lastSync.toLocaleTimeString("zh-CN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    : "同步中"}
+              </span>
+              <button
+                className="icon-button"
+                onClick={refresh}
+                disabled={busy}
+                aria-label="刷新数据"
+              >
+                <RefreshCw size={15} className={busy ? "spin" : ""} />
+              </button>
+            </div>
+          )}
         </header>
         <main
           className={
             location.pathname.startsWith("/nodes/") ? "device-page" : undefined
           }
         >
-          {error && (
+          {!independent && error && (
             <div className="banner error" role="alert">
               {error}
               <button onClick={refresh}>重试</button>
             </div>
           )}
-          {state && routes ? (
-            <Routes>
-              <Route
-                path="/"
-                element={<Overview state={state} document={routes} />}
-              />
-              <Route
-                path="/agents"
-                element={<Agents state={state} document={routes} />}
-              />
-              <Route
-                path="/nodes"
-                element={
-                  <Nodes
-                    state={state}
-                    document={routes}
-                    onChange={setRoutes}
-                    onLabelChange={updateNodeLabel}
-                    onArchiveChange={updateNodeArchive}
-                  />
-                }
-              />
-              <Route
-                path="/nodes/:nodeId"
-                element={
-                  <Nodes
-                    state={state}
-                    document={routes}
-                    onChange={setRoutes}
-                    onLabelChange={updateNodeLabel}
-                    onArchiveChange={updateNodeArchive}
-                  />
-                }
-              />
-              <Route path="/routes" element={<LegacyRoutes />} />
-              <Route
-                path="/system"
-                element={<System state={state} document={routes} />}
-              />
-              <Route path="/messages" element={<Apps />} />
-              <Route path="/mqtt" element={<MqttUsers />} />
-              <Route path="/audio" element={<Audio state={state} />} />
-              <Route path="/reviews" element={<Reviews />} />
-              <Route
-                path="/apps"
-                element={<Navigate to="/messages" replace />}
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          ) : (
-            <Loading />
-          )}
+          <Suspense fallback={<Loading />}>
+            {independent ? (
+              <Routes>
+                <Route path="/box" element={<Apps />} />
+                <Route path="/mqtt" element={<MqttUsers />} />
+                <Route path="/reviews" element={<Reviews />} />
+                <Route path="*" element={<Navigate to="/box" replace />} />
+              </Routes>
+            ) : state && routes ? (
+              <Routes>
+                <Route
+                  path="/"
+                  element={<Overview state={state} document={routes} />}
+                />
+                <Route
+                  path="/agents"
+                  element={<Agents state={state} document={routes} />}
+                />
+                <Route
+                  path="/nodes"
+                  element={
+                    <Nodes
+                      state={state}
+                      document={routes}
+                      onChange={setRoutes}
+                      onLabelChange={updateNodeLabel}
+                      onArchiveChange={updateNodeArchive}
+                    />
+                  }
+                />
+                <Route
+                  path="/nodes/:nodeId"
+                  element={
+                    <Nodes
+                      state={state}
+                      document={routes}
+                      onChange={setRoutes}
+                      onLabelChange={updateNodeLabel}
+                      onArchiveChange={updateNodeArchive}
+                    />
+                  }
+                />
+                <Route path="/routes" element={<LegacyRoutes />} />
+                <Route
+                  path="/system"
+                  element={<System state={state} document={routes} />}
+                />
+                <Route path="/audio" element={<Audio state={state} />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            ) : (
+              <Loading />
+            )}
+          </Suspense>
         </main>
-        <footer className="app-footer">
-          <span>Orbit 控制台</span>
-        </footer>
       </div>
     </div>
   );
