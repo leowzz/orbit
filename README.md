@@ -3,7 +3,7 @@
 Orbit connects trusted host state to display nodes. The current V1 path reads
 Sub2API usage and local Codex task state in a host Agent, transports Protobuf
 observations over MQTT, and lets Core publish retained views for OLED and
-Android nodes. Core includes an authenticated React workbench for inspecting
+Android nodes. An independent React workbench connects to Core for inspecting
 Agents and Nodes and managing projection routes stored in local SQLite.
 Deployment settings remain in YAML.
 
@@ -17,7 +17,8 @@ audio-records page. See [audio setup and protocol](docs/audio-pipeline.md).
 | --- | --- |
 | Agent | Collect host usage and Codex state; execute enabled typed capabilities. |
 | ASR worker Agent | Consume queued audio on a Windows/Linux host and return structured speech recognition results; desktop controls and Windows tray support. |
-| Core + workbench | Validate observations, manage routes, publish device views and serve the shared inbox at `/box`. Defaults to `127.0.0.1:7620`. |
+| Core | Validate observations, manage routes and publish device views. Management API defaults to `127.0.0.1:7620`. |
+| Console | React workbench based on shadcn-admin, including `/box`. Independent Nginx service at `127.0.0.1:7621` proxies `/api` to Core. |
 | OLED / Android Node | Render the view assigned by Core on a physical display or Android widgets. |
 | Xiaozhi color display | ESP32-S3 / ST7789 320x240 device showing API usage or weekly quota, managed by Core. [Firmware build and USB setup](nodes/display/models/xiaozhi-320x240/variants/ma-xin-wifi/README.md). |
 
@@ -108,9 +109,8 @@ locally. There is no arbitrary URL or shell command payload.
 ## Requirements
 
 - Go 1.27 or newer (go.mod declares go 1.27.0).
-- Node.js 22.12+ and pnpm 11.9.0 for the Core console and Make-based Go
-  builds/checks (CI and Docker use Node 24). These are not needed to run the
-  compiled Core binary.
+- Node.js 22.12+ and pnpm 11.9.0 for the frontend (CI and Docker use Node 24).
+  Go builds and backend tests work independently. Docker is required for the browser regression suite.
 - uv and Python 3.13 or newer for the firmware project.
 - A C++17 toolchain supported by PlatformIO.
 - For live operation: an MQTT broker reachable by all participants, credentials
@@ -140,7 +140,7 @@ From the repository root, download Go dependencies and run the Go build:
 
 ~~~shell
 go mod download
-make build-go       # build the console, then compile all Go packages
+make build-go       # compile all Go packages; no frontend dependencies
 make build-core     # write a standalone binary to dist/orbit-core
 ~~~
 
@@ -257,7 +257,7 @@ The hardware wiring expected by this variant is:
 
 Set `console.password` in the existing Core YAML, then run `make dev-core` and
 open <http://127.0.0.1:5173> for the Vite development console with hot updates.
-The compiled Core serves its embedded console at <http://127.0.0.1:7620>.
+Core serves APIs at `7620`; the production frontend is a separate Nginx service at `7621`.
 The console has separate pages:
 
 | Page | Contents |
@@ -267,7 +267,7 @@ The console has separate pages:
 | Devices (`/nodes`) | Unified MQTT/App device list and App authorization. |
 | Device (`/nodes/:id`) | Data content/display, independent shortcut pairings, connection and access. |
 | MQTT accounts (`/mqtt`) | Create scoped Node/Agent credentials, reset passwords and revoke access. |
-| Inbox (`/messages`) | Shared texts, tasks and photos. |
+| Inbox (`/box`) | Shared texts, tasks and photos. |
 | System (`/system`) | Core identity, storage, session, and observation policies. |
 
 Shortcut pairings connect each receiver to multiple Agents or execution-capable App Nodes independently of data routes. Local targets stay on their execution endpoint. Device appearance is owned by Core. Legacy `/routes?node=...` links redirect to device details.
@@ -407,7 +407,7 @@ been deleted in the console. Manage subsequent changes through the console.
 Discovery and Canonical State are rebuilt from MQTT after restart; SQLite is
 not a history of online devices or observations.
 
-### Frontend development and embedded builds
+### Independent frontend development and builds
 
 [`web/core-console`](web/core-console/README.md) is an independent React +
 TypeScript project using Vite, Tailwind CSS, and pnpm, with its own dependencies
@@ -418,14 +418,19 @@ make dev-core       # start Core + Vite together; no frontend production build
 make dev-core-api   # start only the Go backend with its YAML
 make dev-console    # start only Vite; /api proxies to Core at 127.0.0.1:7620
 make build-console  # install locked frontend dependencies and build assets
-make build-core     # embed frontend assets into dist/orbit-core
-make build-go       # build frontend and compile all Go packages
+make build-core     # compile the API backend to dist/orbit-core
+make build-go       # compile Go packages independently
 ```
 
-`make build-core`, Docker builds, and release CI build the frontend before Go
-embeds its assets. The resulting binary needs no Node.js, pnpm, or external
-static files at runtime. Before using `go build` or `go test` directly, run
-`make build-console`; without built assets the console entry point returns 503.
+The frontend uses the layout, UI components and theme from
+[satnaing/shadcn-admin](https://github.com/satnaing/shadcn-admin).
+Core has no frontend build dependency. `make build-console` produces static
+assets in `web/core-console/dist`; its separate Dockerfile packages them with
+Nginx. Nginx serves SPA routes and proxies `/api/` to Core with the browser Host
+and scheme preserved, so existing HttpOnly session cookies and origin checks
+continue to work. Configure `ORBIT_CORE_UPSTREAM=orbit-core:7620` at runtime.
+For a custom development backend, set `ORBIT_CORE_TARGET=http://127.0.0.1:7620`.
+
 The Vite development server uses port 5173 and the same Core login. `make dev-core`
 starts both processes with a fixed terminal header for the frontend URL and
 service status, plus tagged Core/Vite logs below. Either service exiting stops
@@ -434,8 +439,7 @@ set `ORBIT_DEV_PLAIN=1` to request plain logs explicitly.
 Edit React/TypeScript/CSS files to see hot updates without
 restarting Core. Stop them with Ctrl-C. Go changes still require a restart.
 For separate terminals, run `make dev-core-api` and `make dev-console`.
-Port 7620 serves the backend and any previously embedded assets, so use port
-5173 to see frontend changes. Vite fails if its port is occupied rather than
+Port 7620 serves the backend APIs; use port 5173 for frontend development. Vite fails if its port is occupied rather than
 silently selecting another port.
 
 ### Workbench loading and browser checks
@@ -447,18 +451,9 @@ Offscreen thumbnails use native lazy loading. Hashed assets are precompressed
 and cached as immutable; HTML and private APIs remain uncached. A failed page
 chunk offers reload without discarding persisted inbox drafts.
 
-Measured on local Chrome against the embedded Core, with an authenticated direct
-link and a fresh browser context. Sizes are bytes, excluding HTTP headers and
-message/attachment payloads; timings depend on the host and are not a latency SLO.
-Baseline is `8485184`, where the inbox was `/messages`.
-
-| Metric | Baseline | Workbench `/box` |
-| --- | ---: | ---: |
-| JavaScript decoded size, complete route | 359,315 | 273,890 |
-| JavaScript actually transferred | 359,315 | 90,753 |
-| JavaScript + CSS actually transferred | 412,844 | 103,254 |
-| Hashed asset transfer on repeat load | 412,844 | 0 |
-| Unrelated state/routes/devices startup requests | 3 | 0 |
+Route sizes can be inspected from the build manifest. Browser checks cover
+compression, immutable asset caching and route loading through the production
+Nginx configuration against a temporary Core backend.
 
 Reproduce the current route import sizes and browser checks:
 
@@ -471,8 +466,10 @@ pnpm --dir web/core-console test:browser
 ORBIT_BROWSER_CHANNEL=chrome pnpm --dir web/core-console test:browser
 ```
 
-The browser suite starts Core on loopback port 17622 with a fresh temporary
-database; it does not read deployment configuration. It exercises direct links,
+The browser suite requires a local Docker daemon (select it with `DOCKER_CONTEXT`,
+e.g. `colima`) and starts Nginx on loopback port 17622 and
+a disposable Core fixture on port 17623 with a fresh temporary database; it does
+not read deployment configuration. Stop other processes using those test ports. It exercises direct links,
 refresh/history, editing, todos, deletion/restoration, clipboard, image selection,
 paste/drop and previews, offline queues, conflicts, failed requests, expired
 sessions, cross-tab locks, draft-aware logout, and 390px layout. It also asserts
@@ -534,18 +531,20 @@ docker compose --env-file .env -f deploy/docker-compose.yml pull
 docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ~~~
 
-The deployment binds the Core workbench to host `127.0.0.1:7620` and the native
+The deployment binds the frontend to host `127.0.0.1:7621`, Core management APIs
+to `127.0.0.1:7620`, and the native
 App API to `127.0.0.1:7622`. Set `console.listen: 0.0.0.0:7620`,
 `console.database: /app/data/core.sqlite`, and `console.password` in the Core YAML.
 When enabling App synchronization, persist `app.data_dir` under `/app/data` too.
-Only Core serves browser pages; `/box` supports direct links and refresh.
+The `orbit-console` service serves browser pages; `/box` supports direct links and refresh.
 
 Files under `configs/` are mounted read-only and must be readable by UID 65532.
 The `orbit-core-data` volume persists SQLite across container replacements;
 retain it during upgrades and back it up along with the YAML and secrets.
-Expose the Core console through an HTTPS reverse proxy to `127.0.0.1:7620`,
-or access it over an SSH tunnel. Core frontend assets are included in its image;
-there is no separate frontend service to deploy.
+Point the public HTTPS reverse proxy to `127.0.0.1:7621` and forward the original
+Host and `X-Forwarded-Proto`. The frontend proxies management and browser inbox
+APIs to Core internally. Deploy `orbit-console` alongside `orbit-core`; keep the
+Core API and native App API bindings private. An SSH tunnel can also expose the frontend.
 
 make test-go uses an in-memory MQTT broker, an httptest Sub2API server, and
 Codex fixtures. It proves source selection, initial AgentState ordering,
@@ -643,7 +642,7 @@ make uninstall-agent
 Uninstalling preserves `~/Library/Logs/Orbit/` for diagnostics and never
 removes the source YAML or secret files.
 
-Open the Core workbench at `http://127.0.0.1:7620/box` for the personal inbox.
+Open the Core workbench at `http://127.0.0.1:7621/box` for the personal inbox.
 Use the workbench password; browser access does not need a device token or
 separate process. `make dev-core` runs the same frontend with Vite during
 local development. See [personal inbox](docs/personal-inbox.md) for upgrades,
@@ -806,7 +805,7 @@ gen/go/                 generated Go Protobuf bindings
 nodes/display/          shared display firmware and model/variant delivery units
 nodes/app/              Unified Flutter inbox and Android widgets app
 nodes/android/          Shared Android widget service, settings UI, and tests
-web/core-console/       unified workbench, /box inbox and Go embed bridge
+web/core-console/       independent shadcn-admin workbench, /box inbox and Nginx gateway
 deploy/                 published-image Compose deployment
 configs/                non-sensitive host configuration examples
 docs/                   architecture, security, MQTT, and ADR documentation
@@ -820,8 +819,8 @@ are also kept in
 ## Personal inbox App
 
 For messages only, start with `configs/core.inbox.example.yaml`: no MQTT broker,
-Agent, node identity, or projection route is required. Core serves the browser
-inbox at `/box` on the workbench listener. Log in with the workbench password;
+Agent, node identity, or projection route is required. The independent console
+serves the browser inbox at `/box` and connects to Core. Log in with the workbench password;
 add independent devices for native Apps in the device settings. The separate
 App listener serves only the device API.
 See [个人收件箱：连接、使用与部署](docs/personal-inbox.md).

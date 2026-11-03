@@ -32,6 +32,72 @@ async function send(page: Page, body: string) {
   ).not.toContainText("待同步");
 }
 
+test("independent gateway preserves API authentication and asset boundaries", async ({
+  page,
+}) => {
+  for (const path of ["/", "/box", "/nodes/example"]) {
+    const response = await page.request.get(path);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["cache-control"]).toBe("no-store");
+    expect(response.headers()["content-security-policy"]).toContain(
+      "frame-ancestors 'none'",
+    );
+  }
+  for (const path of [
+    "/assets/missing.js",
+    "/assets/missing.js.gz",
+    "/.vite/manifest.json",
+    "/missing.svg",
+  ]) {
+    expect((await page.request.get(path)).status()).toBe(404);
+  }
+  expect((await page.request.get("http://127.0.0.1:17623/box")).status()).toBe(
+    404,
+  );
+  expect((await page.request.get("/api/auth/session")).status()).toBe(401);
+  // An API ending in a file extension must still reach the auth middleware.
+  expect(
+    (await page.request.get("/api/app/attachments/missing.jpg")).status(),
+  ).toBe(401);
+  const response = await page.request.post("/api/auth/login", {
+    headers: { Origin: "http://127.0.0.1:17622" },
+    data: { password: "local-check-only" },
+  });
+  expect(response.status()).toBe(200);
+  expect(response.headers()["set-cookie"]).toContain("HttpOnly");
+  expect(response.headers()["set-cookie"]).toContain("SameSite=Strict");
+  expect((await page.request.get("/api/auth/session")).status()).toBe(200);
+  expect(
+    (
+      await page.request.post("/api/auth/logout", {
+        headers: { Origin: "https://evil.example" },
+      })
+    ).status(),
+  ).toBe(403);
+  expect(
+    (
+      await page.request.post("/api/auth/logout", {
+        headers: { Origin: "http://127.0.0.1:17622" },
+      })
+    ).status(),
+  ).toBe(200);
+  expect((await page.request.get("/api/auth/session")).status()).toBe(401);
+});
+
+test("template sidebar collapses, persists and supports the keyboard", async ({
+  page,
+}) => {
+  await login(page);
+  const sidebar = page.locator('[data-slot="sidebar"][data-state]');
+  await page.locator('[data-sidebar="trigger"]').click();
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await page.reload();
+  await expect(page.locator("#sync-state")).toHaveText("已同步");
+  await expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  await page.keyboard.press("ControlOrMeta+b");
+  await expect(sidebar).toHaveAttribute("data-state", "expanded");
+});
+
 test("direct links, refresh, history, inbox actions and responsive layout", async ({
   page,
   context,
@@ -100,14 +166,8 @@ test("direct links, refresh, history, inbox actions and responsive layout", asyn
     animations: "disabled",
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole("button", { name: "打开导航" })).toBeVisible();
-  await expect(page.locator("#main-navigation")).toHaveAttribute("inert", "");
-  await expect
-    .poll(async () => {
-      const navigation = await page.locator("#main-navigation").boundingBox();
-      return Math.round(navigation!.x + navigation!.width);
-    })
-    .toBeLessThanOrEqual(0);
+  await expect(page.getByRole("button", { name: "切换导航" })).toBeVisible();
+  await expect(page.locator("#main-navigation")).toHaveCount(0);
   await expect(edited).toBeVisible();
   await send(page, "窄屏发送验收");
   await expect
@@ -122,23 +182,17 @@ test("direct links, refresh, history, inbox actions and responsive layout", asyn
     fullPage: true,
     animations: "disabled",
   });
-  await page.getByRole("button", { name: "打开导航" }).click();
-  await expect(page.locator("#main-navigation")).not.toHaveAttribute(
-    "inert",
-    "",
-  );
+  await page.getByRole("button", { name: "切换导航" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "导航", exact: true }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "总览", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "工作台", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "切换到深色模式" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect
-    .poll(async () => {
-      const navigation = await page.locator("#main-navigation").boundingBox();
-      return Math.round(navigation!.x + navigation!.width);
-    })
-    .toBeLessThanOrEqual(0);
+  await expect(page.locator("#main-navigation")).toHaveCount(0);
   await page.screenshot({
     path: testInfo.outputPath("mobile-home-dark.png"),
     fullPage: true,
@@ -384,8 +438,8 @@ test("cold load only fetches inbox data and repeat navigation reuses assets", as
     (sum, resource) => sum + resource.encodedBodySize,
     0,
   );
-  expect(decodedJS).toBeLessThan(300000);
-  expect(encodedJS).toBeLessThan(100000);
+  expect(decodedJS).toBeLessThan(450000);
+  expect(encodedJS).toBeLessThan(150000);
   const coldRequests = [...requests];
   await page.reload();
   await expect(page.locator("#sync-state")).toHaveText("已同步");

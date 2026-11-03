@@ -86,7 +86,7 @@ kill-core:
 
 build: build-go
 
-build-go: build-console
+build-go:
 	$(GO) build ./...
 
 build-node:
@@ -106,20 +106,20 @@ test-console: build-console
 	$(PNPM) --dir "$(CONSOLE_DIR)" check
 	$(PNPM) --dir "$(CONSOLE_DIR)" test
 
-test-go: build-console
+test-go:
 	$(GO) test ./...
 
 test-node:
 	$(MAKE) -C "$(NODE_DIR)" check
 
-lint: build-console
+lint:
 	$(GO) vet ./...
 
 fmt:
-	gofmt -w $$(find cmd internal proto -name '*.go' -type f) web/core-console/*.go
+	gofmt -w $$(find cmd internal proto -name '*.go' -type f)
 
 fmt-check:
-	@test -z "$$(gofmt -l $$(find cmd internal proto -name '*.go' -type f) web/core-console/*.go)"
+	@test -z "$$(gofmt -l $$(find cmd internal proto -name '*.go' -type f))"
 
 proto-lint: $(BUF)
 	$(BUF) lint
@@ -164,7 +164,7 @@ build-console:
 	$(PNPM) --dir "$(CONSOLE_DIR)" install --frozen-lockfile
 	$(PNPM) --dir "$(CONSOLE_DIR)" build
 
-build-core: build-console
+build-core:
 	$(GO) build -trimpath -o dist/orbit-core ./cmd/orbit-core
 
 .PHONY: desktop prepare-desktop-runtime dev-desktop-agent test-desktop-agent build-desktop-agent

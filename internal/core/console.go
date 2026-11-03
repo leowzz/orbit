@@ -22,7 +22,6 @@ import (
 	_ "modernc.org/sqlite"
 	orbitv1 "orbit/gen/go/orbit/v1"
 	"orbit/internal/config"
-	coreconsole "orbit/web/core-console"
 )
 
 // RouteStore stores one atomic, versioned routing document. An empty document is
@@ -280,7 +279,6 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	mux.Handle("POST /api/app/", admin)
 	mux.Handle("PUT /api/app/", admin)
 	mux.Handle("DELETE /api/app/", admin)
-	mux.Handle("GET /", coreconsole.Handler())
 	for _, path := range []string{"GET /inbox", "GET /inbox/"} {
 		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusSeeOther) })
 	}

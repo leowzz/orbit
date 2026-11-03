@@ -1,26 +1,20 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
-  NavLink,
   Navigate,
   Route,
   Routes,
   useLocation,
   useSearchParams,
 } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
+import { AppSidebar, navigation } from "./components/layout/app-sidebar";
 import {
-  Inbox,
-  Boxes,
-  LayoutDashboard,
-  KeyRound,
-  LogOut,
-  Menu,
-  Mic,
-  CalendarDays,
-  RefreshCw,
-  Server,
-  Settings2,
-  X,
-} from "lucide-react";
+  SidebarProvider,
+  SidebarInset,
+  SidebarTrigger,
+} from "./components/ui/sidebar";
+import { Separator } from "./components/ui/separator";
+import { Button } from "./components/ui/button";
 import { api, errorText } from "./api";
 import type { NetworkState, RouteDocument } from "./api";
 import { Mark, Loading } from "./components";
@@ -35,16 +29,6 @@ const Box = lazy(() => import("./pages/Box"));
 const MqttUsers = lazy(() => import("./pages/MqttUsers"));
 const Audio = lazy(() => import("./pages/Audio"));
 const Reviews = lazy(() => import("./pages/Reviews"));
-const navigation = [
-  { path: "/", label: "总览", icon: LayoutDashboard },
-  { path: "/box", label: "收件箱", icon: Inbox },
-  { path: "/agents", label: "电脑与来源", icon: Server },
-  { path: "/nodes", label: "设备", icon: Boxes },
-  { path: "/mqtt", label: "MQTT 账号", icon: KeyRound },
-  { path: "/audio", label: "音频记录", icon: Mic },
-  { path: "/reviews", label: "每日回顾", icon: CalendarDays },
-  { path: "/system", label: "系统信息", icon: Settings2 },
-];
 export default function App() {
   const [auth, setAuth] = useState<"checking" | "in" | "out" | "error">(
       "checking",
@@ -53,24 +37,7 @@ export default function App() {
     [routes, setRoutes] = useState<RouteDocument | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [lastSync, setLastSync] = useState<Date | null>(null),
-    [menu, setMenu] = useState(false);
-  const [narrow, setNarrow] = useState(
-    () => window.matchMedia("(max-width: 760px)").matches,
-  );
-  useEffect(() => {
-    const media = window.matchMedia("(max-width: 760px)");
-    const update = () => setNarrow(media.matches);
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenu(false);
-    };
-    media.addEventListener("change", update);
-    window.addEventListener("keydown", escape);
-    return () => {
-      media.removeEventListener("change", update);
-      window.removeEventListener("keydown", escape);
-    };
-  }, []);
+    [lastSync, setLastSync] = useState<Date | null>(null);
   const location = useLocation();
   const independent = [
     "/box",
@@ -82,9 +49,6 @@ export default function App() {
     "/mqtt",
     "/reviews",
   ].includes(location.pathname);
-  useEffect(() => {
-    setMenu(false);
-  }, [location.pathname]);
   const session = useCallback(() => {
     setAuth("checking");
     api("/auth/session")
@@ -202,63 +166,29 @@ export default function App() {
         (item.path !== "/" && location.pathname.startsWith(item.path + "/")),
     ) ?? navigation[0];
   return (
-    <div className="app-shell">
-      <button
-        className={"mobile-scrim " + (menu ? "visible" : "")}
-        onClick={() => setMenu(false)}
-        aria-label="关闭导航"
-      />
-      <aside
-        id="main-navigation"
-        inert={narrow && !menu}
-        className={"sidebar " + (menu ? "open" : "")}
+    <SidebarProvider
+      defaultOpen={!document.cookie.split("; ").includes("sidebar_state=false")}
+    >
+      <a
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:p-3"
+        href="#main-content"
       >
-        <div className="wordmark">
-          <Mark small />
-          Orbit<span>工作台</span>
-          <button
-            className="mobile-close icon-button"
-            onClick={() => setMenu(false)}
-            aria-label="关闭导航"
-          >
-            <X size={18} />
-          </button>
-        </div>
-        <nav>
-          {navigation.map((item) => (
-            <NavLink key={item.path} to={item.path} end={item.path === "/"}>
-              <item.icon size={17} strokeWidth={1.6} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <button onClick={logout}>
-            <LogOut size={16} />
-            退出登录
-          </button>
-        </div>
-      </aside>
-      <div className="main-shell">
-        <header className="topbar">
-          <div>
-            <button
-              className="mobile-menu icon-button"
-              onClick={() => setMenu(true)}
-              aria-label="打开导航"
-              aria-expanded={menu}
-              aria-controls="main-navigation"
-            >
-              <Menu size={20} />
-            </button>
-            <span>工作空间</span>
-            <span className="slash">/</span>
-            <strong>{current.label}</strong>
-          </div>
-          <div className="topbar-actions">
+        跳到主要内容
+      </a>
+      <AppSidebar onLogout={logout} />
+      <SidebarInset className="min-w-0">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur-sm md:px-6">
+          <SidebarTrigger aria-label="切换导航" />
+          <Separator orientation="vertical" className="mr-1 h-4" />
+          <span className="hidden text-sm text-muted-foreground sm:inline">
+            工作台
+          </span>
+          <span className="hidden text-muted-foreground/50 sm:inline">/</span>
+          <span className="text-sm font-medium">{current.label}</span>
+          <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
             {!independent && (
-              <div className="sync">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className={"status-dot " + (error ? "warn" : "")} />
                 <span>
                   {error
@@ -271,24 +201,28 @@ export default function App() {
                         })
                       : "同步中"}
                 </span>
-                <button
-                  className="icon-button"
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={refresh}
                   disabled={busy}
                   aria-label="刷新数据"
                 >
                   <RefreshCw size={15} className={busy ? "spin" : ""} />
-                </button>
+                </Button>
               </div>
             )}
           </div>
         </header>
         <main
+          id="main-content"
+          tabIndex={-1}
           className={
-            location.pathname.startsWith("/nodes/") ? "device-page" : undefined
+            "w-full min-w-0 max-w-none px-4 py-6 md:px-6 " +
+            (location.pathname.startsWith("/nodes/") ? "device-page" : "")
           }
         >
-          {!independent && error && (
+          {error && (
             <div className="banner error" role="alert">
               {error}
               <button onClick={refresh}>重试</button>
@@ -351,8 +285,8 @@ export default function App() {
             </Suspense>
           </PageBoundary>
         </main>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 

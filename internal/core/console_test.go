@@ -151,8 +151,10 @@ func TestConsoleRoutesValidationConflictAuthAndHotApply(t *testing.T) {
 	if w := request("GET", "/api/state", "", "", ""); w.Code != 401 {
 		t.Fatal(w.Code)
 	}
-	if w := request("GET", "/", "", "test-password", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "Orbit 工作台") {
-		t.Fatal(w.Code)
+	for _, path := range []string{"/", "/box", "/assets/index.js"} {
+		if w := request("GET", path, "", "test-password", ""); w.Code != http.StatusNotFound {
+			t.Fatalf("Core must serve APIs only: %s returned %d", path, w.Code)
+		}
 	}
 	if w := request("PUT", "/api/routes", `{"revision":1,"routes":{}}`, "test-password", "https://evil.example"); w.Code != 403 {
 		t.Fatal(w.Code)

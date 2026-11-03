@@ -9,9 +9,11 @@ Pushing `main` runs `.github/workflows/unit-tests.yml`, covering Go/Web, scripts
 Android, the desktop Agent, and ESP32-S3 config/native tests without packaging,
 signing, or uploading distributable artifacts.
 
-`Windows Agent` (`.github/workflows/windows-agent.yml`) additionally runs on branch
-pushes and pull requests touching the desktop Agent, canonical protocol, or its
-build workflows, and supports manual dispatch. It checks TypeScript, UI tests,
+`Windows Agent` (`.github/workflows/windows-agent.yml`) additionally runs on `main`
+pushes and pull requests touching `agents/desktop/**` or `proto/**`. Feature-branch
+pushes do not duplicate PR runs. Workflow-only changes use manual dispatch;
+console and image workflow changes do not automatically build a Windows installer.
+It checks TypeScript, UI tests,
 Rust formatting/clippy/tests on `windows-2022`, builds a release-mode x64 NSIS
 installer, and uploads `windows-agent-x64` (installer plus `WINDOWS-SHA256SUMS`,
 retained for 14 days). Download it from the workflow run's Artifacts section.
@@ -22,7 +24,8 @@ Windows packaging. Rust compilation uses two jobs to limit linker memory use.
 ## Outputs
 
 - Linux amd64 images: `ghcr.io/leowzz/orbit-agent:TAG`,
-  `ghcr.io/leowzz/orbit-core:TAG`. The Core image includes the workbench.
+  `ghcr.io/leowzz/orbit-core:TAG`, and `ghcr.io/leowzz/orbit-console:TAG`.
+  The console image serves the independent frontend and proxies `/api/` to Core.
   The workflow derives the lowercase owner from the repository. Each image is
   signed by digest using GitHub OIDC and Cosign. Existing Aliyun mirror publishing
   and signing runs when both Aliyun registry secrets are present.

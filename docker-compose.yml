@@ -16,3 +16,8 @@ services:
       <<: *orbit-build
       args:
         BINARY: orbit-core
+
+  orbit-console:
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-console:${version:?set version in .env}
+    build:
+      context: ./web/core-console

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { Badge as AdminBadge } from "./components/ui/badge";
 export function Mark({ small = false }: { small?: boolean }) {
   return (
     <img
@@ -45,10 +46,19 @@ export function Badge({
   tone?: "neutral" | "good" | "warn";
 }) {
   return (
-    <span className={"badge " + tone}>
+    <AdminBadge
+      variant="outline"
+      className={
+        tone === "good"
+          ? "border-transparent bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+          : tone === "warn"
+            ? "border-transparent bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+            : "border-transparent bg-secondary text-muted-foreground"
+      }
+    >
       <i />
       {children}
-    </span>
+    </AdminBadge>
   );
 }
 export function Empty({
