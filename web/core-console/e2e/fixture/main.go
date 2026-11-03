@@ -46,8 +46,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("Local fixture: http://127.0.0.1:17622")
-	server := &http.Server{Addr: "127.0.0.1:17622", Handler: core.InboxConsoleHandler(engine, routes, cfg, personal.AdminHandler(), personal.Handler()), ReadHeaderTimeout: 5 * time.Second}
+	fmt.Println("Local API fixture: http://127.0.0.1:17623")
+	server := &http.Server{Addr: "0.0.0.0:17623", Handler: core.InboxConsoleHandler(engine, routes, cfg, personal.AdminHandler(), personal.Handler()), ReadHeaderTimeout: 5 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() { <-ctx.Done(); _ = server.Close() }()

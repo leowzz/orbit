@@ -20,6 +20,15 @@ services:
       - orbit-core-data:/app/data
     image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-core:${version:?set version in .env}
 
+  orbit-console:
+    restart: unless-stopped
+    image: registry.cn-heyuan.aliyuncs.com/leo03w/orbit-console:${version:?set version in .env}
+    depends_on:
+      - orbit-core
+    environment:
+      ORBIT_CORE_UPSTREAM: orbit-core:7620
+    ports:
+      - "127.0.0.1:7621:8080"
 
 volumes:
   orbit-core-data:

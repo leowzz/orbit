@@ -1,13 +1,13 @@
 .box {
-  --border: var(--line);
-  --surface: #fff;
-  --page: #f7f8fa;
+  --box-border: var(--line);
+  --surface: var(--card);
+  --page: var(--background);
   --hover: var(--surface-soft);
   --soft: var(--surface-soft);
   --strong: var(--text);
   --warning: #fff8eb;
   --warning-border: #eedbb6;
-  --on-accent: #fff;
+  --on-accent: var(--primary-foreground);
   max-width: 960px;
   margin: 0 auto;
   [hidden] {
@@ -26,7 +26,7 @@
   }
   button {
     min-height: 36px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     border-radius: 9px;
     background: var(--surface);
     padding: 6px 12px;
@@ -39,14 +39,14 @@
     cursor: wait;
   }
   button.primary {
-    background: var(--accent);
+    background: var(--brand);
     color: var(--on-accent);
-    border-color: var(--accent);
+    border-color: var(--brand);
   }
   input,
   textarea,
   select {
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     border-radius: 9px;
     background: var(--surface);
     padding: 9px 12px;
@@ -62,7 +62,7 @@
   textarea:focus-visible,
   select:focus-visible,
   summary:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--brand);
     outline-offset: 3px;
   }
   header {
@@ -123,7 +123,7 @@
   }
   #sync-state {
     font-size: 13px;
-    color: var(--muted);
+    color: var(--text-muted);
   }
   .box-content {
     padding-bottom: 210px;
@@ -131,7 +131,7 @@
   .search {
     display: flex;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     border-radius: 10px;
     flex: 1;
     min-width: 130px;
@@ -144,14 +144,14 @@
     background: none;
   }
   .date-heading {
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 14px;
     font-weight: 500;
     margin: 24px 2px 10px;
   }
   .message {
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     border-radius: 14px;
     padding: 16px 20px;
     margin: 10px 0;
@@ -161,7 +161,7 @@
     align-items: center;
     gap: 10px;
     min-height: 30px;
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 13px;
     margin-bottom: 8px;
   }
@@ -188,7 +188,7 @@
     z-index: 3;
     background: var(--surface);
     box-shadow: 0 6px 24px #1b243014;
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     padding: 6px;
     border-radius: 10px;
     min-width: 120px;
@@ -211,7 +211,7 @@
     overflow: hidden;
   }
   .message.completed .message-body {
-    color: var(--muted);
+    color: var(--text-muted);
     text-decoration: line-through;
   }
   .body-row {
@@ -225,7 +225,7 @@
     flex: 0 0 18px;
     width: 18px;
     height: 18px;
-    accent-color: var(--accent);
+    accent-color: var(--brand);
   }
   .body-content {
     min-width: 0;
@@ -238,9 +238,9 @@
     margin-top: 12px;
   }
   .links a {
-    color: var(--accent);
+    color: var(--brand);
     font-size: 14px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     border-radius: 8px;
     padding: 5px 10px;
     max-width: 100%;
@@ -263,7 +263,7 @@
   .box-empty {
     padding: 70px 16px;
     text-align: center;
-    color: var(--muted);
+    color: var(--text-muted);
   }
   .box-empty strong {
     font-size: 20px;
@@ -286,7 +286,7 @@
     max-width: 960px;
     margin: auto;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     border-radius: 16px;
     padding: 12px 14px;
     box-shadow: 0 5px 24px #1b243009;
@@ -313,11 +313,11 @@
     white-space: nowrap;
   }
   .todo-switch input {
-    accent-color: var(--accent);
+    accent-color: var(--brand);
   }
   .shortcut {
     margin-left: auto;
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 12px;
   }
   .compose-actions #send {
@@ -340,7 +340,7 @@
   }
   #attachment {
     font-size: 14px;
-    color: var(--accent);
+    color: var(--brand);
     display: flex;
     align-items: center;
     gap: 12px;
@@ -364,7 +364,7 @@
     font-size: 14px;
   }
   dialog {
-    border: 1px solid var(--border);
+    border: 1px solid var(--box-border);
     border-radius: 16px;
     padding: 24px;
     max-width: calc(100vw - 32px);

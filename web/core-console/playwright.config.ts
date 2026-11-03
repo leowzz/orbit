@@ -9,9 +9,10 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "go run ./e2e/fixture",
+    command: "node e2e/serve.mjs",
     url: "http://127.0.0.1:17622/box",
     reuseExistingServer: false,
+    gracefulShutdown: { signal: "SIGTERM", timeout: 5000 },
     timeout: 60000,
   },
 });

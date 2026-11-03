@@ -1,0 +1,53 @@
+map $http_x_forwarded_proto $orbit_proto {
+    default $scheme;
+    https https;
+}
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    server_tokens off;
+    gzip_vary on;
+    client_max_body_size 100m;
+
+    add_header Cache-Control no-store always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy same-origin always;
+    # Radix uses inline styles for layout. Inbox supports local image previews.
+    add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'" always;
+
+    location ^~ /api/ {
+        proxy_pass http://${ORBIT_CORE_UPSTREAM};
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Proto $orbit_proto;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Connection "";
+        # Inbox event streams and audio uploads must reach Core immediately.
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_read_timeout 1h;
+        proxy_hide_header Content-Security-Policy;
+    }
+
+    location ^~ /assets/ {
+        if ($uri ~ "(^|/)\.|\.gz$") { return 404; }
+        try_files $uri =404;
+        gzip_static on;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options nosniff always;
+    }
+
+    location ~ (^|/)\. { return 404; }
+    location ~ \.gz$ { return 404; }
+    location ~ \.[^/]+$ { try_files $uri =404; }
+
+    location / {
+        try_files $uri /index.html;
+        add_header Cache-Control no-store;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; frame-ancestors 'none'; base-uri 'none'" always;
+    }
+}

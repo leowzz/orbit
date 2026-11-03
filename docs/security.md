@@ -8,13 +8,16 @@ The action accepts a lowercase UUID, constructs the fixed
 command from the network. Commands expire within 30 seconds and are deduplicated
 in bounded process memory.
 
-Core serves a single browser workbench. `/box` and management pages share the
-existing password and persistent random session, stored in an HttpOnly,
+The independent console service serves the browser workbench and proxies `/api/`
+to Core with the original Host and scheme. Core serves APIs without static assets.
+`/box` and management pages share the existing password and persistent random
+session, stored in an HttpOnly,
 SameSite=Strict cookie. Management APIs enforce the console's origin checks.
 Device bearer tokens and `/api/v1` device cookies cannot authorize management
 requests; management cookies cannot authorize device requests. Static assets
-remain public so browsers can render the login form. The standalone browser
-proxy has been removed. Workbench SSE streams contain watermarks only and
+remain public so browsers can render the login form. The frontend Nginx gateway
+preserves the same browser origin; no cross-origin credentials or permissive CORS
+are required. Workbench SSE streams contain watermarks only and
 reconnect at least once a minute to revalidate their session; content requests
 always pass through the normal authorization middleware.
 

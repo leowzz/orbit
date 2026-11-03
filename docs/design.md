@@ -1,6 +1,6 @@
 # Orbit 总体设计
 
-当前浏览器统一使用 Core 工作台，收件箱入口为 `/box`。工作台通过管理会话访问 `/api/app/`；原生 App 继续使用独立设备令牌及 `/api/v1/`。`overview-web` 只保留旧协议兼容，不再对应独立网页进程；MQTT 的通用 Node/Intent 契约仍保留。
+当前浏览器统一使用独立的 React 工作台，收件箱入口为 `/box`。前端基于 shadcn-admin，由独立 Nginx 服务托管并同源代理 `/api/`；Go Core 仅提供 API，不再内嵌静态资源。工作台通过管理会话访问 `/api/app/`；原生 App 继续使用独立设备令牌及 `/api/v1/`。`overview-web` 只保留旧协议兼容，不再对应独立网页进程；MQTT 的通用 Node/Intent 契约仍保留。
 
 
 > 状态：Draft  

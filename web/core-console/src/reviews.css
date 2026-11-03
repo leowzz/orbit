@@ -18,7 +18,7 @@
 .review-date-controls strong small {
   display: block;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-weight: 400;
   margin-top: 5px;
 }
@@ -42,14 +42,14 @@
 .review-view-switch button {
   border: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--text-muted);
   padding: 6px 18px;
   border-radius: 6px;
   cursor: pointer;
 }
 .review-view-switch button[aria-pressed="true"] {
   background: white;
-  color: var(--accent);
+  color: var(--brand);
   box-shadow: 0 1px 3px #24344912;
 }
 .review-caption {
@@ -58,7 +58,7 @@
   flex-wrap: wrap;
   gap: 8px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text-muted);
   margin: 12px 0;
 }
 .review-caption span {
@@ -72,7 +72,7 @@
   background: var(--surface-soft);
   border-radius: 10px;
   margin-bottom: 14px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 14px;
 }
 .review-calendar {
@@ -109,7 +109,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 .review-day-heading {
@@ -133,7 +133,7 @@
 }
 .review-day-heading span {
   width: 100%;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 .review-day-heading strong {
@@ -145,17 +145,17 @@
   font-size: 10px;
 }
 .review-day-heading.today {
-  background: var(--accent-soft);
+  background: var(--brand-soft);
 }
 .review-day-heading.today strong,
 .review-day-heading.today small {
-  color: var(--accent);
+  color: var(--brand);
 }
 .review-daily-link {
   display: block;
   border: 0;
   background: transparent;
-  color: var(--accent);
+  color: var(--brand);
   font-size: 11px;
   width: 100%;
   margin-top: 4px;
@@ -176,7 +176,7 @@
   padding: 9px 8px;
   text-align: right;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   background: white;
   position: sticky;
@@ -198,7 +198,7 @@
   min-height: 76px;
   padding: 8px;
   border: 1px solid #dce8fb;
-  background: var(--accent-soft);
+  background: var(--brand-soft);
   border-radius: 7px;
   color: var(--text);
   cursor: pointer;
@@ -208,7 +208,7 @@
   margin-top: 5px;
 }
 .review-slot:hover {
-  border-color: var(--accent);
+  border-color: var(--brand);
 }
 .review-slot-count {
   display: block;
@@ -218,14 +218,14 @@
   border: 1px dashed var(--line);
   background: var(--surface-soft);
   border-radius: 7px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   text-align: left;
   cursor: pointer;
 }
 .review-slot-count:hover {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--brand);
+  color: var(--brand);
 }
 .review-slot strong {
   display: block;
@@ -237,7 +237,7 @@
 .review-slot small {
   display: block;
   font-size: 10px;
-  color: var(--muted);
+  color: var(--text-muted);
   margin-top: 4px;
 }
 .review-slot-meta {
@@ -247,7 +247,7 @@
   gap: 2px 5px;
   margin-bottom: 4px;
   font-size: 10px;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 .review-slot.media,
 .review-slot.queued {
@@ -285,7 +285,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 14px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
@@ -299,7 +299,7 @@
   padding: 14px 16px;
   margin-top: 18px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 .review-coverage strong {
   color: var(--text);
@@ -326,16 +326,16 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
 }
 .review-item .review-uncertainty {
   font-size: 12px;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 .review-item details summary {
   cursor: pointer;
-  color: var(--accent);
+  color: var(--brand);
   font-size: 12px;
   padding: 4px 0;
 }
@@ -354,7 +354,7 @@
   border-bottom: 0;
 }
 .review-evidence time {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
