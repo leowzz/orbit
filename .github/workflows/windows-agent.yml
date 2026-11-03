@@ -1,19 +1,17 @@
 name: Windows Agent
 
 on:
+  # Automatic installer builds follow Agent/protocol changes only. Workflow-only
+  # edits can be verified with workflow_dispatch; tagged releases use workflow_call.
   push:
-    branches: ['**']
+    branches: [main]
     paths:
       - 'agents/desktop/**'
       - 'proto/**'
-      - '.github/workflows/windows-agent.yml'
-      - '.github/workflows/release.yml'
   pull_request:
     paths:
       - 'agents/desktop/**'
       - 'proto/**'
-      - '.github/workflows/windows-agent.yml'
-      - '.github/workflows/release.yml'
   workflow_dispatch:
   workflow_call:
     inputs:
