@@ -13,6 +13,7 @@ function client() {
         if (!elements.has(id))
           elements.set(id, {
             value: "",
+            elements: [],
             disabled: false,
             hidden: false,
             textContent: "",
@@ -34,7 +35,7 @@ function client() {
     },
     window: { addEventListener() {}, removeEventListener() {} },
     root: null,
-    navigator: { locks: { request: () => new Promise(() => {}) } },
+    indexedDB: { open: () => ({}) },
     Event,
     AbortController,
     TextEncoder,
@@ -54,7 +55,7 @@ function client() {
     .replace("export function mountBox(root) {", "");
   vm.runInContext(source, context);
   vm.runInContext(
-    'render=()=>{};save=async()=>{};$("send").disabled=false;',
+    'render=()=>{};load=async()=>structuredClone(state);save=async(change)=>{const current=structuredClone(state);change(current);return current;};$("send").disabled=false;',
     context,
   );
   return {
@@ -122,7 +123,7 @@ test("lost response retries the same operation and merges the receipt once", asy
 test("conflicts preserve the draft and newer authoritative content", async () => {
   const c = client();
   c.run(
-    `closed=false;catchUp=async()=>{};state.items=[{id:'one',body:'remote',revision:'3'}];state.outbox=[{op:{item_id:'one',body:'local',type:'update',expected_revision:'1'}}];api=async()=>{throw {code:'conflict',status:409}};`,
+    `closed=false;catchUp=async()=>{};state.items=[{id:'one',body:'remote',revision:'3'}];state.outbox=[{op:{operation_id:'edit',item_id:'one',body:'local',type:'update',expected_revision:'1'}}];api=async()=>{throw {code:'conflict',status:409}};`,
   );
   await c.run("sync()");
   assert.equal(c.run("state.outbox[0].error"), "conflict");

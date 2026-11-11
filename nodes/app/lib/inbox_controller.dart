@@ -158,7 +158,8 @@ class InboxController extends ChangeNotifier {
             ).hasMatch(body),
             'todo' => item['kind'] == 'todo' && item['completed'] != true,
             'completed' => item['kind'] == 'todo' && item['completed'] == true,
-            'image' => item['kind'] == 'image',
+            'image' =>
+              item['attachment_id'] != null || item['local_photo'] != null,
             _ => true,
           };
     }).toList();

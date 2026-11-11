@@ -338,17 +338,33 @@
   .draft-error button {
     margin: 8px 8px 0 0;
   }
-  #attachment {
+  #attachment,
+  #edit-attachment {
     font-size: 14px;
     color: var(--brand);
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 4px;
+    flex-wrap: wrap;
   }
-  #attachment-name {
+  #attachment-name,
+  #edit-attachment-name {
     overflow-wrap: anywhere;
     min-width: 0;
+  }
+  #edit-preview,
+  .draft-photo {
+    display: block;
+    max-width: min(100%, 160px);
+    max-height: 110px;
+    object-fit: contain;
+    border-radius: 6px;
+  }
+  #edit-error {
+    margin: 8px 0;
+    color: var(--destructive);
+    font-size: 14px;
   }
   #toast {
     position: fixed;

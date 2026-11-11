@@ -13,51 +13,24 @@ export function mountBox(root) {
   });
   let state = emptyState(),
     db,
-    node = "",
     syncing = false,
+    syncRequested = false,
     closed = true,
     timer,
     events,
     limit = 100,
     editing,
+    editPhoto,
+    starting = false,
     lastRender = "",
     toastTimer,
     disposed = false;
   const controller = new AbortController();
   const pictures = new Map();
-  const pendingCommits = new Set();
-  let releaseLock, lockedNode;
-  async function claimDevice(id) {
-    if (lockedNode === id) return;
-    releaseLock?.();
-    if (!navigator.locks) throw { code: "storage_unavailable" };
-    await new Promise((resolve, reject) => {
-      navigator.locks
-        .request(
-          "orbit-workbench-box-" + id,
-          { ifAvailable: true },
-          async (lock) => {
-            if (!lock) {
-              reject({ code: "inbox_in_use" });
-              return;
-            }
-            if (disposed) {
-              resolve();
-              return;
-            }
-            lockedNode = id;
-            await new Promise((release) => {
-              releaseLock = () => {
-                lockedNode = null;
-                release();
-              };
-              resolve();
-            });
-          },
-        )
-        .catch(reject);
-    });
-  }
+  const channel =
+    typeof BroadcastChannel === "function"
+      ? new BroadcastChannel("orbit-workbench-box")
+      : null;
   function note(text) {
     $("toast").textContent = text;
     $("toast").hidden = false;
@@ -67,16 +40,13 @@ export function mountBox(root) {
   function reason(error) {
     return (
       {
-        inbox_in_use:
-          "此设备的收件箱已在另一个标签页打开，请切换到该标签页，或关闭后重试这里。",
         storage_unavailable:
           "此浏览器无法安全保存离线内容，请使用支持本地存储的新版浏览器。",
         unauthenticated: "登录已失效，请重新登录。",
         unavailable: "收件箱暂时不可用，请检查连接后重试。",
         rate_limited: "尝试次数过多，请稍后再试。",
         device_revoked: "这台设备的访问已被撤销，请在管理台重新授权。",
-        conflict:
-          "另一台设备已修改这条消息。你的修改已保留，可复制后重新编辑。",
+        conflict: "这条消息已有新修改。你的修改已保留，可复制后重新编辑。",
         invalid_fields: "内容格式不正确，请检查后重试。",
         invalid_image: "请选择 JPEG、PNG 或 GIF 图片。",
         image_too_large: "图片不能超过 10 MB。",
@@ -125,20 +95,37 @@ export function mountBox(root) {
       request.onerror = () => reject(request.error);
     });
   }
-  function save() {
-    const snapshot = structuredClone(state);
+  // Read and patch the shared record in one transaction. A tab never writes
+  // its in-memory copy of another tab's draft, cache or pending operations.
+  function save(change) {
     return new Promise((resolve, reject) => {
       const tx = db.transaction("state", "readwrite");
-      tx.objectStore("state").put(snapshot, "inbox");
-      tx.oncomplete = resolve;
+      const store = tx.objectStore("state");
+      const request = store.get("inbox");
+      let current;
+      request.onsuccess = () => {
+        current = request.result || emptyState();
+        if (change(current) !== false) store.put(current, "inbox");
+      };
+      tx.oncomplete = () => resolve(current);
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
     });
   }
   function storeError() {
-    $("error").textContent =
-      "无法保存到此浏览器。请检查存储空间或浏览器权限；未发送内容仍保留在输入框。";
-    $("error").hidden = false;
+    const error = $("editor").open ? $("edit-error") : $("error");
+    error.textContent = "无法保存到此浏览器，请检查存储空间或权限后重试。";
+    error.hidden = false;
+  }
+  async function saveDraft() {
+    const draft = {
+      draft: $("body").value,
+      kind: $("todo").checked ? "todo" : "text",
+      photo: state.photo,
+      draftVersion: crypto.randomUUID(),
+    };
+    Object.assign(state, draft);
+    await save((current) => Object.assign(current, draft));
   }
   function urls(body) {
     return [
@@ -170,13 +157,14 @@ export function mountBox(root) {
     return el;
   }
   function draftChanged() {
-    state.draft = $("body").value;
-    state.kind = $("todo").checked ? "todo" : "text";
-    void save().catch(storeError);
+    if (!closed) void saveDraft().catch(storeError);
   }
   function composer() {
     $("body").value = state.draft;
     $("todo").checked = state.kind === "todo";
+    showComposerPhoto();
+  }
+  function showComposerPhoto() {
     $("attachment").hidden = !state.photo;
     $("attachment-name").textContent = state.photo?.name || "";
   }
@@ -200,13 +188,24 @@ export function mountBox(root) {
         items.set(item.id, item);
       }
       if (item) {
-        if (op.type === "update") item.body = op.body;
-        if (op.type === "set_completed") item.completed = op.completed;
-        if (op.type === "set_kind") {
-          item.kind = op.kind;
-          item.completed = false;
+        if (op.type === "update") {
+          item.body = op.body;
+          item.photo = entry.photo;
+          item.attachment_id = op.attachment_id || item.attachment_id;
         }
-        item.pending = true;
+        if (op.type === "set_completed") item.completed = op.completed;
+        if (op.type === "update" || op.type === "set_kind") {
+          const kind = op.kind || item.kind;
+          const nextKind =
+            kind !== "todo" && (item.attachment_id || item.photo)
+              ? "image"
+              : kind;
+          if (nextKind !== item.kind) item.completed = false;
+          item.kind = nextKind;
+        }
+        if (op.type === "delete") item.deleted_at = entry.created;
+        if (op.type === "restore") delete item.deleted_at;
+        item.pending = op.operation_id;
       }
     }
     return [...items.values()]
@@ -219,7 +218,7 @@ export function mountBox(root) {
       );
   }
   function localPicture(item) {
-    const key = "local:" + item.id;
+    const key = "local:" + item.id + ":" + item.pending;
     if (!pictures.has(key)) pictures.set(key, URL.createObjectURL(item.photo));
     return pictures.get(key);
   }
@@ -246,7 +245,7 @@ export function mountBox(root) {
           (filter === "links" && urls(i.body).length) ||
           (filter === "todo" && i.kind === "todo" && !i.completed) ||
           (filter === "completed" && i.kind === "todo" && i.completed) ||
-          (filter === "image" && i.kind === "image")),
+          (filter === "image" && (i.attachment_id || i.photo))),
     );
     const signature = JSON.stringify([
       state.generation,
@@ -271,27 +270,33 @@ export function mountBox(root) {
           "message-body",
         ),
       );
+      if (entry.photo) {
+        const preview = document.createElement("img");
+        preview.className = "draft-photo";
+        preview.alt = entry.photo.name;
+        preview.src = localPicture({
+          id: entry.op.item_id,
+          photo: entry.photo,
+          pending: entry.op.operation_id,
+        });
+        panel.append(preview);
+      }
+      if (entry.op.body)
+        panel.append(button("复制修改", () => copy(entry.op.body)));
+      if (entry.error !== "conflict") {
+        panel.append(
+          button("重试", () =>
+            changePending(entry, (pending) => {
+              delete pending.error;
+              return pending;
+            }),
+          ),
+        );
+      }
       panel.append(
-        button("复制修改", () => copy(entry.op.body || "")),
-        button("重试", async () => {
-          delete entry.error;
-          try {
-            await save();
-            render();
-            void sync();
-          } catch {
-            storeError();
-          }
-        }),
-        button("放弃修改", async () => {
-          if (!confirm("放弃这次未同步的修改？")) return;
-          state.outbox = state.outbox.filter((e) => e !== entry);
-          try {
-            await save();
-            render();
-          } catch {
-            storeError();
-          }
+        button("放弃修改", () => {
+          if (confirm("放弃这次未同步的修改？"))
+            void changePending(entry, () => null);
         }),
       );
       list.append(panel);
@@ -325,20 +330,24 @@ export function mountBox(root) {
       head.append(stamp);
       if (item.body) head.append(button("复制", () => copy(item.body)));
       const menu = document.createElement("details");
+      menu.setAttribute("name", "inbox-message-actions");
       menu.append(textElement("summary", "···"));
       menu.firstChild.setAttribute("aria-label", "更多操作");
       const choices = textElement("div", "", "menu");
       const busy = state.outbox.some((e) => e.op.item_id === item.id);
       const edit = button("编辑", () => {
-        editing = item;
-        $("edit-body").value = item.body;
-        $("editor").showModal();
+        menu.open = false;
+        openEditor(item);
       });
       edit.disabled = busy;
       if (!item.deleted_at) choices.append(edit);
-      if (!item.deleted_at && item.kind !== "image") {
+      if (!item.deleted_at) {
         const kind = button(
-          item.kind === "todo" ? "改为文本" : "设为待办",
+          item.kind === "todo"
+            ? item.attachment_id
+              ? "改为图片"
+              : "改为文本"
+            : "设为待办",
           () =>
             queue("set_kind", item, {
               kind: item.kind === "todo" ? "text" : "todo",
@@ -360,7 +369,7 @@ export function mountBox(root) {
       menu.append(choices);
       head.append(menu);
       card.append(head);
-      if (item.kind === "image") {
+      if (item.attachment_id || item.photo) {
         const photo = button("正在读取图片…", async () => {
           try {
             $("full-image").src = item.photo
@@ -400,8 +409,17 @@ export function mountBox(root) {
           "aria-label",
           item.completed ? "撤销完成" : "完成待办",
         );
-        checkbox.onchange = () =>
-          queue("set_completed", item, { completed: checkbox.checked });
+        checkbox.onchange = async () => {
+          checkbox.disabled = true;
+          if (
+            !(await queue("set_completed", item, {
+              completed: checkbox.checked,
+            }))
+          ) {
+            checkbox.checked = item.completed;
+            checkbox.disabled = false;
+          }
+        };
         row.append(checkbox);
       }
       const content = textElement("div", "", "body-content");
@@ -470,12 +488,8 @@ export function mountBox(root) {
       note("无法访问剪贴板，请选择正文复制");
     }
   }
-  async function queue(type, item, fields = {}) {
+  async function queue(type, item, fields = {}, photo = null, draftVersion) {
     if (closed) return false;
-    if (item && state.outbox.some((entry) => entry.op.item_id === item.id)) {
-      note("这条消息还有修改待同步");
-      return false;
-    }
     const op = {
       operation_id: crypto.randomUUID(),
       item_id: item?.id || crypto.randomUUID(),
@@ -483,21 +497,70 @@ export function mountBox(root) {
       type,
       ...fields,
     };
-    const entry = { op, created: new Date().toISOString() };
-    state.outbox.push(entry);
-    pendingCommits.add(op.operation_id);
+    const entry = { op, photo, created: new Date().toISOString() };
+    let added = false;
     try {
-      await save();
-      pendingCommits.delete(op.operation_id);
+      const current = await save((current) => {
+        if (
+          item &&
+          current.outbox.some((pending) => pending.op.item_id === item.id)
+        )
+          return false;
+        current.outbox.push(entry);
+        if (type === "create" && current.draftVersion === draftVersion) {
+          current.draft = "";
+          current.photo = null;
+          delete current.draftVersion;
+        }
+        added = true;
+      });
+      state.outbox = current.outbox;
+      if (!added) {
+        note("这条消息还有修改待同步");
+        render();
+        return false;
+      }
       render();
-      void sync();
+      channel?.postMessage("queue");
+      requestSync();
       return true;
     } catch {
-      state.outbox = state.outbox.filter((e) => e !== entry);
-      pendingCommits.delete(op.operation_id);
       storeError();
       return false;
     }
+  }
+  async function updatePending(entry, change) {
+    let updated;
+    const current = await save((current) => {
+      const index = current.outbox.findIndex(
+        (pending) => pending.op.operation_id === entry.op.operation_id,
+      );
+      if (index === -1) return false;
+      updated = change(current.outbox[index]);
+      if (updated) current.outbox[index] = updated;
+      else current.outbox.splice(index, 1);
+    });
+    state.outbox = current.outbox;
+    return updated;
+  }
+  async function changePending(entry, change) {
+    try {
+      await updatePending(entry, change);
+      render();
+      channel?.postMessage("queue");
+      requestSync();
+    } catch {
+      storeError();
+    }
+  }
+  async function saveCache(generation, cursor) {
+    await save((current) => {
+      if (current.generation !== generation || current.cursor !== cursor)
+        return false;
+      current.items = state.items;
+      current.generation = state.generation;
+      current.cursor = state.cursor;
+    });
   }
   function merge(items) {
     const map = new Map(state.items.map((i) => [i.id, i]));
@@ -519,9 +582,10 @@ export function mountBox(root) {
                 after: state.cursor,
               }),
           );
+          const cursor = state.cursor;
           merge(page.changes.map((c) => c.item));
           state.cursor = page.cursor;
-          await save();
+          if (page.cursor !== cursor) await saveCache(state.generation, cursor);
           if (!page.has_more) return;
         }
       } catch (e) {
@@ -541,35 +605,50 @@ export function mountBox(root) {
       );
       all.push(...page.items);
     }
+    const { generation, cursor } = state;
     state.items = all;
     state.generation = page.generation;
     state.cursor = page.cursor;
-    await save();
+    await saveCache(generation, cursor);
+  }
+  function requestSync() {
+    if (syncing) syncRequested = true;
+    else void sync();
   }
   async function sync() {
     if (syncing || closed) return;
     syncing = true;
     $("sync-state").textContent = "正在同步…";
     try {
+      const current = await load();
+      state.outbox = current.outbox;
+      state.items = current.items;
+      state.generation = current.generation;
+      state.cursor = current.cursor;
+      render();
       await catchUp();
       let sent = false;
-      for (const entry of [...state.outbox]) {
+      for (let entry of [...state.outbox]) {
         if (disposed) return;
-        if (entry.error || pendingCommits.has(entry.op.operation_id)) continue;
+        if (entry.error) continue;
         try {
           if (entry.photo && !entry.op.attachment_id) {
             const attachment = await api("attachments", {
               method: "POST",
               body: entry.photo,
             });
-            entry.op.attachment_id = attachment.id;
-            await save();
+            // Multiple tabs may upload concurrently. All retries must submit
+            // the same attachment ID for this operation's server receipt.
+            entry = await updatePending(entry, (pending) => {
+              pending.op.attachment_id ||= attachment.id;
+              return pending;
+            });
+            if (!entry || entry.error) continue;
           }
           const item = await api("operations", json(entry.op));
           sent = true;
           merge([item]);
-          state.outbox = state.outbox.filter((e) => e !== entry);
-          await save();
+          await updatePending(entry, () => null);
         } catch (e) {
           if (
             e.status === 400 ||
@@ -577,8 +656,10 @@ export function mountBox(root) {
             e.status === 404 ||
             e.status === 413
           ) {
-            entry.error = e.code;
-            await save();
+            await updatePending(entry, (pending) => {
+              pending.error = e.code;
+              return pending;
+            });
           } else throw e;
         }
       }
@@ -592,12 +673,14 @@ export function mountBox(root) {
       $("sync-state").textContent = "等待同步";
       $("error").textContent = reason(e);
       $("error").hidden = false;
-      if (e.status === 401 || e.code === "device_revoked") {
-        lock(reason(e));
-      }
+      if (e.status === 401 || e.code === "device_revoked") lock(reason(e));
     } finally {
       syncing = false;
       if (!disposed) render();
+      if (syncRequested) {
+        syncRequested = false;
+        void sync();
+      }
     }
   }
   function lock(message) {
@@ -609,21 +692,21 @@ export function mountBox(root) {
     $("error").hidden = false;
   }
   async function start() {
+    if (starting || disposed) return;
+    starting = true;
     $("send").disabled = true;
-    node = "console";
-    await claimDevice(node);
-    if (disposed) return;
-    if (db) db.close();
+    db?.close();
     try {
-      db = await openDB(node);
+      db = await openDB("console");
       state = await load();
       if (disposed) {
         db.close();
         return;
       }
     } catch {
-      releaseLock?.();
       throw { code: "storage_unavailable" };
+    } finally {
+      starting = false;
     }
     if (disposed) return;
     closed = false;
@@ -662,110 +745,90 @@ export function mountBox(root) {
       note("正文过长，请缩短后发送");
       return;
     }
-    const old = { draft: state.draft, photo: state.photo, kind: state.kind };
-    const entry = {
-      created: new Date().toISOString(),
-      photo: state.photo,
-      op: {
-        operation_id: crypto.randomUUID(),
-        item_id: crypto.randomUUID(),
-        type: "create",
-        expected_revision: "0",
-        kind: state.photo ? "image" : state.kind,
-        body,
-      },
-    };
-    state.outbox.push(entry);
-    pendingCommits.add(entry.op.operation_id);
-    state.draft = "";
-    state.photo = null;
-    $("send").disabled = true;
-    $("body").disabled = true;
+    for (const control of $("composer").elements) control.disabled = true;
     try {
-      await save();
-      pendingCommits.delete(entry.op.operation_id);
-      composer();
-      $("search").value = "";
-      $("filter").value = "all";
-      limit = 100;
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      void sync();
-    } catch {
-      state.outbox = state.outbox.filter((e) => e !== entry);
-      Object.assign(state, old);
-      pendingCommits.delete(entry.op.operation_id);
-      storeError();
+      if (
+        await queue(
+          "create",
+          null,
+          {
+            kind: $("todo").checked ? "todo" : state.photo ? "image" : "text",
+            body,
+          },
+          state.photo,
+          state.draftVersion,
+        )
+      ) {
+        state.draft = "";
+        state.photo = null;
+        delete state.draftVersion;
+        composer();
+        $("search").value = "";
+        $("filter").value = "all";
+        limit = 100;
+        render();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } finally {
-      $("send").disabled = false;
-      $("body").disabled = false;
+      for (const control of $("composer").elements) control.disabled = closed;
     }
   };
   $("body").oninput = draftChanged;
   $("todo").onchange = draftChanged;
-  $("body").onkeydown = (event) => {
-    if (
-      (event.metaKey || event.ctrlKey) &&
-      event.key === "Enter" &&
-      !event.isComposing
-    ) {
-      event.preventDefault();
-      $("composer").requestSubmit();
-    }
-  };
-  $("choose-photo").onclick = () => $("photo").click();
-  async function selectPhoto(file) {
-    if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      note("图片不能超过 10 MB");
-      return;
-    }
-    if (!["image/png", "image/jpeg", "image/gif"].includes(file.type)) {
-      note("请选择 JPEG、PNG 或 GIF 图片");
-      return;
-    }
-    const previous = state.photo;
-    state.photo = file;
-    try {
-      await save();
-      composer();
-    } catch {
-      state.photo = previous;
-      storeError();
-    }
+  function bindComposer(form, body, input, choose, select) {
+    $(choose).onclick = () => $(input).click();
+    $(input).onchange = () => {
+      select($(input).files[0]);
+      $(input).value = "";
+    };
+    $(body).onkeydown = (event) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key === "Enter" &&
+        !event.isComposing
+      ) {
+        event.preventDefault();
+        $(form).requestSubmit();
+      }
+    };
+    $(body).addEventListener("paste", (event) => {
+      const file = event.clipboardData?.files[0];
+      if (file) {
+        event.preventDefault();
+        select(file);
+      }
+    });
+    $(form).addEventListener("dragover", (event) => {
+      if (event.dataTransfer.types.includes("Files")) event.preventDefault();
+    });
+    $(form).addEventListener("drop", (event) => {
+      const file = event.dataTransfer?.files[0];
+      if (file) {
+        event.preventDefault();
+        select(file);
+      }
+    });
   }
-  $("photo").onchange = () => {
-    const file = $("photo").files[0];
-    $("photo").value = "";
-    void selectPhoto(file);
-  };
-  $("body").addEventListener("paste", (event) => {
-    const file = event.clipboardData?.files[0];
-    if (file) {
-      event.preventDefault();
-      void selectPhoto(file);
-    }
-  });
-  $("composer").addEventListener("dragover", (event) => {
-    if (event.dataTransfer.types.includes("Files")) event.preventDefault();
-  });
-  $("composer").addEventListener("drop", (event) => {
-    const file = event.dataTransfer?.files[0];
-    if (file) {
-      event.preventDefault();
-      void selectPhoto(file);
-    }
-  });
-  $("remove-photo").onclick = async () => {
-    const previous = state.photo;
+  function photoError(file) {
+    if (file.size > 10 * 1024 * 1024) return "图片不能超过 10 MB";
+    if (!["image/png", "image/jpeg", "image/gif"].includes(file.type))
+      return "请选择 JPEG、PNG 或 GIF 图片";
+    return "";
+  }
+  function selectPhoto(file) {
+    if (closed || $("send").disabled || !file) return;
+    const error = photoError(file);
+    if (error) return note(error);
+    state.photo = file;
+    showComposerPhoto();
+    draftChanged();
+  }
+  bindComposer("composer", "body", "photo", "choose-photo", selectPhoto);
+  $("remove-photo").onclick = () => {
+    if (closed || $("send").disabled) return;
     state.photo = null;
-    try {
-      await save();
-      composer();
-    } catch {
-      state.photo = previous;
-      storeError();
-    }
+    showComposerPhoto();
+    draftChanged();
   };
   function toggleSearch(open) {
     $("search-field").hidden = !open;
@@ -808,15 +871,89 @@ export function mountBox(root) {
     if (closed) void start().catch((e) => lock(reason(e)));
     else void sync();
   };
+  function editError(message) {
+    $("edit-error").textContent = message;
+    $("edit-error").hidden = !message;
+  }
+  function showEditPhoto() {
+    const existing = editing.attachment_id;
+    const preview = $("edit-preview");
+    if (preview.dataset.local) URL.revokeObjectURL(preview.dataset.local);
+    delete preview.dataset.local;
+    if (editPhoto) preview.dataset.local = URL.createObjectURL(editPhoto);
+    const src =
+      preview.dataset.local ||
+      (existing ? "/api/app/attachments/" + existing + "?thumbnail=1" : "");
+    $("edit-attachment").hidden = !src;
+    if (src) preview.src = src;
+    else preview.removeAttribute("src");
+    $("edit-remove-photo").hidden = !editPhoto;
+    $("edit-attachment-name").textContent = editPhoto?.name || "";
+    $("edit-choose-photo").textContent = src ? "更换图片" : "添加图片";
+  }
+  function openEditor(item) {
+    editing = item;
+    editPhoto = null;
+    $("edit-body").value = item.body;
+    $("edit-todo").checked = item.kind === "todo";
+    showEditPhoto();
+    editError("");
+    $("editor").showModal();
+  }
+  bindComposer(
+    "edit-form",
+    "edit-body",
+    "edit-photo",
+    "edit-choose-photo",
+    (file) => {
+      if (!file || $("save-edit").disabled) return;
+      const error = photoError(file);
+      editError(error);
+      if (error) return;
+      editPhoto = file;
+      showEditPhoto();
+    },
+  );
+  $("edit-remove-photo").onclick = () => {
+    editPhoto = null;
+    showEditPhoto();
+    editError("");
+  };
   $("edit-form").onsubmit = async (event) => {
     event.preventDefault();
+    if (!editing || $("save-edit").disabled) return;
     const body = $("edit-body").value.trim();
-    if (new TextEncoder().encode(body).length > 16000) {
-      note("正文过长，请缩短后保存");
+    const kind = $("edit-todo").checked ? "todo" : "text";
+    if (new TextEncoder().encode(body).length > 16000)
+      return editError("正文过长，请缩短后保存");
+    if (!body && !editing.attachment_id && !editPhoto)
+      return editError("请填写正文或添加图片");
+    if (
+      body === editing.body &&
+      (kind === "todo") === (editing.kind === "todo") &&
+      !editPhoto
+    ) {
+      $("editor").close();
       return;
     }
-    if (!body && editing.kind !== "image") return;
-    if (await queue("update", editing, { body })) $("editor").close();
+    editError("");
+    for (const control of $("edit-form").elements) control.disabled = true;
+    try {
+      if (await queue("update", editing, { body, kind }, editPhoto))
+        $("editor").close();
+      else if ($("edit-error").hidden)
+        editError("这条消息还有修改待同步，请稍后再试。");
+    } finally {
+      for (const control of $("edit-form").elements) control.disabled = false;
+    }
+  };
+  $("editor").oncancel = (event) => {
+    if ($("save-edit").disabled) event.preventDefault();
+  };
+  $("editor").onclose = () => {
+    editPhoto = null;
+    showEditPhoto();
+    editing = null;
   };
   $("cancel-edit").onclick = () => $("editor").close();
   $("close-image").onclick = () => $("image-view").close();
@@ -839,7 +976,9 @@ export function mountBox(root) {
     events?.close();
     clearInterval(timer);
     clearTimeout(toastTimer);
-    releaseLock?.();
+    channel?.close();
+    const preview = $("edit-preview");
+    if (preview.dataset.local) URL.revokeObjectURL(preview.dataset.local);
     db?.close();
     for (const url of pictures.values()) URL.revokeObjectURL(url);
     pictures.clear();
@@ -848,6 +987,13 @@ export function mountBox(root) {
     window.removeEventListener("orbit:logout", stop);
     window.removeEventListener("orbit:beforelogout", beforeLogout);
   };
+  if (channel)
+    channel.onmessage = (event) => {
+      if (event.data === "logout") {
+        stop();
+        window.dispatchEvent(new Event("orbit:unauthorized"));
+      } else if (event.data === "queue") requestSync();
+    };
   window.addEventListener("online", online);
   document.addEventListener("visibilitychange", visible);
   window.addEventListener("orbit:logout", stop);
@@ -880,6 +1026,11 @@ export async function confirmBoxLogout() {
   }
 }
 export async function clearBoxCache() {
+  if (typeof BroadcastChannel === "function") {
+    const channel = new BroadcastChannel("orbit-workbench-box");
+    channel.postMessage("logout");
+    channel.close();
+  }
   const db = await openLogoutCache();
   try {
     await new Promise((resolve, reject) => {

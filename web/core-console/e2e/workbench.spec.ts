@@ -106,6 +106,7 @@ test("direct links, refresh, history, inbox actions and responsive layout", asyn
   page.on("pageerror", (e) => errors.push(e.message));
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await login(page);
+  await send(page, "另一张菜单卡片");
   await send(page, "浏览器验收 https://example.org/check");
   const message = page.locator(".message").filter({ hasText: "浏览器验收" });
   await expect(message.getByRole("link")).toHaveAttribute(
@@ -117,6 +118,14 @@ test("direct links, refresh, history, inbox actions and responsive layout", asyn
     .poll(() => page.evaluate(() => navigator.clipboard.readText()))
     .toContain("浏览器验收");
   await message.locator("summary").click();
+  const otherMenu = page
+    .locator(".message")
+    .filter({ hasText: "另一张菜单卡片" });
+  await otherMenu.locator("summary").click();
+  await expect(message.locator("details[open]")).toHaveCount(0);
+  await expect(otherMenu.locator("details[open]")).toHaveCount(1);
+  await message.locator("summary").click();
+  await expect(otherMenu.locator("details[open]")).toHaveCount(0);
   await message.getByRole("button", { name: "设为待办", exact: true }).click();
   await expect(
     message.getByRole("checkbox", { name: "完成待办" }),
@@ -207,7 +216,7 @@ test("direct links, refresh, history, inbox actions and responsive layout", asyn
   expect(errors).toEqual([]);
 });
 
-test("draft durability, offline outbox, cross-tab lock, and logout", async ({
+test("draft durability, concurrent tabs, offline outbox, and logout", async ({
   page,
   context,
 }) => {
@@ -219,20 +228,33 @@ test("draft durability, offline outbox, cross-tab lock, and logout", async ({
   );
   const other = await context.newPage();
   await other.goto("/box");
-  await expect(other.locator("#error")).toContainText("另一个标签页");
-  await expect(other.locator("#send")).toBeDisabled();
-  await other.close();
+  await expect(other.locator("#send")).toBeEnabled();
   await context.setOffline(true);
   await page.getByRole("button", { name: "发送", exact: true }).click();
   await expect(
     page.locator(".message").filter({ hasText: "保留的草稿" }),
   ).toContainText("待同步");
+  await other
+    .getByLabel("消息内容", { exact: true })
+    .fill("另一标签页的离线消息");
+  await other.locator("#send").click();
+  await expect(other.locator("#messages")).toContainText(
+    "另一标签页的离线消息",
+  );
   await context.setOffline(false);
   await page.getByRole("button", { name: "同步消息" }).click();
   await expect(page.locator("#sync-state")).toHaveText("已同步");
   await expect(
     page.locator(".message").filter({ hasText: "保留的草稿" }),
   ).not.toContainText("待同步");
+  for (const tab of [page, other]) {
+    await expect(tab.locator("#messages")).toContainText("保留的草稿");
+    await expect(tab.locator("#messages")).toContainText(
+      "另一标签页的离线消息",
+    );
+    await expect(tab.locator("#messages")).not.toContainText("待同步");
+  }
+  await other.close();
   await page.getByLabel("消息内容", { exact: true }).fill("退出前的草稿");
   await page.getByRole("link", { name: "总览", exact: true }).click();
   page.once("dialog", (dialog) => dialog.dismiss());
@@ -316,6 +338,54 @@ test("image selection, preview and narrow editor", async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
     .toBe(390);
+});
+
+test("edit text to add an image and convert the image to a todo", async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  await send(page, "待加图片");
+  const message = page.locator(".message").filter({ hasText: "待加图片" });
+  const editor = page.getByRole("dialog", { name: "编辑消息" });
+  async function openEditor() {
+    await message.locator("summary").click();
+    await message.getByRole("button", { name: "编辑", exact: true }).click();
+  }
+
+  await openEditor();
+  await editor.locator("#edit-photo").setInputFiles({
+    name: "edit.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(pixel, "base64"),
+  });
+  await expect(editor.getByRole("img")).toBeVisible();
+  await context.setOffline(true);
+  await editor.getByRole("button", { name: "保存" }).click();
+  await expect(message.locator("img")).toBeVisible();
+  await expect(message).toContainText("待同步");
+  const other = await context.newPage();
+  await context.setOffline(false);
+  await other.goto("/box");
+  await expect(
+    other.locator(".message").filter({ hasText: "待加图片" }).locator("img"),
+  ).toBeVisible();
+  await expect(message).not.toContainText("待同步");
+  await other.close();
+
+  await openEditor();
+  await expect(editor.getByRole("img")).toBeVisible();
+  await editor.getByRole("checkbox", { name: "设为待办" }).check();
+  await editor.getByRole("button", { name: "保存" }).click();
+  await expect(
+    message.getByRole("checkbox", { name: "完成待办" }),
+  ).toBeEnabled();
+  await page.getByLabel("筛选消息").selectOption("image");
+  await expect(message.locator("img")).toBeVisible();
+  await page.reload();
+  await expect(message.locator("img")).toBeVisible();
+  await message.getByRole("checkbox", { name: "完成待办" }).check();
+  await expect(message).toHaveClass(/completed/);
 });
 
 test("pasted and dropped images survive offline synchronization", async ({

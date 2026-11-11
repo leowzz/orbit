@@ -293,7 +293,9 @@ class _InboxScreenState extends State<InboxScreen> {
 
   Future<void> edit(Json item) async {
     final value = await editText(item['body'], '编辑消息');
-    if (value == null || (value.isEmpty && item['kind'] != 'image')) return;
+    if (value == null || (value.isEmpty && item['attachment_id'] == null)) {
+      return;
+    }
     await c.submit('update', item: item, body: value);
   }
 
@@ -1113,7 +1115,13 @@ class _InboxScreenState extends State<InboxScreen> {
                         PopupMenuItem(
                           value: 'kind',
                           enabled: !busy,
-                          child: Text(todo ? '改为文本' : '设为待办'),
+                          child: Text(
+                            todo
+                                ? (item['attachment_id'] != null
+                                      ? '改为图片'
+                                      : '改为文本')
+                                : '设为待办',
+                          ),
                         ),
                       PopupMenuItem(
                         value: 'delete',
@@ -1125,7 +1133,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              if (item['kind'] == 'image')
+              if (item['attachment_id'] != null || item['local_photo'] != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Semantics(
@@ -1158,7 +1166,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     ),
                   ),
                 ),
-              if ((item['body'] as String).isNotEmpty)
+              if (todo || (item['body'] as String).isNotEmpty)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

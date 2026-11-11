@@ -167,13 +167,12 @@ func (s *Store) Apply(ctx context.Context, node string, op Operation) (Item, err
 		if exists {
 			return item, &Fault{Code: "conflict", Current: &item}
 		}
-		if op.ExpectedRevision != 0 || (op.Kind != "text" && op.Kind != "todo" && op.Kind != "image") || (op.Kind != "image" && strings.TrimSpace(op.Body) == "") || (op.Kind != "image" && op.AttachmentID != "") || op.Completed != nil {
+		if op.ExpectedRevision != 0 || (op.Kind != "text" && op.Kind != "todo" && op.Kind != "image") || (op.Kind == "image" && op.AttachmentID == "") || (op.Kind == "text" && op.AttachmentID != "") || (op.AttachmentID == "" && strings.TrimSpace(op.Body) == "") || op.Completed != nil {
 			return item, &Fault{Code: "invalid_fields"}
 		}
-		if op.Kind == "image" {
-			var owner string
-			if err = tx.QueryRowContext(ctx, `SELECT owner FROM attachments WHERE id=?`, op.AttachmentID).Scan(&owner); err != nil || owner != node {
-				return item, &Fault{Code: "attachment_unavailable"}
+		if op.AttachmentID != "" {
+			if err := checkAttachmentOwner(ctx, tx, node, op.AttachmentID); err != nil {
+				return item, err
 			}
 		}
 		item = Item{ID: op.ItemID, Kind: op.Kind, Body: op.Body, AttachmentID: op.AttachmentID, CreatedBy: node, CreatedAt: now}
@@ -203,18 +202,29 @@ func (s *Store) Apply(ctx context.Context, node string, op Operation) (Item, err
 			}
 			item.DeletedAt = ""
 		case "update":
-			if (item.Kind != "image" && strings.TrimSpace(op.Body) == "") || op.Kind != "" || op.AttachmentID != "" || op.Completed != nil {
+			if (op.Kind != "" && op.Kind != "text" && op.Kind != "todo") || op.Completed != nil {
+				return item, &Fault{Code: "invalid_fields"}
+			}
+			if op.AttachmentID != "" && op.AttachmentID != item.AttachmentID {
+				if err := checkAttachmentOwner(ctx, tx, node, op.AttachmentID); err != nil {
+					return item, err
+				}
+				item.AttachmentID = op.AttachmentID
+			}
+			if item.AttachmentID == "" && strings.TrimSpace(op.Body) == "" {
 				return item, &Fault{Code: "invalid_fields"}
 			}
 			item.Body = op.Body
+			kind := op.Kind
+			if kind == "" {
+				kind = item.Kind
+			}
+			item.setKind(kind)
 		case "set_kind":
-			if (item.Kind != "text" && item.Kind != "todo") || (op.Kind != "text" && op.Kind != "todo") || op.Body != "" || op.AttachmentID != "" || op.Completed != nil {
+			if (op.Kind != "text" && op.Kind != "todo") || op.Body != "" || op.AttachmentID != "" || op.Completed != nil {
 				return item, &Fault{Code: "invalid_fields"}
 			}
-			if item.Kind != op.Kind {
-				item.Kind = op.Kind
-				item.Completed = false
-			}
+			item.setKind(op.Kind)
 		case "set_completed":
 			if item.Kind != "todo" || op.Completed == nil || op.Body != "" || op.Kind != "" || op.AttachmentID != "" {
 				return item, &Fault{Code: "invalid_fields"}
@@ -242,6 +252,25 @@ func (s *Store) Apply(ctx context.Context, node string, op Operation) (Item, err
 		return item, err
 	}
 	return item, tx.Commit()
+}
+
+func (i *Item) setKind(kind string) {
+	if kind != "todo" && i.AttachmentID != "" {
+		kind = "image"
+	}
+	if i.Kind != kind {
+		i.Kind = kind
+		i.Completed = false
+	}
+}
+
+func checkAttachmentOwner(ctx context.Context, tx *sql.Tx, node, id string) error {
+	var owner string
+	err := tx.QueryRowContext(ctx, `SELECT owner FROM attachments WHERE id=?`, id).Scan(&owner)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && owner != node) {
+		return &Fault{Code: "attachment_unavailable"}
+	}
+	return err
 }
 
 func validID(s string) bool { _, err := uuid.Parse(s); return err == nil && len(s) == 36 }

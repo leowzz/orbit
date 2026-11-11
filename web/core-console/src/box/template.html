@@ -89,18 +89,36 @@
     </form>
   </div>
 </div>
-<dialog id="editor">
+<dialog id="editor" aria-labelledby="edit-title">
   <form id="edit-form">
-    <h2>编辑消息</h2>
+    <h2 id="edit-title">编辑消息</h2>
     <textarea
       id="edit-body"
       rows="8"
       maxlength="16000"
       aria-label="编辑消息内容"
     ></textarea>
+    <div id="edit-attachment" hidden>
+      <img id="edit-preview" alt="图片预览" />
+      <span id="edit-attachment-name"></span>
+      <button type="button" id="edit-remove-photo">撤销选图</button>
+    </div>
+    <p id="edit-error" role="alert" hidden></p>
+    <div class="compose-actions">
+      <label class="todo-switch"
+        ><input id="edit-todo" type="checkbox" />设为待办</label
+      >
+      <button type="button" id="edit-choose-photo">添加图片</button>
+      <input
+        id="edit-photo"
+        type="file"
+        accept="image/png,image/jpeg,image/gif"
+        hidden
+      />
+    </div>
     <div class="dialog-actions">
       <button type="button" id="cancel-edit">取消</button
-      ><button class="primary">保存</button>
+      ><button id="save-edit" class="primary" type="submit">保存</button>
     </div>
   </form>
 </dialog>

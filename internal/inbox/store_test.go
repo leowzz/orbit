@@ -200,7 +200,7 @@ func TestKindChangesPreserveContentAndSync(t *testing.T) {
 	}
 }
 
-func TestKindChangeRejectsImagesAndUnrelatedFields(t *testing.T) {
+func TestKindChangeRejectsUnrelatedFields(t *testing.T) {
 	s := newStore(t)
 	item := apply(t, s, "a", create())
 	completed := true
@@ -213,15 +213,43 @@ func TestKindChangeRejectsImagesAndUnrelatedFields(t *testing.T) {
 		_, err := s.Apply(ctx, "a", fields)
 		code(t, err, "invalid_fields")
 	}
+}
+
+func TestUpdateSupportsPicturesOnTodos(t *testing.T) {
+	s := newStore(t)
 	attachment := uuid.NewString()
-	if err := s.AddAttachment(ctx, "a", Attachment{ID: attachment, MIME: "image/png", Size: 10, Width: 1, Height: 1}); err != nil {
+	if err := s.AddAttachment(ctx, "b", Attachment{ID: attachment, MIME: "image/png", Size: 10, Width: 1, Height: 1}); err != nil {
 		t.Fatal(err)
 	}
-	image := create()
-	image.Kind, image.AttachmentID = "image", attachment
-	stored := apply(t, s, "a", image)
-	_, err := s.Apply(ctx, "a", Operation{ID: uuid.NewString(), ItemID: stored.ID, Type: "set_kind", ExpectedRevision: stored.Revision, Kind: "todo"})
-	code(t, err, "invalid_fields")
+	createText := create()
+	createText.Kind = "text"
+	text := apply(t, s, "a", createText)
+	op := Operation{ID: uuid.NewString(), ItemID: text.ID, Type: "update", ExpectedRevision: text.Revision, Body: text.Body, AttachmentID: attachment}
+	_, err := s.Apply(ctx, "a", op)
+	code(t, err, "attachment_unavailable")
+	image := apply(t, s, "b", op)
+	if image.Kind != "image" || image.AttachmentID != attachment || image.Body != text.Body {
+		t.Fatal(image)
+	}
+
+	op = Operation{ID: uuid.NewString(), ItemID: image.ID, Type: "update", ExpectedRevision: image.Revision, Kind: "todo"}
+	todo := apply(t, s, "a", op)
+	if todo.Kind != "todo" || todo.AttachmentID != attachment || todo.Body != "" || todo.Completed {
+		t.Fatal(todo)
+	}
+	if apply(t, s, "a", op) != todo {
+		t.Fatal("retry changed the item")
+	}
+	completed := true
+	done := apply(t, s, "a", Operation{ID: uuid.NewString(), ItemID: todo.ID, Type: "set_completed", ExpectedRevision: todo.Revision, Completed: &completed})
+	edited := apply(t, s, "a", Operation{ID: uuid.NewString(), ItemID: done.ID, Type: "update", ExpectedRevision: done.Revision, Kind: "todo", Body: "caption"})
+	if !edited.Completed || edited.AttachmentID != attachment {
+		t.Fatal(edited)
+	}
+	reverted := apply(t, s, "b", Operation{ID: uuid.NewString(), ItemID: edited.ID, Type: "set_kind", ExpectedRevision: edited.Revision, Kind: "text"})
+	if reverted.Kind != "image" || reverted.Completed || reverted.AttachmentID != attachment || reverted.Body != "caption" {
+		t.Fatal(reverted)
+	}
 }
 
 func TestAttachmentCleanupKeepsLiveReferences(t *testing.T) {
