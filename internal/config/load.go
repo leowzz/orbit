@@ -71,7 +71,11 @@ func LoadAgent(path string) (*AgentConfig, error) {
 
 func LoadCore(path string) (*CoreConfig, error) {
 	cfg := CoreConfig{
-		Audio:   AudioConfig{MaxSegments: DefaultAudioMaxSegments},
+		Audio: AudioConfig{
+			MaxSegments:             DefaultAudioMaxSegments,
+			MaxBytes:                DefaultAudioMaxBytes,
+			CleanupThresholdPercent: DefaultAudioCleanupThresholdPercent,
+		},
 		Console: ConsoleConfig{Listen: "127.0.0.1:7620", Database: "data/core.sqlite", SessionHours: DefaultConsoleSessionHours},
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
 		NTP:     defaultNTPConfig(),
@@ -200,6 +204,15 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	}
 	if cfg.Audio.MaxSegments <= 0 {
 		return errors.New("audio.max_segments must be positive")
+	}
+	if cfg.Audio.MaxBytes <= 0 {
+		return errors.New("audio.max_bytes must be positive")
+	}
+	if cfg.Audio.CleanupThresholdPercent <= 0 || cfg.Audio.CleanupThresholdPercent > 100 {
+		return errors.New("audio.cleanup_threshold_percent must be between 1 and 100")
+	}
+	if cfg.Audio.DataDir != "" && !filepath.IsAbs(cfg.Audio.DataDir) {
+		cfg.Audio.DataDir = filepath.Join(baseDir, cfg.Audio.DataDir)
 	}
 	if cfg.Audio.Analysis.Enabled {
 		a := &cfg.Audio.Analysis

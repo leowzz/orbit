@@ -29,6 +29,7 @@ import (
 type RouteStore struct {
 	db               *sql.DB
 	audioMaxSegments int
+	audioFiles       *audioFileStore
 	analysis         config.AnalysisConfig
 }
 type RouteDocument struct {
@@ -38,8 +39,20 @@ type RouteDocument struct {
 
 func OpenRouteStore(path string, seed map[string]config.ProjectionRoute, audioConfig ...config.AudioConfig) (*RouteStore, error) {
 	maxSegments := config.DefaultAudioMaxSegments
+	maxBytes := int64(config.DefaultAudioMaxBytes)
+	thresholdPercent := config.DefaultAudioCleanupThresholdPercent
+	audioDir := filepath.Join(filepath.Dir(path), "audio")
 	if len(audioConfig) > 0 {
 		maxSegments = int(audioConfig[0].MaxSegments)
+		if audioConfig[0].MaxBytes > 0 {
+			maxBytes = audioConfig[0].MaxBytes
+		}
+		if audioConfig[0].CleanupThresholdPercent > 0 {
+			thresholdPercent = audioConfig[0].CleanupThresholdPercent
+		}
+		if audioConfig[0].DataDir != "" {
+			audioDir = audioConfig[0].DataDir
+		}
 	}
 	if maxSegments <= 0 {
 		return nil, errors.New("audio.max_segments must be positive")
@@ -47,12 +60,16 @@ func OpenRouteStore(path string, seed map[string]config.ProjectionRoute, audioCo
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
+	audioFiles, err := newAudioFileStore(audioDir, maxBytes, thresholdPercent)
+	if err != nil {
+		return nil, err
+	}
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	store := &RouteStore{db: db, audioMaxSegments: maxSegments}
+	store := &RouteStore{db: db, audioMaxSegments: maxSegments, audioFiles: audioFiles}
 	if len(audioConfig) > 0 {
 		store.analysis = audioConfig[0].Analysis
 	}

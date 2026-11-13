@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -133,11 +135,14 @@ func (s AudioSegment) validate(node string) error {
 	return nil
 }
 func (s *RouteStore) storeAudioSegment(ctx context.Context, segment AudioSegment, now time.Time) error {
-	raw, _ := json.Marshal(segment)
 	jobRaw, _ := json.Marshal(map[string]any{"schema_version": 1, "job_id": segment.SegmentID, "segment": segment})
 	if len(jobRaw) > AudioMaxMessageBytes {
 		return errors.New("audio job exceeds message limit")
 	}
+	metaSegment := segment
+	metaSegment.Packets = nil
+	metaRaw, _ := json.Marshal(metaSegment)
+
 	tx, e := s.db.BeginTx(ctx, nil)
 	if e != nil {
 		return e
@@ -146,8 +151,23 @@ func (s *RouteStore) storeAudioSegment(ctx context.Context, segment AudioSegment
 	var existing string
 	e = tx.QueryRowContext(ctx, `SELECT payload FROM audio_segments WHERE segment_id=?`, segment.SegmentID).Scan(&existing)
 	if e == nil {
-		if existing != string(raw) {
+		var existingSeg AudioSegment
+		if err := json.Unmarshal([]byte(existing), &existingSeg); err != nil {
+			return err
+		}
+		if len(existingSeg.Packets) > 0 {
+			if !reflect.DeepEqual(existingSeg, segment) {
+				return errors.New("audio segment ID conflict")
+			}
+			return tx.Commit()
+		}
+		if !reflect.DeepEqual(existingSeg, metaSegment) {
 			return errors.New("audio segment ID conflict")
+		}
+		if s.audioFiles != nil {
+			if err := s.audioFiles.save(segment); err != nil {
+				return err
+			}
 		}
 		return tx.Commit()
 	}
@@ -174,46 +194,100 @@ func (s *RouteStore) storeAudioSegment(ctx context.Context, segment AudioSegment
 	if _, e = tx.ExecContext(ctx, `INSERT OR IGNORE INTO audio_sessions VALUES(?,?,?)`, segment.SessionID, segment.NodeID, now.UTC().Format(time.RFC3339Nano)); e != nil {
 		return e
 	}
-	if _, e = tx.ExecContext(ctx, `INSERT INTO audio_segments VALUES(?,?,?,?,?,?,?,?)`, segment.SegmentID, segment.SessionID, segment.NodeID, segment.Sequence, segment.StartedAt, segment.DurationMS, segment.SpeechMS, string(raw)); e != nil {
+	if _, e = tx.ExecContext(ctx, `INSERT INTO audio_segments VALUES(?,?,?,?,?,?,?,?)`, segment.SegmentID, segment.SessionID, segment.NodeID, segment.Sequence, segment.StartedAt, segment.DurationMS, segment.SpeechMS, string(metaRaw)); e != nil {
 		return e
 	}
 	if _, e = tx.ExecContext(ctx, `INSERT INTO audio_jobs(job_id,created_at) VALUES(?,?)`, segment.SegmentID, now.UTC().Format(time.RFC3339Nano)); e != nil {
 		return e
 	}
-	if e = s.pruneAudio(ctx, tx); e != nil {
+	prunedIDs, e := s.pruneAudioCollectingIDs(ctx, tx)
+	if e != nil {
 		return e
 	}
 	if e = addAudioCounter(ctx, tx, "received_total", "", "", 1); e != nil {
 		return e
 	}
-	return tx.Commit()
+
+	savedFile := false
+	if s.audioFiles != nil {
+		if e = s.audioFiles.save(segment); e != nil {
+			return e
+		}
+		savedFile = true
+	}
+	if e = tx.Commit(); e != nil {
+		if savedFile {
+			_ = s.audioFiles.remove(segment.SegmentID)
+		}
+		return e
+	}
+	if s.audioFiles != nil {
+		for _, id := range prunedIDs {
+			_ = s.audioFiles.remove(id)
+		}
+		if _, err := s.audioFiles.cleanup(segment.SegmentID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // pruneAudio runs in the same transaction as insertion, including pending jobs.
 // SQLite reuses freed pages; this does not VACUUM the shared console database.
 func (s *RouteStore) pruneAudio(ctx context.Context, tx *sql.Tx) error {
-	var startedAt, segmentID string
-	err := tx.QueryRowContext(ctx, `SELECT started_at,segment_id FROM audio_segments ORDER BY julianday(started_at) DESC,segment_id DESC LIMIT 1 OFFSET ?`, s.audioMaxSegments).Scan(&startedAt, &segmentID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
+	prunedIDs, err := s.pruneAudioCollectingIDs(ctx, tx)
 	if err != nil {
 		return err
 	}
+	if s.audioFiles != nil {
+		for _, id := range prunedIDs {
+			_ = s.audioFiles.remove(id)
+		}
+	}
+	return nil
+}
+
+func (s *RouteStore) pruneAudioCollectingIDs(ctx context.Context, tx *sql.Tx) ([]string, error) {
+	var startedAt, segmentID string
+	err := tx.QueryRowContext(ctx, `SELECT started_at,segment_id FROM audio_segments ORDER BY julianday(started_at) DESC,segment_id DESC LIMIT 1 OFFSET ?`, s.audioMaxSegments).Scan(&startedAt, &segmentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO audio_retention VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET started_at=excluded.started_at,segment_id=excluded.segment_id`, startedAt, segmentID); err != nil {
-		return err
+		return nil, err
 	}
 	const expiredIDs = `SELECT segment_id FROM audio_segments WHERE (julianday(started_at),segment_id) <= (julianday(?),?)`
+	rows, err := tx.QueryContext(ctx, expiredIDs, startedAt, segmentID)
+	if err != nil {
+		return nil, err
+	}
+	var prunedIDs []string
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		prunedIDs = append(prunedIDs, id)
+	}
+	if err = rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
 	for _, table := range []string{"audio_results", "audio_jobs"} {
 		if _, err = tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE job_id IN (`+expiredIDs+`)`, startedAt, segmentID); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM audio_segments WHERE segment_id IN (`+expiredIDs+`)`, startedAt, segmentID); err != nil {
-		return err
+		return nil, err
 	}
 	_, err = tx.ExecContext(ctx, `DELETE FROM audio_sessions WHERE NOT EXISTS(SELECT 1 FROM audio_segments WHERE audio_segments.session_id=audio_sessions.session_id)`)
-	return err
+	return prunedIDs, err
 }
 
 func (s *RouteStore) storeAudioResult(ctx context.Context, r AudioResult) error {
@@ -392,6 +466,19 @@ func (r *AudioRunner) dispatch(ctx context.Context) error {
 		return e
 	}
 	for _, s := range segments {
+		if len(s.Packets) == 0 && r.store.audioFiles != nil {
+			packets, loadErr := r.store.audioFiles.loadPackets(s.SegmentID)
+			if loadErr != nil {
+				if errors.Is(loadErr, os.ErrNotExist) {
+					if _, execErr := r.store.db.ExecContext(ctx, `UPDATE audio_jobs SET status='failed' WHERE job_id=? AND status='pending'`, s.SegmentID); execErr != nil {
+						return execErr
+					}
+					continue
+				}
+				return loadErr
+			}
+			s.Packets = packets
+		}
 		pubctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		e = r.publish(pubctx, "orbit/v1/audio/jobs", map[string]any{"schema_version": 1, "job_id": s.SegmentID, "segment": s})
 		cancel()

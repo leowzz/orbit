@@ -123,11 +123,18 @@ type MetricsConfig struct {
 	Listen string `yaml:"listen"`
 }
 
-const DefaultAudioMaxSegments = 10000
+const (
+	DefaultAudioMaxSegments             = 10000
+	DefaultAudioMaxBytes                = 200 * 1024 * 1024
+	DefaultAudioCleanupThresholdPercent = 90
+)
 
 type AudioConfig struct {
-	MaxSegments SegmentLimit   `yaml:"max_segments"`
-	Analysis    AnalysisConfig `yaml:"analysis"`
+	MaxSegments             SegmentLimit   `yaml:"max_segments"`
+	MaxBytes                int64          `yaml:"max_bytes"`
+	CleanupThresholdPercent int            `yaml:"cleanup_threshold_percent"`
+	DataDir                 string         `yaml:"data_dir"`
+	Analysis                AnalysisConfig `yaml:"analysis"`
 }
 
 // Analysis credentials are read once on startup and never exposed to the console.
