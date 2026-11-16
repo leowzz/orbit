@@ -2450,6 +2450,8 @@ main.device-page {
   min-height: 22px;
 }
 .screen-preview {
+  width: 100%;
+  max-width: 380px;
   margin-top: 16px;
   padding: 14px 16px;
   border: 1px solid var(--line);
