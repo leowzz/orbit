@@ -262,6 +262,9 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		if route.NFCDMetricsLeftPadding != nil && (route.Profile != "overview-app" || *route.NFCDMetricsLeftPadding > 64) {
 			return fmt.Errorf("projection route %q: NFCD metrics padding requires an App route and a value from 0 to 64", nodeID)
 		}
+		if route.DisplayBrightnessPercent != nil && ((!strings.HasSuffix(route.Profile, "-oled-128x32") && route.Profile != "metrics-xiaozhi-320x240") || *route.DisplayBrightnessPercent > 100) {
+			return fmt.Errorf("projection route %q: display brightness requires a screen route and a value from 0 to 100", nodeID)
+		}
 		if _, ok := cfg.App.Devices[nodeID]; ok && route.Profile != "overview-app" {
 			return errors.New("app devices require overview-app routes")
 		}

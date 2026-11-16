@@ -7,7 +7,8 @@ namespace orbit_display {
 ViewApplyResult ViewStore::apply(const DisplayView& candidate,
                                  const char* expected_node_id) {
   if (candidate.core_epoch.value[0] == '\0' || candidate.revision == 0U ||
-      candidate.node_id.value[0] == '\0') {
+      candidate.node_id.value[0] == '\0' ||
+      (candidate.has_brightness_percent && candidate.brightness_percent > 100U)) {
     return ViewApplyResult::kInvalid;
   }
   if (expected_node_id != nullptr &&

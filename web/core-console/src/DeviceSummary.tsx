@@ -127,6 +127,16 @@ export default function DeviceSummary({
             </dd>
           </div>
         )}
+        {route.display_brightness_percent !== undefined && (
+          <div>
+            <dt>屏幕亮度</dt>
+            <dd>
+              {route.display_brightness_percent === 0
+                ? "0% (息屏)"
+                : `${route.display_brightness_percent}%`}
+            </dd>
+          </div>
+        )}
         {system && route.system_primary && (
           <div>
             <dt>主指标</dt>

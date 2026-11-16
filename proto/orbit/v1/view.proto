@@ -91,4 +91,6 @@ message DeviceView {
   // Device-specific override; absent uses the Agent preference.
   optional uint32 nfcd_metrics_left_padding = 14;
   SystemView system = 15;
+  // Physical screen brightness override (0-100%); 0 turns OLED pixels/backlight off.
+  optional uint32 display_brightness_percent = 16;
 }

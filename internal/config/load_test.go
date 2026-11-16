@@ -392,6 +392,54 @@ func TestLoadCoreAllowsSystemRouteAndRotatingWithoutExplicitSystemPolicy(t *test
 	}
 }
 
+func TestValidateRoutesDisplayBrightnessPercent(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	cfg, err := LoadCore(writeConfig(t, dir, "core.yaml", validWebCoreYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	uintPtr := func(v uint32) *uint32 { return &v }
+	valid := map[string]ProjectionRoute{
+		"desk-oled-01": {
+			Profile:                  "usage-oled-128x32",
+			DisplayMode:              "system",
+			DisplayBrightnessPercent: uintPtr(0),
+			Inputs:                   []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+		},
+		"desk-xiaozhi-01": {
+			Profile:                  "metrics-xiaozhi-320x240",
+			DisplayMode:              "system",
+			DisplayBrightnessPercent: uintPtr(100),
+			Inputs:                   []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+		},
+	}
+	if err := cfg.ValidateRoutes(valid); err != nil {
+		t.Fatalf("ValidateRoutes valid brightness failed: %v", err)
+	}
+	overMax := map[string]ProjectionRoute{
+		"desk-oled-01": {
+			Profile:                  "usage-oled-128x32",
+			DisplayMode:              "system",
+			DisplayBrightnessPercent: uintPtr(101),
+			Inputs:                   []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+		},
+	}
+	if err := cfg.ValidateRoutes(overMax); err == nil {
+		t.Fatal("accepted display_brightness_percent > 100")
+	}
+	nonDisplay := map[string]ProjectionRoute{
+		"desk-web-01": {
+			Profile:                  "overview-web",
+			DisplayBrightnessPercent: uintPtr(50),
+			Inputs:                   []ProjectionInput{{AgentID: "agent-a", ObservationType: "usage"}},
+		},
+	}
+	if err := cfg.ValidateRoutes(nonDisplay); err == nil {
+		t.Fatal("accepted display_brightness_percent on overview-web")
+	}
+}
+
 func writeFixtureFiles(t *testing.T, dir string, includeSub2API bool) {
 	t.Helper()
 	files := map[string]string{

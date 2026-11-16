@@ -38,6 +38,7 @@ def test_valid_config_generates_topics_and_contrast(tmp_path: Path) -> None:
     assert 'kNodeId[] = "desk-oled-01"' in header
     assert 'kViewTopic[] = "orbit/v1/nodes/desk-oled-01/view"' in header
     assert 'kStateTopic[] = "orbit/v1/nodes/desk-oled-01/state"' in header
+    assert "kDisplayBrightnessPercent = 56U" in header
     assert "kDisplayContrast = 143U" in header
     assert "ORBIT_MQTT_TLS 0" in header
 

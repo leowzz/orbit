@@ -231,5 +231,8 @@ func consoleNodePreview(now time.Time, view *orbitv1.DeviceView, step, total int
 		preview["rotation_step"] = step
 		preview["rotation_total"] = total
 	}
+	if view.DisplayBrightnessPercent != nil {
+		preview["brightness_percent"] = view.GetDisplayBrightnessPercent()
+	}
 	return preview
 }

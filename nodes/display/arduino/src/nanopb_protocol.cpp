@@ -49,6 +49,15 @@ class NanopbProtocolCodec final : public orbit_display::IProtocolCodec {
     decoded.revision = message.metadata.revision;
     decoded.fresh_until = message.fresh_until.seconds;
     decoded.retain_until = message.retain_until.seconds;
+    if (message.has_display_brightness_percent) {
+      if (message.display_brightness_percent > 100U) {
+        error = orbit_display::CodecError::kMalformed;
+        return false;
+      }
+      decoded.has_brightness_percent = true;
+      decoded.brightness_percent =
+          static_cast<uint8_t>(message.display_brightness_percent);
+    }
     if (!orbit_display::setText(decoded.node_id, message.node_id) ||
         !orbit_display::setText(decoded.core_epoch, message.core_epoch) ||
         !orbit_display::setText(decoded.display_kind, message.display_kind) ||

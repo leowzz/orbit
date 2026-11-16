@@ -146,6 +146,12 @@ export default function DeviceContent({
   }, [document, nodeId, profile, state, auto.queue, busy]);
   function update(patch: Partial<Route>) {
     const next = { ...draft, ...patch };
+    if (
+      "display_brightness_percent" in patch &&
+      patch.display_brightness_percent === undefined
+    ) {
+      delete next.display_brightness_percent;
+    }
     if (patch.display_mode && patch.display_mode !== "rotating")
       delete next.rotation_seconds;
     if (patch.display_mode || patch.sessions_enabled) {
@@ -371,6 +377,59 @@ export default function DeviceContent({
                   </button>
                 );
               })}
+            </div>
+          </div>
+        )}
+        {metricsOnly && (
+          <div className="setting-row">
+            <span>
+              <strong>屏幕亮度</strong>
+              <small>
+                调到 0% 可完全息屏防止烧屏；需设备运行新版固件才会生效。
+              </small>
+            </span>
+            <div className="brightness-control">
+              <input
+                className="brightness-slider"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                aria-label="屏幕亮度"
+                value={draft.display_brightness_percent ?? 80}
+                onChange={(event) =>
+                  update({
+                    display_brightness_percent: Number(event.target.value),
+                  })
+                }
+              />
+              <span className="brightness-value">
+                {draft.display_brightness_percent === undefined
+                  ? "固件默认"
+                  : draft.display_brightness_percent === 0
+                    ? "0% (息屏)"
+                    : `${draft.display_brightness_percent}%`}
+              </span>
+              {draft.display_brightness_percent !== 0 && (
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => update({ display_brightness_percent: 0 })}
+                >
+                  息屏
+                </button>
+              )}
+              {draft.display_brightness_percent !== undefined && (
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() =>
+                    update({ display_brightness_percent: undefined })
+                  }
+                >
+                  恢复默认
+                </button>
+              )}
             </div>
           </div>
         )}

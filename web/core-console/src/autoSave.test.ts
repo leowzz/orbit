@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { Route } from "./api.ts";
 import { AutoSave } from "./autoSave.ts";
 
 function deferred<T>() {
@@ -174,5 +175,34 @@ test("the first explicit choice can create a device route even when it matches d
   queue.set(0, 350, true);
   await queue.flush();
   assert.deepEqual(writes, [0]);
+  assert.equal(queue.getSnapshot().dirty, false);
+});
+
+test("route brightness preserves explicit 0% and clears back to default cleanly", async () => {
+  const writes: Route[] = [];
+  const base: Route = {
+    profile: "usage-oled-128x32",
+    display_mode: "system",
+    inputs: [{ agent_id: "macmini", observation_type: "system" }],
+  };
+  const queue = new AutoSave<Route>(base, async (value) => {
+    writes.push(value);
+    return value;
+  });
+
+  const off: Route = { ...base, display_brightness_percent: 0 };
+  queue.set(off);
+  assert.equal(queue.getSnapshot().dirty, true);
+  await queue.flush();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].display_brightness_percent, 0);
+
+  const reset: Route = { ...off };
+  delete reset.display_brightness_percent;
+  queue.set(reset);
+  assert.equal(queue.getSnapshot().dirty, true);
+  await queue.flush();
+  assert.equal(writes.length, 2);
+  assert.equal("display_brightness_percent" in writes[1], false);
   assert.equal(queue.getSnapshot().dirty, false);
 });

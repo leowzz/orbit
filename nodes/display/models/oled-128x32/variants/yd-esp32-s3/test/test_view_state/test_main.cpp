@@ -83,6 +83,25 @@ void test_rejects_text_over_the_fixed_bound() {
   TEST_ASSERT_FALSE(setText(text, too_long));
 }
 
+void test_rejects_brightness_percent_over_100() {
+  ViewStore store;
+  DisplayView invalid = makeView(7, 1, 2000);
+  invalid.has_brightness_percent = true;
+  invalid.brightness_percent = 101;
+  TEST_ASSERT_EQUAL(ViewApplyResult::kInvalid,
+                    store.apply(invalid, "desk-oled-01"));
+  TEST_ASSERT_FALSE(store.hasView());
+
+  DisplayView off = makeView(7, 1, 2000);
+  off.has_brightness_percent = true;
+  off.brightness_percent = 0;
+  TEST_ASSERT_EQUAL(ViewApplyResult::kAccepted,
+                    store.apply(off, "desk-oled-01"));
+  TEST_ASSERT_TRUE(store.hasView());
+  TEST_ASSERT_TRUE(store.view().has_brightness_percent);
+  TEST_ASSERT_EQUAL_UINT8(0U, store.view().brightness_percent);
+}
+
 void setUp() {}
 void tearDown() {}
 
@@ -93,5 +112,6 @@ int main(int, char**) {
   RUN_TEST(test_accepts_first_view_from_a_new_core_epoch);
   RUN_TEST(test_rejects_wrong_node_and_invalid_identity);
   RUN_TEST(test_rejects_text_over_the_fixed_bound);
+  RUN_TEST(test_rejects_brightness_percent_over_100);
   return UNITY_END();
 }

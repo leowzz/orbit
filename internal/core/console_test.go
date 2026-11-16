@@ -335,3 +335,77 @@ func TestAppAdminUsesConsoleAuthenticationAndOriginChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestConsoleRoutesDisplayBrightnessHotApply(t *testing.T) {
+	now := time.Now().UTC()
+	engine := newTestEngine(t)
+	_ = engine.ApplyAgentState(testAgentState(now))
+	_, _ = engine.ApplyNodeState(now, testNodeState(now))
+	_, _ = engine.ApplyObservation(now, testObservation(now))
+
+	transport := &fakeTransport{}
+	runner, err := NewRunner(engine, transport, nil, func() time.Time { return now })
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenRouteStore(filepath.Join(t.TempDir(), "core.sqlite"), seedRoutes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	cfg := &config.CoreConfig{
+		Console:             config.ConsoleConfig{Password: "pw", SessionHours: 72},
+		ObservationPolicies: map[string]config.ObservationPolicy{"usage": {MaxTTL: config.Duration{Duration: time.Minute}}},
+	}
+	handler := ConsoleHandler(runner, store, cfg)
+
+	login := httptest.NewRequest("POST", "/api/auth/login", strings.NewReader(`{"password":"pw"}`))
+	login.Header.Set("Content-Type", "application/json")
+	lw := httptest.NewRecorder()
+	handler.ServeHTTP(lw, login)
+	cookies := lw.Result().Cookies()
+
+	put := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("PUT", "/api/routes", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		return w
+	}
+
+	if w := put(`{"revision":1,"routes":{"node-a":{"profile":"usage-oled-128x32","display_brightness_percent":101,"inputs":[{"agent_id":"agent-a","observation_type":"usage"}]}}}`); w.Code != 400 {
+		t.Fatalf("expected 400 for brightness 101, got %d %s", w.Code, w.Body.String())
+	}
+
+	if w := put(`{"revision":1,"routes":{"node-a":{"profile":"usage-oled-128x32","display_brightness_percent":0,"inputs":[{"agent_id":"agent-a","observation_type":"usage"}]}}}`); w.Code != 200 {
+		t.Fatalf("expected 200 for brightness 0, got %d %s", w.Code, w.Body.String())
+	}
+	if len(transport.messages) == 0 {
+		t.Fatal("expected MQTT publication after brightness update")
+	}
+	var offView orbitv1.DeviceView
+	if err := proto.Unmarshal(transport.messages[len(transport.messages)-1].Payload, &offView); err != nil {
+		t.Fatal(err)
+	}
+	if offView.DisplayBrightnessPercent == nil || *offView.DisplayBrightnessPercent != 0 {
+		t.Fatalf("expected published DeviceView brightness 0, got %#v", offView.DisplayBrightnessPercent)
+	}
+
+	publishedBeforeClear := len(transport.messages)
+	if w := put(`{"revision":2,"routes":{"node-a":{"profile":"usage-oled-128x32","inputs":[{"agent_id":"agent-a","observation_type":"usage"}]}}}`); w.Code != 200 {
+		t.Fatalf("expected 200 clearing brightness, got %d %s", w.Code, w.Body.String())
+	}
+	if len(transport.messages) <= publishedBeforeClear {
+		t.Fatal("expected MQTT publication after clearing brightness")
+	}
+	var defaultView orbitv1.DeviceView
+	if err := proto.Unmarshal(transport.messages[len(transport.messages)-1].Payload, &defaultView); err != nil {
+		t.Fatal(err)
+	}
+	if defaultView.DisplayBrightnessPercent != nil {
+		t.Fatalf("expected cleared DeviceView brightness nil, got %#v", *defaultView.DisplayBrightnessPercent)
+	}
+}

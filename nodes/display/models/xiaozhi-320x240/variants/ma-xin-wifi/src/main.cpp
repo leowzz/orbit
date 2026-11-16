@@ -26,6 +26,16 @@ std::unique_ptr<MqttNodeRuntime> runtime;
 uint16_t battery[10]{};
 size_t batteryCount = 0, batteryIndex = 0;
 uint32_t lastFrame = 0;
+int16_t appliedBrightness = -1;
+
+void applyBrightness(uint8_t percent) {
+  if (percent > 100U) percent = 100U;
+  if (static_cast<int16_t>(percent) == appliedBrightness) return;
+  appliedBrightness = percent;
+  const uint32_t contrast = (static_cast<uint32_t>(percent) * 255U + 50U) / 100U;
+  const uint32_t duty = percent == 0U ? 0U : (contrast * 1023U) / 255U;
+  ledcWrite(0, duty);
+}
 
 void command(uint8_t value, const uint8_t* data = nullptr, size_t size = 0) {
   digitalWrite(board::kLcdCs, LOW);
@@ -52,7 +62,7 @@ void beginDisplay() {
   spi.endTransaction();
   ledcSetup(0, 25000, 10);
   ledcAttachPin(board::kLcdBacklight, 0);
-  ledcWrite(0, generated_config::kDisplayContrast * 1023U / 255U);
+  applyBrightness(generated_config::kDisplayBrightnessPercent);
   canvas.setTextWrap(false);
 }
 
@@ -76,6 +86,9 @@ void push() {
 void render() {
   if (!canvas.getBuffer()) return;
   auto snapshot = runtime->snapshot();
+  applyBrightness(snapshot.has_view && snapshot.view.has_brightness_percent
+                      ? snapshot.view.brightness_percent
+                      : generated_config::kDisplayBrightnessPercent);
   battery[batteryIndex++ % 10] = analogRead(board::kBatteryAdc);
   if (batteryCount < 10) ++batteryCount;
   uint32_t sum = 0;

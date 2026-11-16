@@ -25,8 +25,27 @@ orbit_display::ViewStore view_store;
 MqttNodeRuntime* runtime = nullptr;
 bool display_ready = false;
 bool full_refresh_needed = true;
+int16_t applied_brightness = -1;
 uint32_t last_display_retry_ms = 0U;
 uint32_t last_frame_ms = 0U;
+
+void applyDisplayBrightness(uint8_t percent) {
+  if (percent > 100U) percent = 100U;
+  if (static_cast<int16_t>(percent) == applied_brightness) return;
+  const bool waking = applied_brightness <= 0 && percent > 0U;
+  applied_brightness = percent;
+  if (percent == 0U) {
+    display.setPowerSave(1);
+    Serial.println("INFO oled brightness=0 power_save=1");
+    return;
+  }
+  const uint8_t contrast = static_cast<uint8_t>(
+      (static_cast<uint16_t>(percent) * 255U + 50U) / 100U);
+  display.setPowerSave(0);
+  display.setContrast(contrast);
+  if (waking) full_refresh_needed = true;
+  Serial.printf("INFO oled brightness=%u contrast=%u\n", percent, contrast);
+}
 
 void printI2cDevice(uint8_t address) {
   Serial.printf("INFO i2c device discovered address=0x%02X\n", address);
@@ -49,8 +68,8 @@ bool startDisplay() {
   display.setI2CAddress(kDisplayAddress << 1U);
   display.setBusClock(kI2cClockHz);
   display.initDisplay();
-  display.setPowerSave(0);
-  display.setContrast(generated_config::kDisplayContrast);
+  applied_brightness = -1;
+  applyDisplayBrightness(generated_config::kDisplayBrightnessPercent);
   full_refresh_needed = true;
   Serial.println("INFO oled ready address=0x3C size=128x32");
   return true;
@@ -90,8 +109,15 @@ void loop() {
             ? view_store.snapshot(orbit_display::RuntimeState::kBoot,
                                   orbit_display::DisplayError::kNone)
             : runtime->snapshot();
-    orbit_display::renderUi(display, snapshot, full_refresh_needed);
-    full_refresh_needed = false;
+    const uint8_t target_brightness =
+        snapshot.has_view && snapshot.view.has_brightness_percent
+            ? snapshot.view.brightness_percent
+            : generated_config::kDisplayBrightnessPercent;
+    applyDisplayBrightness(target_brightness);
+    if (applied_brightness != 0) {
+      orbit_display::renderUi(display, snapshot, full_refresh_needed);
+      full_refresh_needed = false;
+    }
   }
   delay(1);
 }

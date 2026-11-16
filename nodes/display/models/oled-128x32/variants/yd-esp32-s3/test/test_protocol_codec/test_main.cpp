@@ -92,6 +92,50 @@ void test_decodes_explicit_display_page() {
   TEST_ASSERT_EQUAL_INT64(2000, decoded.fresh_until);
 }
 
+void test_decodes_and_validates_display_brightness() {
+  auto codec = makeNanopbProtocolCodec();
+  TEST_ASSERT_NOT_NULL(codec.get());
+
+  auto encode_view = [](bool has_brightness, uint32_t brightness, uint8_t* out,
+                        size_t cap) -> size_t {
+    orbit_v1_DeviceView msg = orbit_v1_DeviceView_init_zero;
+    msg.has_metadata = true;
+    msg.metadata.revision = 9;
+    msg.has_fresh_until = msg.has_retain_until = true;
+    msg.fresh_until.seconds = 2000;
+    msg.retain_until.seconds = 3000;
+    setGeneratedText(msg.node_id, "node-1");
+    setGeneratedText(msg.core_epoch, "epoch-1");
+    msg.freshness = orbit_v1_Freshness_FRESHNESS_FRESH;
+    msg.has_primary = msg.has_secondary = msg.has_footer = true;
+    setGeneratedText(msg.primary.text, "24%");
+    setGeneratedText(msg.display_kind, "system");
+    msg.has_display_brightness_percent = has_brightness;
+    msg.display_brightness_percent = brightness;
+    pb_ostream_t stream = pb_ostream_from_buffer(out, cap);
+    TEST_ASSERT_TRUE(pb_encode(&stream, orbit_v1_DeviceView_fields, &msg));
+    return stream.bytes_written;
+  };
+
+  std::array<uint8_t, 1024> buf{};
+  orbit_display::DisplayView decoded{};
+  orbit_display::CodecError error = orbit_display::CodecError::kNone;
+
+  size_t len = encode_view(true, 0U, buf.data(), buf.size());
+  TEST_ASSERT_TRUE(codec->decodeDeviceView(buf.data(), len, decoded, error));
+  TEST_ASSERT_TRUE(decoded.has_brightness_percent);
+  TEST_ASSERT_EQUAL_UINT8(0U, decoded.brightness_percent);
+
+  len = encode_view(true, 100U, buf.data(), buf.size());
+  TEST_ASSERT_TRUE(codec->decodeDeviceView(buf.data(), len, decoded, error));
+  TEST_ASSERT_TRUE(decoded.has_brightness_percent);
+  TEST_ASSERT_EQUAL_UINT8(100U, decoded.brightness_percent);
+
+  len = encode_view(true, 101U, buf.data(), buf.size());
+  TEST_ASSERT_FALSE(codec->decodeDeviceView(buf.data(), len, decoded, error));
+  TEST_ASSERT_EQUAL(orbit_display::CodecError::kMalformed, error);
+}
+
 }  // namespace
 
 void setUp() {}
@@ -102,5 +146,6 @@ int main(int, char**) {
   RUN_TEST(test_decodes_device_view);
   RUN_TEST(test_encodes_node_state_with_metadata);
   RUN_TEST(test_decodes_explicit_display_page);
+  RUN_TEST(test_decodes_and_validates_display_brightness);
   return UNITY_END();
 }

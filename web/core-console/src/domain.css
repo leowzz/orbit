@@ -2553,6 +2553,31 @@ main.device-page {
 .interval-input input {
   width: 92px;
 }
+.brightness-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 1 1 260px;
+}
+.brightness-slider {
+  width: min(180px, 100%);
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+.brightness-value {
+  min-width: 72px;
+  text-align: right;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.brightness-control .button {
+  padding: 6px 12px;
+  min-height: 32px;
+  font-size: 13px;
+}
 .content-sources {
   margin-top: 12px;
   display: grid;

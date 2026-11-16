@@ -190,6 +190,7 @@ def render_header(config: AppConfig) -> str:
         f"{strings}\n"
         f"inline constexpr uint16_t kMqttPort = {config.mqtt_port}U;\n"
         f"inline constexpr uint16_t kMqttKeepAliveSeconds = {config.mqtt_keep_alive_seconds}U;\n"
+        f"inline constexpr uint8_t kDisplayBrightnessPercent = {config.display_brightness_percent}U;\n"
         f"inline constexpr uint8_t kDisplayContrast = {contrast}U;\n"
         "}  // namespace generated_config\n"
     )

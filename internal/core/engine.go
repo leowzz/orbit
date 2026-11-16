@@ -40,15 +40,16 @@ type RouteInput struct {
 }
 
 type Route struct {
-	NFCDMetricsLeftPadding *uint32
-	SessionsEnabled        *bool
-	DisplayMode            string
-	SystemPrimary          string
-	NodeID                 string
-	AgentID                string
-	Profile                string
-	Inputs                 []RouteInput
-	RotationSeconds        int
+	NFCDMetricsLeftPadding   *uint32
+	DisplayBrightnessPercent *uint32
+	SessionsEnabled          *bool
+	DisplayMode              string
+	SystemPrimary            string
+	NodeID                   string
+	AgentID                  string
+	Profile                  string
+	Inputs                   []RouteInput
+	RotationSeconds          int
 }
 
 type UsagePolicy struct {
@@ -134,6 +135,9 @@ func New(config Config) (*Engine, error) {
 		route := &config.Routes[index]
 		if route.NFCDMetricsLeftPadding != nil && (route.Profile != appProfile || *route.NFCDMetricsLeftPadding > 64) {
 			return nil, fmt.Errorf("invalid NFCD metrics padding for node %q", route.NodeID)
+		}
+		if route.DisplayBrightnessPercent != nil && (!isPhysicalDisplayProfile(route.Profile) || *route.DisplayBrightnessPercent > 100) {
+			return nil, fmt.Errorf("invalid display brightness for node %q", route.NodeID)
 		}
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
@@ -551,6 +555,10 @@ func isRichProfile(profile string) bool {
 	return profile == webProfile || profile == androidProfile || profile == appProfile
 }
 
+func isPhysicalDisplayProfile(profile string) bool {
+	return profile == usageProfile || profile == codexWeeklyProfile || profile == rotatingOLEDProfile || profile == xiaozhiProfile
+}
+
 func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision uint64, recordStart bool) (*orbitv1.DeviceView, int, int, bool) {
 	explicitPage := configured.displayMode() == "rotating" || configured.DisplayMode != ""
 	route, step, total := e.displayRouteAt(now, configured, recordStart)
@@ -570,14 +578,15 @@ func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision
 			ProducedAt: timestamppb.New(now),
 			ExpiresAt:  timestamppb.New(retainUntil),
 		},
-		SessionsEnabled:        proto.Bool(configured.sessionsEnabled()),
-		NfcdMetricsLeftPadding: configured.NFCDMetricsLeftPadding,
-		DisplayKind:            route.DisplayMode,
-		NodeId:                 nodeID,
-		CoreEpoch:              e.config.CoreEpoch,
-		Freshness:              freshness,
-		FreshUntil:             timestamppb.New(freshUntil),
-		RetainUntil:            timestamppb.New(retainUntil),
+		SessionsEnabled:          proto.Bool(configured.sessionsEnabled()),
+		NfcdMetricsLeftPadding:   configured.NFCDMetricsLeftPadding,
+		DisplayBrightnessPercent: configured.DisplayBrightnessPercent,
+		DisplayKind:              route.DisplayMode,
+		NodeId:                   nodeID,
+		CoreEpoch:                e.config.CoreEpoch,
+		Freshness:                freshness,
+		FreshUntil:               timestamppb.New(freshUntil),
+		RetainUntil:              timestamppb.New(retainUntil),
 	}
 	if hasUsage && isRichProfile(route.Profile) {
 		cost := usage.value.GetActualCostMicros()

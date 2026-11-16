@@ -9,6 +9,7 @@ export interface Route {
   display_mode?: DisplayMode;
   system_primary?: SystemPrimary;
   rotation_seconds?: number;
+  display_brightness_percent?: number;
   inputs: { agent_id: string; observation_type: InputKind }[];
 }
 export interface RouteDocument {
@@ -45,6 +46,7 @@ export interface NodePreview {
   updated_at?: string;
   rotation_step?: number;
   rotation_total?: number;
+  brightness_percent?: number;
 }
 export interface Agent {
   id: string;

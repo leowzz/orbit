@@ -52,6 +52,8 @@ struct DisplayView {
   DisplayText primary{};
   DisplayText secondary{};
   DisplayText footer{};
+  bool has_brightness_percent{false};
+  uint8_t brightness_percent{0};
 };
 
 struct NodeState {

@@ -599,8 +599,10 @@ type DeviceView struct {
 	// Device-specific override; absent uses the Agent preference.
 	NfcdMetricsLeftPadding *uint32     `protobuf:"varint,14,opt,name=nfcd_metrics_left_padding,json=nfcdMetricsLeftPadding,proto3,oneof" json:"nfcd_metrics_left_padding,omitempty"`
 	System                 *SystemView `protobuf:"bytes,15,opt,name=system,proto3" json:"system,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Physical screen brightness override (0-100%); 0 turns OLED pixels/backlight off.
+	DisplayBrightnessPercent *uint32 `protobuf:"varint,16,opt,name=display_brightness_percent,json=displayBrightnessPercent,proto3,oneof" json:"display_brightness_percent,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *DeviceView) Reset() {
@@ -738,6 +740,13 @@ func (x *DeviceView) GetSystem() *SystemView {
 	return nil
 }
 
+func (x *DeviceView) GetDisplayBrightnessPercent() uint32 {
+	if x != nil && x.DisplayBrightnessPercent != nil {
+		return *x.DisplayBrightnessPercent
+	}
+	return 0
+}
+
 var File_orbit_v1_view_proto protoreflect.FileDescriptor
 
 const file_orbit_v1_view_proto_rawDesc = "" +
@@ -805,7 +814,7 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\x10_swap_used_bytesB\x13\n" +
 	"\x11_swap_total_bytesB\x10\n" +
 	"\x0e_load_1m_milliB\x11\n" +
-	"\x0f_uptime_seconds\"\x82\x06\n" +
+	"\x0f_uptime_seconds\"\xe4\x06\n" +
 	"\n" +
 	"DeviceView\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x17\n" +
@@ -825,9 +834,11 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\fdisplay_kind\x18\f \x01(\tR\vdisplayKind\x12.\n" +
 	"\x10sessions_enabled\x18\r \x01(\bH\x00R\x0fsessionsEnabled\x88\x01\x01\x12>\n" +
 	"\x19nfcd_metrics_left_padding\x18\x0e \x01(\rH\x01R\x16nfcdMetricsLeftPadding\x88\x01\x01\x12,\n" +
-	"\x06system\x18\x0f \x01(\v2\x14.orbit.v1.SystemViewR\x06systemB\x13\n" +
+	"\x06system\x18\x0f \x01(\v2\x14.orbit.v1.SystemViewR\x06system\x12A\n" +
+	"\x1adisplay_brightness_percent\x18\x10 \x01(\rH\x02R\x18displayBrightnessPercent\x88\x01\x01B\x13\n" +
 	"\x11_sessions_enabledB\x1c\n" +
-	"\x1a_nfcd_metrics_left_padding*g\n" +
+	"\x1a_nfcd_metrics_left_paddingB\x1d\n" +
+	"\x1b_display_brightness_percent*g\n" +
 	"\tFreshness\x12\x19\n" +
 	"\x15FRESHNESS_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fFRESHNESS_FRESH\x10\x01\x12\x13\n" +

@@ -380,3 +380,118 @@ func TestFormatMemoryRatioRanges(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayBrightnessValidationAndProjection(t *testing.T) {
+	now := time.Date(2026, 11, 16, 8, 0, 0, 0, time.UTC)
+	uintPtr := func(v uint32) *uint32 { return &v }
+
+	if _, err := New(Config{
+		CoreID:    "core",
+		CoreEpoch: "epoch",
+		Routes: []Route{{
+			NodeID:                   "screen-1",
+			Profile:                  usageProfile,
+			DisplayMode:              "system",
+			DisplayBrightnessPercent: uintPtr(101),
+			Inputs:                   []RouteInput{{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM}},
+		}},
+	}); err == nil {
+		t.Fatal("expected error for brightness > 100")
+	}
+
+	if _, err := New(Config{
+		CoreID:    "core",
+		CoreEpoch: "epoch",
+		Routes: []Route{{
+			NodeID:                   "web-1",
+			Profile:                  "overview-web",
+			DisplayBrightnessPercent: uintPtr(50),
+			Inputs:                   []RouteInput{{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM}},
+		}},
+	}); err == nil {
+		t.Fatal("expected error for brightness on overview-web")
+	}
+
+	e, err := New(Config{
+		CoreID:    "core",
+		CoreEpoch: "epoch",
+		Routes: []Route{{
+			NodeID:                   "oled-off",
+			Profile:                  usageProfile,
+			DisplayMode:              "system",
+			DisplayBrightnessPercent: uintPtr(0),
+			Inputs:                   []RouteInput{{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM}},
+		}, {
+			NodeID:                   "xz-bright",
+			Profile:                  xiaozhiProfile,
+			DisplayMode:              "system",
+			DisplayBrightnessPercent: uintPtr(100),
+			Inputs:                   []RouteInput{{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("New valid brightness failed: %v", err)
+	}
+	if err := e.ApplyAgentState(testSystemAgentState(now, "agent-a")); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []struct {
+		id, model, variant string
+	}{
+		{"oled-off", oledModel, ydVariant},
+		{"xz-bright", xiaozhiModel, xiaozhiVariant},
+	} {
+		if _, err := e.ApplyNodeState(now, &orbitv1.NodeState{
+			Metadata:        &orbitv1.Metadata{MessageId: "ns-" + n.id, ProducerId: n.id, Revision: 1, ProducedAt: timestamppb.New(now)},
+			NodeId:          n.id,
+			NodeEpoch:       "ne-" + n.id,
+			SeriesId:        displaySeries,
+			ModelId:         n.model,
+			VariantId:       n.variant,
+			FirmwareVersion: "0.1.0",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	views, err := e.ApplyObservation(now, testSystemObservation(now, "agent-a", 1))
+	if err != nil || len(views) != 2 {
+		t.Fatalf("ApplyObservation views=%v err=%v", views, err)
+	}
+	byNode := map[string]*orbitv1.DeviceView{}
+	for _, v := range views {
+		if proto.Size(v) > 1024 {
+			t.Fatalf("DeviceView %s exceeds 1024 bytes: %d", v.NodeId, proto.Size(v))
+		}
+		raw, err := proto.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var roundTrip orbitv1.DeviceView
+		if err := proto.Unmarshal(raw, &roundTrip); err != nil {
+			t.Fatal(err)
+		}
+		byNode[roundTrip.NodeId] = &roundTrip
+	}
+	if byNode["oled-off"].DisplayBrightnessPercent == nil || byNode["oled-off"].GetDisplayBrightnessPercent() != 0 {
+		t.Fatalf("expected explicit 0%% brightness preserved, got %#v", byNode["oled-off"].DisplayBrightnessPercent)
+	}
+	if byNode["xz-bright"].DisplayBrightnessPercent == nil || byNode["xz-bright"].GetDisplayBrightnessPercent() != 100 {
+		t.Fatalf("expected explicit 100%% brightness preserved, got %#v", byNode["xz-bright"].DisplayBrightnessPercent)
+	}
+
+	rawState, _ := json.Marshal(e.consoleState(now))
+	var state struct {
+		NodeViews map[string]struct {
+			BrightnessPercent *uint32 `json:"brightness_percent"`
+		} `json:"node_views"`
+	}
+	if err := json.Unmarshal(rawState, &state); err != nil {
+		t.Fatal(err)
+	}
+	if state.NodeViews["oled-off"].BrightnessPercent == nil || *state.NodeViews["oled-off"].BrightnessPercent != 0 {
+		t.Fatalf("expected console preview brightness_percent=0, got %#v", state.NodeViews["oled-off"])
+	}
+	if state.NodeViews["xz-bright"].BrightnessPercent == nil || *state.NodeViews["xz-bright"].BrightnessPercent != 100 {
+		t.Fatalf("expected console preview brightness_percent=100, got %#v", state.NodeViews["xz-bright"])
+	}
+}

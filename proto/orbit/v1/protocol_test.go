@@ -192,9 +192,11 @@ func TestSystemObservationAndViewRoundTripWithZeroPresence(t *testing.T) {
 		t.Fatalf("unexpected decoded system observation: %#v", sys)
 	}
 
+	zeroBrightness := uint32(0)
 	view := &orbitv1.DeviceView{
-		NodeId:      "web-1",
-		DisplayKind: "system",
+		NodeId:                   "web-1",
+		DisplayKind:              "system",
+		DisplayBrightnessPercent: &zeroBrightness,
 		System: &orbitv1.SystemView{
 			Freshness:        orbitv1.Freshness_FRESHNESS_FRESH,
 			FreshUntil:       timestamppb.New(now.Add(time.Minute)),
@@ -215,5 +217,8 @@ func TestSystemObservationAndViewRoundTripWithZeroPresence(t *testing.T) {
 	}
 	if decodedView.GetSystem() == nil || decodedView.GetSystem().CpuUsagePermille == nil || *decodedView.GetSystem().CpuUsagePermille != 0 {
 		t.Fatalf("unexpected decoded system view: %#v", decodedView.GetSystem())
+	}
+	if decodedView.DisplayBrightnessPercent == nil || *decodedView.DisplayBrightnessPercent != 0 {
+		t.Fatalf("expected explicit 0 display_brightness_percent presence, got %#v", decodedView.DisplayBrightnessPercent)
 	}
 }

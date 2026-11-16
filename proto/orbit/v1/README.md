@@ -19,4 +19,4 @@ them.
 `DeviceView` keeps its OLED slots wire-compatible and adds typed `UsageView`,
 `CodexView`, and `SystemView` sections for rich projections (`overview-web`,
 `overview-android`, `overview-app`). Core never includes those rich sections in
-physical display views (`*-oled-128x32`, `metrics-xiaozhi-320x240`).
+physical display views (`*-oled-128x32`, `metrics-xiaozhi-320x240`), and `display_brightness_percent` (`0`–`100`, where `0` powers off pixels/backlight to prevent burn-in).
