@@ -2555,25 +2555,32 @@ main.device-page {
 }
 .brightness-control {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  flex: 1 1 260px;
+  flex: 0 0 auto;
 }
 .brightness-slider {
-  width: min(180px, 100%);
+  width: 160px;
+  flex: 0 0 160px;
   accent-color: var(--brand);
   cursor: pointer;
 }
+.brightness-slider:disabled {
+  cursor: not-allowed;
+}
 .brightness-value {
-  min-width: 72px;
+  width: 56px;
+  flex: 0 0 56px;
   text-align: right;
+  white-space: nowrap;
   font-size: 14px;
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
 .brightness-control .button {
+  flex: 0 0 auto;
   padding: 6px 12px;
   min-height: 32px;
   font-size: 13px;
@@ -2657,6 +2664,19 @@ main.device-page {
 @media (max-width: 760px) {
   .setting-row {
     gap: 16px;
+  }
+  .brightness-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .brightness-control {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .brightness-slider {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 120px;
   }
 }
 

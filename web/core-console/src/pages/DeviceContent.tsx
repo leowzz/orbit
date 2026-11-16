@@ -177,6 +177,23 @@ export default function DeviceContent({
   const sessions = sessionsEnabled(draft);
   const metricsOnly =
     profile.endsWith("-oled-128x32") || profile === "metrics-xiaozhi-320x240";
+  const screenOff = draft.display_brightness_percent === 0;
+  const lastActiveBrightnessRef = useRef<number | undefined>(
+    screenOff ? undefined : draft.display_brightness_percent,
+  );
+  const lastNodeRef = useRef(nodeId);
+  if (lastNodeRef.current !== nodeId) {
+    lastNodeRef.current = nodeId;
+    lastActiveBrightnessRef.current = screenOff
+      ? undefined
+      : draft.display_brightness_percent;
+  } else if (!screenOff) {
+    lastActiveBrightnessRef.current = draft.display_brightness_percent;
+  }
+  const defaultBrightness = profile === "metrics-xiaozhi-320x240" ? 80 : 20;
+  const sliderBrightness = screenOff
+    ? (lastActiveBrightnessRef.current ?? defaultBrightness)
+    : (draft.display_brightness_percent ?? defaultBrightness);
   const hasSystemInput = draft.inputs.some(
     (i) => i.observation_type === "system",
   );
@@ -381,57 +398,60 @@ export default function DeviceContent({
           </div>
         )}
         {metricsOnly && (
-          <div className="setting-row">
-            <span>
-              <strong>屏幕亮度</strong>
-              <small>
-                调到 0% 可完全息屏防止烧屏；需设备运行新版固件才会生效。
-              </small>
-            </span>
-            <div className="brightness-control">
-              <input
-                className="brightness-slider"
-                type="range"
-                min={0}
-                max={100}
-                step={1}
-                aria-label="屏幕亮度"
-                value={draft.display_brightness_percent ?? 80}
-                onChange={(event) =>
-                  update({
-                    display_brightness_percent: Number(event.target.value),
-                  })
-                }
-              />
-              <span className="brightness-value">
-                {draft.display_brightness_percent === undefined
-                  ? "固件默认"
-                  : draft.display_brightness_percent === 0
-                    ? "0% (息屏)"
-                    : `${draft.display_brightness_percent}%`}
+          <>
+            <SettingSwitch
+              title="息屏"
+              description="关闭屏幕显示以防烧屏，开启后仍保持在线并继续同步最新数据。"
+              checked={screenOff}
+              onChange={(checked) =>
+                update({
+                  display_brightness_percent: checked
+                    ? 0
+                    : lastActiveBrightnessRef.current,
+                })
+              }
+            />
+            <div className="setting-row brightness-row">
+              <span>
+                <strong>屏幕亮度</strong>
+                <small>在 1%–100% 之间调节显示亮度；需设备运行新版固件。</small>
               </span>
-              {draft.display_brightness_percent !== 0 && (
+              <div className="brightness-control">
+                <input
+                  className="brightness-slider"
+                  type="range"
+                  min={1}
+                  max={100}
+                  step={1}
+                  aria-label="屏幕亮度"
+                  disabled={screenOff}
+                  value={sliderBrightness}
+                  onChange={(event) =>
+                    update({
+                      display_brightness_percent: Number(event.target.value),
+                    })
+                  }
+                />
+                <span className="brightness-value">
+                  {screenOff
+                    ? "已息屏"
+                    : draft.display_brightness_percent === undefined
+                      ? "默认"
+                      : `${draft.display_brightness_percent}%`}
+                </span>
                 <button
                   type="button"
                   className="button"
-                  onClick={() => update({ display_brightness_percent: 0 })}
-                >
-                  息屏
-                </button>
-              )}
-              {draft.display_brightness_percent !== undefined && (
-                <button
-                  type="button"
-                  className="button"
+                  disabled={draft.display_brightness_percent === undefined}
                   onClick={() =>
                     update({ display_brightness_percent: undefined })
                   }
                 >
                   恢复默认
                 </button>
-              )}
+              </div>
             </div>
-          </div>
+          </>
         )}
         {!metricsOnly && (
           <SettingSwitch

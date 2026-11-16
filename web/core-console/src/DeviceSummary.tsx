@@ -132,7 +132,7 @@ export default function DeviceSummary({
             <dt>屏幕亮度</dt>
             <dd>
               {route.display_brightness_percent === 0
-                ? "0% (息屏)"
+                ? "已息屏"
                 : `${route.display_brightness_percent}%`}
             </dd>
           </div>
