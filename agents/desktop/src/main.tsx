@@ -21,6 +21,18 @@ import "./style.css";
 import { Shortcuts } from "./Shortcuts";
 import { SoftwareUpdate, useSoftwareUpdate } from "./SoftwareUpdate";
 import { useVisiblePolling, useWindowVisible } from "./ui-polling";
+const emptySource: Source = {
+  lastSuccess: null,
+  error: "",
+  sessions: null,
+  runningSessions: null,
+  cpuUsagePermille: null,
+  memoryUsedBytes: null,
+  memoryTotalBytes: null,
+};
+function formatGiB(bytes: number) {
+  return (bytes / 1024 ** 3).toFixed(1);
+}
 const pages = [
   { id: "status", name: "运行状态", icon: Activity },
   { id: "connection", name: "连接", icon: Cable },
@@ -165,7 +177,7 @@ function App() {
     );
   }
   function source(
-    group: "core" | "mqtt" | "codex" | "usage" | "inference",
+    group: "core" | "mqtt" | "codex" | "usage" | "system" | "inference",
     key: string,
     value: unknown,
   ) {
@@ -216,7 +228,7 @@ function App() {
     );
   }
   function number(
-    group: "codex" | "usage",
+    group: "codex" | "usage" | "system",
     key: string,
     label: string,
     value: number,
@@ -289,6 +301,13 @@ function App() {
         {enabled && s.sessions !== null && (
           <p className="counts">
             {s.sessions} 个会话 · {s.runningSessions} 个运行中
+          </p>
+        )}
+        {enabled && s.memoryTotalBytes !== null && s.memoryTotalBytes > 0 && (
+          <p className="counts">
+            CPU {((s.cpuUsagePermille ?? 0) / 10).toFixed(1)}% · 内存{" "}
+            {formatGiB(s.memoryUsedBytes ?? 0)}/
+            {formatGiB(s.memoryTotalBytes)}G
           </p>
         )}
       </div>
@@ -429,22 +448,17 @@ function App() {
                       {sourceState(
                         "Codex",
                         settings.config.codex.enabled,
-                        status?.codex || {
-                          lastSuccess: null,
-                          error: "",
-                          sessions: null,
-                          runningSessions: null,
-                        },
+                        status?.codex || emptySource,
                       )}
                       {sourceState(
                         "Sub2API",
                         settings.config.usage.enabled,
-                        status?.usage || {
-                          lastSuccess: null,
-                          error: "",
-                          sessions: null,
-                          runningSessions: null,
-                        },
+                        status?.usage || emptySource,
+                      )}
+                      {sourceState(
+                        "系统资源",
+                        settings.config.system.enabled,
+                        status?.system || emptySource,
                       )}
                     </div>
                     {status?.weeklyError && (
@@ -1059,6 +1073,33 @@ function App() {
                           ))}
                         </details>
                       </>
+                    )}
+                  </Section>
+                  <Section title="系统资源">
+                    <Toggle
+                      label="同步本机 CPU 与内存"
+                      hint="低开销采集本机 CPU、内存、负载与运行时长，供桌面端与硬件小屏展示。"
+                      value={settings.config.system.enabled}
+                      onChange={(v) => source("system", "enabled", v)}
+                    />
+                    {settings.config.system.enabled && (
+                      <details>
+                        <summary>采集设置</summary>
+                        <div className="two-col">
+                          {number(
+                            "system",
+                            "interval",
+                            "采集间隔（秒）",
+                            settings.config.system.interval,
+                          )}
+                          {number(
+                            "system",
+                            "ttl",
+                            "状态保留（秒）",
+                            settings.config.system.ttl,
+                          )}
+                        </div>
+                      </details>
                     )}
                   </Section>
                 </>

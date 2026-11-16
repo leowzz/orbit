@@ -62,6 +62,12 @@ sources:
   #     include_display_name: false
   #     include_project_name: false
 
+  # Optional host resource collector. Enabled by default when omitted.
+  # system:
+  #   enabled: true
+  #   poll_interval: 5s
+  #   observation_ttl: 30s
+
 # Optional remote action. Requires sources.codex to be enabled.
 # capabilities:
 #   open_codex_session:

@@ -14,6 +14,7 @@ import (
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
+	"orbit/internal/sources/system"
 
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -28,14 +29,19 @@ type CodexSource interface {
 	Fetch(context.Context) (codex.Snapshot, error)
 }
 
+type SystemSource interface {
+	Fetch(context.Context) (system.Snapshot, error)
+}
+
 type Transport interface {
 	Publish(context.Context, mqtt.Message) error
 	Subscribe(context.Context, string, mqtt.Handler) error
 }
 
 type Sources struct {
-	Usage UsageSource
-	Codex CodexSource
+	Usage  UsageSource
+	Codex  CodexSource
+	System SystemSource
 }
 
 type CodexSessionOpener interface {
@@ -61,6 +67,9 @@ type Config struct {
 	CodexObservationTTL time.Duration
 	CodexDisplayName    bool
 	CodexProjectName    bool
+
+	SystemPollInterval   time.Duration
+	SystemObservationTTL time.Duration
 }
 
 type sourceState struct {
@@ -83,6 +92,7 @@ type Runner struct {
 
 	usageRevision    uint64
 	codexRevision    uint64
+	systemRevision   uint64
 	stateRevision    uint64
 	sourceStates     map[orbitv1.ObservationType]sourceState
 	commandResults   map[string]cachedCommandResult
@@ -108,7 +118,7 @@ func newRunner(config Config, sources Sources, capabilities Capabilities, transp
 	if config.AgentID == "" || config.AgentEpoch == "" || config.AgentVersion == "" || config.HostLabel == "" {
 		return nil, errors.New("agent identity, epoch, version, and host label are required")
 	}
-	if sources.Usage == nil && sources.Codex == nil {
+	if sources.Usage == nil && sources.Codex == nil && sources.System == nil {
 		return nil, errors.New("at least one agent source is required")
 	}
 	if sources.Usage != nil {
@@ -122,6 +132,9 @@ func newRunner(config Config, sources Sources, capabilities Capabilities, transp
 	if sources.Codex != nil && (config.CodexPollInterval <= 0 || config.CodexObservationTTL < config.CodexPollInterval) {
 		return nil, errors.New("codex valid polling durations are required")
 	}
+	if sources.System != nil && (config.SystemPollInterval <= 0 || config.SystemObservationTTL < config.SystemPollInterval) {
+		return nil, errors.New("system valid polling durations are required")
+	}
 	if capabilities.OpenCodexSession != nil && sources.Codex == nil {
 		return nil, errors.New("open Codex session capability requires the Codex source")
 	}
@@ -131,7 +144,7 @@ func newRunner(config Config, sources Sources, capabilities Capabilities, transp
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	states := make(map[orbitv1.ObservationType]sourceState, 2)
+	states := make(map[orbitv1.ObservationType]sourceState, 3)
 	if sources.Usage != nil {
 		states[orbitv1.ObservationType_OBSERVATION_TYPE_USAGE] = sourceState{
 			enabled: true,
@@ -140,6 +153,12 @@ func newRunner(config Config, sources Sources, capabilities Capabilities, transp
 	}
 	if sources.Codex != nil {
 		states[orbitv1.ObservationType_OBSERVATION_TYPE_CODEX] = sourceState{
+			enabled: true,
+			health:  orbitv1.SourceHealth_SOURCE_HEALTH_UNSPECIFIED,
+		}
+	}
+	if sources.System != nil {
+		states[orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM] = sourceState{
 			enabled: true,
 			health:  orbitv1.SourceHealth_SOURCE_HEALTH_UNSPECIFIED,
 		}
@@ -190,6 +209,13 @@ func (r *Runner) Run(ctx context.Context) error {
 		go func() {
 			defer workers.Done()
 			r.runCodex(ctx)
+		}()
+	}
+	if r.sources.System != nil {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			r.runSystem(ctx)
 		}()
 	}
 	<-ctx.Done()
@@ -293,6 +319,58 @@ func (r *Runner) PollCodexOnce(ctx context.Context) error {
 	return r.markSourceHealthy(ctx, orbitv1.ObservationType_OBSERVATION_TYPE_CODEX, now)
 }
 
+func (r *Runner) PollSystemOnce(ctx context.Context) error {
+	if r.sources.System == nil {
+		return errors.New("system source is not configured")
+	}
+	snapshot, err := r.sources.System.Fetch(ctx)
+	if err != nil {
+		return r.handleSourceFailure(ctx, orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM, err)
+	}
+
+	now := snapshot.ObservedAt.UTC()
+	if now.IsZero() {
+		now = r.now().UTC()
+	} else if offsetNow := r.now().UTC(); !offsetNow.IsZero() {
+		now = offsetNow
+	}
+	cpu := snapshot.CPUUsagePermille
+	cores := snapshot.CPUCores
+	memUsed := snapshot.MemoryUsedBytes
+	memTotal := snapshot.MemoryTotalBytes
+	swapUsed := snapshot.SwapUsedBytes
+	swapTotal := snapshot.SwapTotalBytes
+	uptime := snapshot.UptimeSeconds
+	payload := &orbitv1.SystemObservation{
+		CpuUsagePermille: &cpu,
+		CpuCores:         &cores,
+		MemoryUsedBytes:  &memUsed,
+		MemoryTotalBytes: &memTotal,
+		SwapUsedBytes:    &swapUsed,
+		SwapTotalBytes:   &swapTotal,
+		UptimeSeconds:    &uptime,
+		ObservedAt:       timestamppb.New(now),
+	}
+	if snapshot.HasLoad1m {
+		load := snapshot.Load1mMilli
+		payload.Load_1MMilli = &load
+	}
+	observation := &orbitv1.Observation{
+		Metadata: &orbitv1.Metadata{
+			MessageId:  newID(),
+			ProducerId: r.config.AgentID,
+			ProducedAt: timestamppb.New(now),
+			ExpiresAt:  timestamppb.New(now.Add(r.config.SystemObservationTTL)),
+		},
+		AgentEpoch: r.config.AgentEpoch,
+		Payload:    &orbitv1.Observation_System{System: payload},
+	}
+	if err := r.publishObservation(ctx, "system", observation); err != nil {
+		return r.handleSourceFailure(ctx, orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM, err)
+	}
+	return r.markSourceHealthy(ctx, orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM, now)
+}
+
 func (r *Runner) runUsage(ctx context.Context) {
 	if err := r.PollOnce(ctx); err != nil && ctx.Err() == nil {
 		r.logger.Warn("usage poll failed", zap.String("source_type", "usage"), zap.String("error_code", sourceErrorCode(err)))
@@ -329,14 +407,36 @@ func (r *Runner) runCodex(ctx context.Context) {
 	}
 }
 
+func (r *Runner) runSystem(ctx context.Context) {
+	if err := r.PollSystemOnce(ctx); err != nil && ctx.Err() == nil {
+		r.logger.Warn("system poll failed", zap.String("source_type", "system"), zap.String("error_code", sourceErrorCode(err)))
+	}
+	ticker := time.NewTicker(r.config.SystemPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := r.PollSystemOnce(ctx); err != nil && ctx.Err() == nil {
+				r.logger.Warn("system poll failed", zap.String("source_type", "system"), zap.String("error_code", sourceErrorCode(err)))
+			}
+		}
+	}
+}
+
 func (r *Runner) publishObservation(ctx context.Context, name string, observation *orbitv1.Observation) error {
 	r.observationMu.Lock()
 	defer r.observationMu.Unlock()
 	source := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
 	interval := r.config.PollInterval
-	if name == "codex" {
+	switch name {
+	case "codex":
 		source = orbitv1.ObservationType_OBSERVATION_TYPE_CODEX
 		interval = r.config.CodexPollInterval
+	case "system":
+		source = orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM
+		interval = r.config.SystemPollInterval
 	}
 	previous := r.lastObservations[name]
 	// Refresh on the last scheduled poll before expiry, even when facts are unchanged.
@@ -385,6 +485,9 @@ func (r *Runner) nextRevision(source orbitv1.ObservationType) uint64 {
 	case orbitv1.ObservationType_OBSERVATION_TYPE_CODEX:
 		r.codexRevision++
 		return r.codexRevision
+	case orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM:
+		r.systemRevision++
+		return r.systemRevision
 	default:
 		return 0
 	}
@@ -438,6 +541,7 @@ func (r *Runner) publishStateLocked(ctx context.Context) error {
 	for _, source := range []orbitv1.ObservationType{
 		orbitv1.ObservationType_OBSERVATION_TYPE_USAGE,
 		orbitv1.ObservationType_OBSERVATION_TYPE_CODEX,
+		orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM,
 	} {
 		status, ok := r.sourceStates[source]
 		if !ok || !status.enabled {
@@ -560,6 +664,31 @@ func observationFacts(observation *orbitv1.Observation) *orbitv1.Observation {
 		sort.Slice(codex.Sessions, func(i, j int) bool {
 			return codex.Sessions[i].SessionId < codex.Sessions[j].SessionId
 		})
+	}
+	if sys := facts.GetSystem(); sys != nil {
+		sys.ObservedAt = nil
+		sys.UptimeSeconds = nil
+		// Bucket high-frequency noise so idle hosts refresh only near TTL expiry.
+		if sys.CpuUsagePermille != nil {
+			v := ((*sys.CpuUsagePermille + 5) / 10) * 10
+			if v > 1000 {
+				v = 1000
+			}
+			sys.CpuUsagePermille = &v
+		}
+		const memStep = 16 * 1024 * 1024
+		if sys.MemoryUsedBytes != nil {
+			v := ((*sys.MemoryUsedBytes + memStep/2) / memStep) * memStep
+			sys.MemoryUsedBytes = &v
+		}
+		if sys.SwapUsedBytes != nil {
+			v := ((*sys.SwapUsedBytes + memStep/2) / memStep) * memStep
+			sys.SwapUsedBytes = &v
+		}
+		if sys.Load_1MMilli != nil {
+			v := ((*sys.Load_1MMilli + 25) / 50) * 50
+			sys.Load_1MMilli = &v
+		}
 	}
 	return facts
 }

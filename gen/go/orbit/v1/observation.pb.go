@@ -28,6 +28,7 @@ const (
 	ObservationType_OBSERVATION_TYPE_UNSPECIFIED ObservationType = 0
 	ObservationType_OBSERVATION_TYPE_USAGE       ObservationType = 1
 	ObservationType_OBSERVATION_TYPE_CODEX       ObservationType = 2
+	ObservationType_OBSERVATION_TYPE_SYSTEM      ObservationType = 3
 )
 
 // Enum value maps for ObservationType.
@@ -36,11 +37,13 @@ var (
 		0: "OBSERVATION_TYPE_UNSPECIFIED",
 		1: "OBSERVATION_TYPE_USAGE",
 		2: "OBSERVATION_TYPE_CODEX",
+		3: "OBSERVATION_TYPE_SYSTEM",
 	}
 	ObservationType_value = map[string]int32{
 		"OBSERVATION_TYPE_UNSPECIFIED": 0,
 		"OBSERVATION_TYPE_USAGE":       1,
 		"OBSERVATION_TYPE_CODEX":       2,
+		"OBSERVATION_TYPE_SYSTEM":      3,
 	}
 )
 
@@ -460,6 +463,116 @@ func (x *CodexObservation) GetWeeklyLimit() *CodexWeeklyLimit {
 	return nil
 }
 
+type SystemObservation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// CPU utilization across all logical cores, in permille (0..1000 => 0.0%..100.0%).
+	CpuUsagePermille *uint32 `protobuf:"varint,1,opt,name=cpu_usage_permille,json=cpuUsagePermille,proto3,oneof" json:"cpu_usage_permille,omitempty"`
+	CpuCores         *uint32 `protobuf:"varint,2,opt,name=cpu_cores,json=cpuCores,proto3,oneof" json:"cpu_cores,omitempty"`
+	MemoryUsedBytes  *uint64 `protobuf:"varint,3,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3,oneof" json:"memory_used_bytes,omitempty"`
+	MemoryTotalBytes *uint64 `protobuf:"varint,4,opt,name=memory_total_bytes,json=memoryTotalBytes,proto3,oneof" json:"memory_total_bytes,omitempty"`
+	SwapUsedBytes    *uint64 `protobuf:"varint,5,opt,name=swap_used_bytes,json=swapUsedBytes,proto3,oneof" json:"swap_used_bytes,omitempty"`
+	SwapTotalBytes   *uint64 `protobuf:"varint,6,opt,name=swap_total_bytes,json=swapTotalBytes,proto3,oneof" json:"swap_total_bytes,omitempty"`
+	// 1-minute load average scaled by 1000 when reported by the host OS.
+	Load_1MMilli  *uint32                `protobuf:"varint,7,opt,name=load_1m_milli,json=load1mMilli,proto3,oneof" json:"load_1m_milli,omitempty"`
+	UptimeSeconds *uint64                `protobuf:"varint,8,opt,name=uptime_seconds,json=uptimeSeconds,proto3,oneof" json:"uptime_seconds,omitempty"`
+	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SystemObservation) Reset() {
+	*x = SystemObservation{}
+	mi := &file_orbit_v1_observation_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SystemObservation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SystemObservation) ProtoMessage() {}
+
+func (x *SystemObservation) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_observation_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SystemObservation.ProtoReflect.Descriptor instead.
+func (*SystemObservation) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SystemObservation) GetCpuUsagePermille() uint32 {
+	if x != nil && x.CpuUsagePermille != nil {
+		return *x.CpuUsagePermille
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetCpuCores() uint32 {
+	if x != nil && x.CpuCores != nil {
+		return *x.CpuCores
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetMemoryUsedBytes() uint64 {
+	if x != nil && x.MemoryUsedBytes != nil {
+		return *x.MemoryUsedBytes
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetMemoryTotalBytes() uint64 {
+	if x != nil && x.MemoryTotalBytes != nil {
+		return *x.MemoryTotalBytes
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetSwapUsedBytes() uint64 {
+	if x != nil && x.SwapUsedBytes != nil {
+		return *x.SwapUsedBytes
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetSwapTotalBytes() uint64 {
+	if x != nil && x.SwapTotalBytes != nil {
+		return *x.SwapTotalBytes
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetLoad_1MMilli() uint32 {
+	if x != nil && x.Load_1MMilli != nil {
+		return *x.Load_1MMilli
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetUptimeSeconds() uint64 {
+	if x != nil && x.UptimeSeconds != nil {
+		return *x.UptimeSeconds
+	}
+	return 0
+}
+
+func (x *SystemObservation) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
 type Observation struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Metadata   *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -468,6 +581,7 @@ type Observation struct {
 	//
 	//	*Observation_Usage
 	//	*Observation_Codex
+	//	*Observation_System
 	Payload       isObservation_Payload `protobuf_oneof:"payload"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -475,7 +589,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_orbit_v1_observation_proto_msgTypes[4]
+	mi := &file_orbit_v1_observation_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -487,7 +601,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_observation_proto_msgTypes[4]
+	mi := &file_orbit_v1_observation_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -500,7 +614,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{4}
+	return file_orbit_v1_observation_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Observation) GetMetadata() *Metadata {
@@ -542,6 +656,15 @@ func (x *Observation) GetCodex() *CodexObservation {
 	return nil
 }
 
+func (x *Observation) GetSystem() *SystemObservation {
+	if x != nil {
+		if x, ok := x.Payload.(*Observation_System); ok {
+			return x.System
+		}
+	}
+	return nil
+}
+
 type isObservation_Payload interface {
 	isObservation_Payload()
 }
@@ -554,9 +677,15 @@ type Observation_Codex struct {
 	Codex *CodexObservation `protobuf:"bytes,4,opt,name=codex,proto3,oneof"`
 }
 
+type Observation_System struct {
+	System *SystemObservation `protobuf:"bytes,5,opt,name=system,proto3,oneof"`
+}
+
 func (*Observation_Usage) isObservation_Payload() {}
 
 func (*Observation_Codex) isObservation_Payload() {}
+
+func (*Observation_System) isObservation_Payload() {}
 
 var File_orbit_v1_observation_proto protoreflect.FileDescriptor
 
@@ -601,18 +730,40 @@ const file_orbit_v1_observation_proto_rawDesc = "" +
 	"\rrunning_count\x18\x03 \x01(\rR\frunningCount\x12;\n" +
 	"\vobserved_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"observedAt\x12=\n" +
-	"\fweekly_limit\x18\x05 \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\xd1\x01\n" +
+	"\fweekly_limit\x18\x05 \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\xda\x04\n" +
+	"\x11SystemObservation\x121\n" +
+	"\x12cpu_usage_permille\x18\x01 \x01(\rH\x00R\x10cpuUsagePermille\x88\x01\x01\x12 \n" +
+	"\tcpu_cores\x18\x02 \x01(\rH\x01R\bcpuCores\x88\x01\x01\x12/\n" +
+	"\x11memory_used_bytes\x18\x03 \x01(\x04H\x02R\x0fmemoryUsedBytes\x88\x01\x01\x121\n" +
+	"\x12memory_total_bytes\x18\x04 \x01(\x04H\x03R\x10memoryTotalBytes\x88\x01\x01\x12+\n" +
+	"\x0fswap_used_bytes\x18\x05 \x01(\x04H\x04R\rswapUsedBytes\x88\x01\x01\x12-\n" +
+	"\x10swap_total_bytes\x18\x06 \x01(\x04H\x05R\x0eswapTotalBytes\x88\x01\x01\x12'\n" +
+	"\rload_1m_milli\x18\a \x01(\rH\x06R\vload1mMilli\x88\x01\x01\x12*\n" +
+	"\x0euptime_seconds\x18\b \x01(\x04H\aR\ruptimeSeconds\x88\x01\x01\x12;\n" +
+	"\vobserved_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAtB\x15\n" +
+	"\x13_cpu_usage_permilleB\f\n" +
+	"\n" +
+	"_cpu_coresB\x14\n" +
+	"\x12_memory_used_bytesB\x15\n" +
+	"\x13_memory_total_bytesB\x12\n" +
+	"\x10_swap_used_bytesB\x13\n" +
+	"\x11_swap_total_bytesB\x10\n" +
+	"\x0e_load_1m_milliB\x11\n" +
+	"\x0f_uptime_seconds\"\x88\x02\n" +
 	"\vObservation\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x1f\n" +
 	"\vagent_epoch\x18\x02 \x01(\tR\n" +
 	"agentEpoch\x122\n" +
 	"\x05usage\x18\x03 \x01(\v2\x1a.orbit.v1.UsageObservationH\x00R\x05usage\x122\n" +
-	"\x05codex\x18\x04 \x01(\v2\x1a.orbit.v1.CodexObservationH\x00R\x05codexB\t\n" +
-	"\apayload*k\n" +
+	"\x05codex\x18\x04 \x01(\v2\x1a.orbit.v1.CodexObservationH\x00R\x05codex\x125\n" +
+	"\x06system\x18\x05 \x01(\v2\x1b.orbit.v1.SystemObservationH\x00R\x06systemB\t\n" +
+	"\apayload*\x88\x01\n" +
 	"\x0fObservationType\x12 \n" +
 	"\x1cOBSERVATION_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16OBSERVATION_TYPE_USAGE\x10\x01\x12\x1a\n" +
-	"\x16OBSERVATION_TYPE_CODEX\x10\x02*\x8d\x02\n" +
+	"\x16OBSERVATION_TYPE_CODEX\x10\x02\x12\x1b\n" +
+	"\x17OBSERVATION_TYPE_SYSTEM\x10\x03*\x8d\x02\n" +
 	"\x12CodexSessionStatus\x12$\n" +
 	" CODEX_SESSION_STATUS_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cCODEX_SESSION_STATUS_UNKNOWN\x10\x01\x12 \n" +
@@ -635,7 +786,7 @@ func file_orbit_v1_observation_proto_rawDescGZIP() []byte {
 }
 
 var file_orbit_v1_observation_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_orbit_v1_observation_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_orbit_v1_observation_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_orbit_v1_observation_proto_goTypes = []any{
 	(ObservationType)(0),          // 0: orbit.v1.ObservationType
 	(CodexSessionStatus)(0),       // 1: orbit.v1.CodexSessionStatus
@@ -643,30 +794,33 @@ var file_orbit_v1_observation_proto_goTypes = []any{
 	(*CodexSession)(nil),          // 3: orbit.v1.CodexSession
 	(*CodexWeeklyLimit)(nil),      // 4: orbit.v1.CodexWeeklyLimit
 	(*CodexObservation)(nil),      // 5: orbit.v1.CodexObservation
-	(*Observation)(nil),           // 6: orbit.v1.Observation
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
-	(*Metadata)(nil),              // 8: orbit.v1.Metadata
+	(*SystemObservation)(nil),     // 6: orbit.v1.SystemObservation
+	(*Observation)(nil),           // 7: orbit.v1.Observation
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(*Metadata)(nil),              // 9: orbit.v1.Metadata
 }
 var file_orbit_v1_observation_proto_depIdxs = []int32{
-	7,  // 0: orbit.v1.UsageObservation.window_start:type_name -> google.protobuf.Timestamp
-	7,  // 1: orbit.v1.UsageObservation.window_end:type_name -> google.protobuf.Timestamp
-	7,  // 2: orbit.v1.UsageObservation.observed_at:type_name -> google.protobuf.Timestamp
+	8,  // 0: orbit.v1.UsageObservation.window_start:type_name -> google.protobuf.Timestamp
+	8,  // 1: orbit.v1.UsageObservation.window_end:type_name -> google.protobuf.Timestamp
+	8,  // 2: orbit.v1.UsageObservation.observed_at:type_name -> google.protobuf.Timestamp
 	1,  // 3: orbit.v1.CodexSession.status:type_name -> orbit.v1.CodexSessionStatus
-	7,  // 4: orbit.v1.CodexSession.updated_at:type_name -> google.protobuf.Timestamp
-	7,  // 5: orbit.v1.CodexWeeklyLimit.resets_at:type_name -> google.protobuf.Timestamp
-	7,  // 6: orbit.v1.CodexWeeklyLimit.observed_at:type_name -> google.protobuf.Timestamp
-	7,  // 7: orbit.v1.CodexWeeklyLimit.fresh_until:type_name -> google.protobuf.Timestamp
+	8,  // 4: orbit.v1.CodexSession.updated_at:type_name -> google.protobuf.Timestamp
+	8,  // 5: orbit.v1.CodexWeeklyLimit.resets_at:type_name -> google.protobuf.Timestamp
+	8,  // 6: orbit.v1.CodexWeeklyLimit.observed_at:type_name -> google.protobuf.Timestamp
+	8,  // 7: orbit.v1.CodexWeeklyLimit.fresh_until:type_name -> google.protobuf.Timestamp
 	3,  // 8: orbit.v1.CodexObservation.sessions:type_name -> orbit.v1.CodexSession
-	7,  // 9: orbit.v1.CodexObservation.observed_at:type_name -> google.protobuf.Timestamp
+	8,  // 9: orbit.v1.CodexObservation.observed_at:type_name -> google.protobuf.Timestamp
 	4,  // 10: orbit.v1.CodexObservation.weekly_limit:type_name -> orbit.v1.CodexWeeklyLimit
-	8,  // 11: orbit.v1.Observation.metadata:type_name -> orbit.v1.Metadata
-	2,  // 12: orbit.v1.Observation.usage:type_name -> orbit.v1.UsageObservation
-	5,  // 13: orbit.v1.Observation.codex:type_name -> orbit.v1.CodexObservation
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	8,  // 11: orbit.v1.SystemObservation.observed_at:type_name -> google.protobuf.Timestamp
+	9,  // 12: orbit.v1.Observation.metadata:type_name -> orbit.v1.Metadata
+	2,  // 13: orbit.v1.Observation.usage:type_name -> orbit.v1.UsageObservation
+	5,  // 14: orbit.v1.Observation.codex:type_name -> orbit.v1.CodexObservation
+	6,  // 15: orbit.v1.Observation.system:type_name -> orbit.v1.SystemObservation
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_observation_proto_init() }
@@ -676,9 +830,11 @@ func file_orbit_v1_observation_proto_init() {
 	}
 	file_orbit_v1_common_proto_init()
 	file_orbit_v1_observation_proto_msgTypes[0].OneofWrappers = []any{}
-	file_orbit_v1_observation_proto_msgTypes[4].OneofWrappers = []any{
+	file_orbit_v1_observation_proto_msgTypes[4].OneofWrappers = []any{}
+	file_orbit_v1_observation_proto_msgTypes[5].OneofWrappers = []any{
 		(*Observation_Usage)(nil),
 		(*Observation_Codex)(nil),
+		(*Observation_System)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -686,7 +842,7 @@ func file_orbit_v1_observation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orbit_v1_observation_proto_rawDesc), len(file_orbit_v1_observation_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

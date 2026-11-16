@@ -58,6 +58,20 @@ message CodexView {
   CodexWeeklyLimit weekly_limit = 7;
 }
 
+message SystemView {
+  Freshness freshness = 1;
+  google.protobuf.Timestamp fresh_until = 2;
+  optional uint32 cpu_usage_permille = 3;
+  optional uint32 cpu_cores = 4;
+  optional uint64 memory_used_bytes = 5;
+  optional uint64 memory_total_bytes = 6;
+  optional uint64 swap_used_bytes = 7;
+  optional uint64 swap_total_bytes = 8;
+  optional uint32 load_1m_milli = 9;
+  optional uint64 uptime_seconds = 10;
+  google.protobuf.Timestamp observed_at = 11;
+}
+
 message DeviceView {
   Metadata metadata = 1;
   string node_id = 2;
@@ -76,4 +90,5 @@ message DeviceView {
   optional bool sessions_enabled = 13;
   // Device-specific override; absent uses the Agent preference.
   optional uint32 nfcd_metrics_left_padding = 14;
+  SystemView system = 15;
 }

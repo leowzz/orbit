@@ -3,7 +3,7 @@ use crate::{
     codex,
     commands::{metadata, Executor},
     config::{Config, Secrets},
-    usage,
+    system, usage,
     wire::{self, observation::Payload, AgentState, Observation, SourceStatus},
 };
 use prost::Message;
@@ -35,6 +35,7 @@ pub struct Status {
     pub message: String,
     pub codex: SourceView,
     pub usage: SourceView,
+    pub system: SourceView,
     pub weekly_error: String,
     pub weekly_diagnostics: WeeklyDiagnostics,
     pub clock_error: String,
@@ -90,6 +91,9 @@ pub struct SourceView {
     pub error: String,
     pub sessions: Option<u32>,
     pub running_sessions: Option<u32>,
+    pub cpu_usage_permille: Option<u32>,
+    pub memory_used_bytes: Option<u64>,
+    pub memory_total_bytes: Option<u64>,
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -192,6 +196,7 @@ pub async fn test_connection(c: &Config, s: &Secrets) -> Result<String, String> 
 enum SourceEvent {
     Codex(Result<wire::CodexObservation, String>),
     Usage(Result<wire::UsageObservation, String>),
+    System(Result<wire::SystemObservation, String>),
     Weekly(Result<wire::CodexWeeklyLimit, codex::WeeklyError>),
 }
 fn spawn_sources(
@@ -250,19 +255,21 @@ fn spawn_sources(
     if c.usage.enabled {
         let config = c.usage.clone();
         let password = s.usage.clone();
+        let out = tx.clone();
+        let time = clock.clone();
         workers.spawn(async move {
             let Ok(mut source) = usage::Source::new(config.clone(), password) else {
                 return;
             };
             loop {
-                let result = source.fetch(clock.now()).await;
+                let result = source.fetch(time.now()).await;
                 let delay = match &result {
                     Err(usage::Error::RateLimited(d)) => {
                         (*d).max(Duration::from_secs(config.interval))
                     }
                     _ => Duration::from_secs(config.interval),
                 };
-                if tx
+                if out
                     .send(SourceEvent::Usage(result.map_err(|e| e.message())))
                     .await
                     .is_err()
@@ -270,6 +277,30 @@ fn spawn_sources(
                     break;
                 }
                 tokio::time::sleep(delay).await;
+            }
+        });
+    }
+    if c.system.enabled {
+        let interval = Duration::from_secs(c.system.interval);
+        let out = tx.clone();
+        let time = clock.clone();
+        workers.spawn(async move {
+            let mut collector = Some(system::Collector::new());
+            tokio::time::sleep(system::MINIMUM_CPU_PRIME_INTERVAL).await;
+            loop {
+                let mut owned = collector.take().unwrap_or_default();
+                let now = time.now();
+                let (returned, result) = tokio::task::spawn_blocking(move || {
+                    let r = owned.collect(now);
+                    (owned, r)
+                })
+                .await
+                .unwrap_or_else(|_| (system::Collector::new(), Err("系统资源采集异常".into())));
+                collector = Some(returned);
+                if out.send(SourceEvent::System(result)).await.is_err() {
+                    break;
+                }
+                tokio::time::sleep(interval).await;
             }
         });
     }
@@ -311,6 +342,26 @@ fn facts(payload: &Payload) -> Vec<u8> {
             u.observed_at = None;
             u.encode_to_vec()
         }
+        Payload::System(s) => {
+            let mut s = *s;
+            s.observed_at = None;
+            s.uptime_seconds = None;
+            // Quantize noisy host metrics so idle machines re-publish only near TTL expiry.
+            if let Some(v) = s.cpu_usage_permille.as_mut() {
+                *v = (v.saturating_add(5) / 10 * 10).min(1000);
+            }
+            const MEM_STEP: u64 = 16 * 1024 * 1024;
+            if let Some(v) = s.memory_used_bytes.as_mut() {
+                *v = v.saturating_add(MEM_STEP / 2) / MEM_STEP * MEM_STEP;
+            }
+            if let Some(v) = s.swap_used_bytes.as_mut() {
+                *v = v.saturating_add(MEM_STEP / 2) / MEM_STEP * MEM_STEP;
+            }
+            if let Some(v) = s.load_1m_milli.as_mut() {
+                *v = v.saturating_add(25) / 50 * 50;
+            }
+            s.encode_to_vec()
+        }
     }
 }
 fn source_status(kind: i32, enabled: bool, v: &SourceView) -> SourceStatus {
@@ -346,7 +397,7 @@ struct Publisher {
     epoch: String,
     state_facts: Vec<u8>,
     state_revision: u64,
-    revisions: [u64; 2],
+    revisions: [u64; 3],
     sent: HashMap<usize, (Vec<u8>, i64)>,
 }
 impl Publisher {
@@ -358,7 +409,7 @@ impl Publisher {
             announcement_queued: false,
             announcement_pkid: None,
             state_revision: 0,
-            revisions: [0, 0],
+            revisions: [0, 0, 0],
             sent: HashMap::new(),
         }
     }
@@ -367,7 +418,7 @@ impl Publisher {
         client: &AsyncClient,
         c: &Config,
         status: &Status,
-        latest: &[Option<Payload>; 2],
+        latest: &[Option<Payload>; 3],
         now: i64,
     ) -> Result<(), String> {
         if !self.announced && self.announcement_queued {
@@ -382,6 +433,7 @@ impl Publisher {
             sources: vec![
                 source_status(1, c.usage.enabled, &status.usage),
                 source_status(2, c.codex.enabled, &status.codex),
+                source_status(3, c.system.enabled, &status.system),
             ],
         };
         let mut state_business = state.clone();
@@ -419,6 +471,12 @@ impl Publisher {
                     "codex",
                     c.codex.ttl,
                     c.codex.interval,
+                    p.observed_at.as_ref(),
+                ),
+                Payload::System(p) => (
+                    "system",
+                    c.system.ttl,
+                    c.system.interval,
                     p.observed_at.as_ref(),
                 ),
             };
@@ -460,7 +518,7 @@ impl Publisher {
 }
 fn record_source(
     event: SourceEvent,
-    latest: &mut [Option<Payload>; 2],
+    latest: &mut [Option<Payload>; 3],
     weekly: &mut Option<wire::CodexWeeklyLimit>,
     status: &SharedStatus,
     now: i64,
@@ -489,6 +547,19 @@ fn record_source(
                 latest[0] = Some(Payload::Usage(value));
             }
             Err(e) => update(status, |v| v.usage.error = e),
+        },
+        SourceEvent::System(result) => match result {
+            Ok(value) => {
+                update(status, |v| {
+                    v.system.last_success = value.observed_at.as_ref().map(|t| t.seconds);
+                    v.system.error.clear();
+                    v.system.cpu_usage_permille = value.cpu_usage_permille;
+                    v.system.memory_used_bytes = value.memory_used_bytes;
+                    v.system.memory_total_bytes = value.memory_total_bytes;
+                });
+                latest[2] = Some(Payload::System(value));
+            }
+            Err(e) => update(status, |v| v.system.error = e),
         },
         SourceEvent::Weekly(result) => {
             if let Ok(value) = result {
@@ -529,7 +600,7 @@ pub async fn run(c: Config, s: Secrets, status: SharedStatus, cancel: Cancellati
     tokio::select! {_ = cancel.cancelled()=>{},_ = tokio::time::sleep(Duration::from_secs(ntp_timeout))=>{}}
     let (tx, mut rx) = mpsc::channel(16);
     spawn_sources(&c, &s, clock.clone(), tx, &mut workers, &status);
-    let mut latest = [None, None];
+    let mut latest = [None, None, None];
     let mut weekly = None;
     let mut executor = Executor::default();
     let mut backoff = 1u64;
@@ -675,7 +746,7 @@ mod tests {
     #[test]
     fn weekly_failure_preserves_stale_values_until_reset_and_recovers_immediately() {
         let status = Arc::new(Mutex::new(Status::default()));
-        let mut latest = [None, None];
+        let mut latest = [None, None, None];
         let mut weekly = None;
         let quota = wire::CodexWeeklyLimit {
             remaining_percent: 42.,
@@ -791,6 +862,24 @@ mod tests {
         let mut b = a.clone();
         b.observed_at = codex::ts(2);
         assert_eq!(facts(&Payload::Codex(a)), facts(&Payload::Codex(b)));
+
+        let sa = wire::SystemObservation {
+            observed_at: codex::ts(1),
+            cpu_usage_permille: Some(233),
+            memory_used_bytes: Some(100 * 1024 * 1024),
+            memory_total_bytes: Some(16 << 30),
+            uptime_seconds: Some(100),
+            ..Default::default()
+        };
+        let mut sb = sa;
+        sb.observed_at = codex::ts(6);
+        sb.uptime_seconds = Some(105);
+        sb.cpu_usage_permille = Some(234); // Same 10-permille bucket (230).
+        sb.memory_used_bytes = Some(100 * 1024 * 1024 + 1024 * 1024); // Same 16 MiB bucket (96 MiB).
+        assert_eq!(facts(&Payload::System(sa)), facts(&Payload::System(sb)));
+
+        sb.cpu_usage_permille = Some(260);
+        assert_ne!(facts(&Payload::System(sa)), facts(&Payload::System(sb)));
     }
     #[test]
     fn failure_retains_last_success() {

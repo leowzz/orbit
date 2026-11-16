@@ -18,6 +18,7 @@ import (
 	"orbit/internal/mqtt"
 	codexsource "orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
+	systemsource "orbit/internal/sources/system"
 
 	"go.uber.org/zap"
 )
@@ -103,6 +104,11 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 		runnerConfig.CodexDisplayName = cfg.Sources.Codex.Privacy.IncludeDisplayName
 		runnerConfig.CodexProjectName = cfg.Sources.Codex.Privacy.IncludeProjectName
 	}
+	if cfg.Sources.System.IsEnabled() {
+		sources.System = systemsource.New()
+		runnerConfig.SystemPollInterval = cfg.Sources.System.PollInterval.Duration
+		runnerConfig.SystemObservationTTL = cfg.Sources.System.ObservationTTL.Duration
+	}
 	var capabilities agent.Capabilities
 	if cfg.Capabilities.OpenCodexSession.Enabled {
 		capabilities.OpenCodexSession = codexcap.NewOpener()
@@ -148,6 +154,7 @@ func run(cfg *config.AgentConfig, logger *zap.Logger) error {
 		zap.String("host_label", runnerConfig.HostLabel),
 		zap.Bool("usage_enabled", sources.Usage != nil),
 		zap.Bool("codex_enabled", sources.Codex != nil),
+		zap.Bool("system_enabled", sources.System != nil),
 		zap.Bool("open_codex_session_enabled", capabilities.OpenCodexSession != nil),
 	)
 	runnerErr := make(chan error, 1)

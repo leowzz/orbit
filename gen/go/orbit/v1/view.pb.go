@@ -455,6 +455,130 @@ func (x *CodexView) GetWeeklyLimit() *CodexWeeklyLimit {
 	return nil
 }
 
+type SystemView struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Freshness        Freshness              `protobuf:"varint,1,opt,name=freshness,proto3,enum=orbit.v1.Freshness" json:"freshness,omitempty"`
+	FreshUntil       *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=fresh_until,json=freshUntil,proto3" json:"fresh_until,omitempty"`
+	CpuUsagePermille *uint32                `protobuf:"varint,3,opt,name=cpu_usage_permille,json=cpuUsagePermille,proto3,oneof" json:"cpu_usage_permille,omitempty"`
+	CpuCores         *uint32                `protobuf:"varint,4,opt,name=cpu_cores,json=cpuCores,proto3,oneof" json:"cpu_cores,omitempty"`
+	MemoryUsedBytes  *uint64                `protobuf:"varint,5,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3,oneof" json:"memory_used_bytes,omitempty"`
+	MemoryTotalBytes *uint64                `protobuf:"varint,6,opt,name=memory_total_bytes,json=memoryTotalBytes,proto3,oneof" json:"memory_total_bytes,omitempty"`
+	SwapUsedBytes    *uint64                `protobuf:"varint,7,opt,name=swap_used_bytes,json=swapUsedBytes,proto3,oneof" json:"swap_used_bytes,omitempty"`
+	SwapTotalBytes   *uint64                `protobuf:"varint,8,opt,name=swap_total_bytes,json=swapTotalBytes,proto3,oneof" json:"swap_total_bytes,omitempty"`
+	Load_1MMilli     *uint32                `protobuf:"varint,9,opt,name=load_1m_milli,json=load1mMilli,proto3,oneof" json:"load_1m_milli,omitempty"`
+	UptimeSeconds    *uint64                `protobuf:"varint,10,opt,name=uptime_seconds,json=uptimeSeconds,proto3,oneof" json:"uptime_seconds,omitempty"`
+	ObservedAt       *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SystemView) Reset() {
+	*x = SystemView{}
+	mi := &file_orbit_v1_view_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SystemView) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SystemView) ProtoMessage() {}
+
+func (x *SystemView) ProtoReflect() protoreflect.Message {
+	mi := &file_orbit_v1_view_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SystemView.ProtoReflect.Descriptor instead.
+func (*SystemView) Descriptor() ([]byte, []int) {
+	return file_orbit_v1_view_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *SystemView) GetFreshness() Freshness {
+	if x != nil {
+		return x.Freshness
+	}
+	return Freshness_FRESHNESS_UNSPECIFIED
+}
+
+func (x *SystemView) GetFreshUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FreshUntil
+	}
+	return nil
+}
+
+func (x *SystemView) GetCpuUsagePermille() uint32 {
+	if x != nil && x.CpuUsagePermille != nil {
+		return *x.CpuUsagePermille
+	}
+	return 0
+}
+
+func (x *SystemView) GetCpuCores() uint32 {
+	if x != nil && x.CpuCores != nil {
+		return *x.CpuCores
+	}
+	return 0
+}
+
+func (x *SystemView) GetMemoryUsedBytes() uint64 {
+	if x != nil && x.MemoryUsedBytes != nil {
+		return *x.MemoryUsedBytes
+	}
+	return 0
+}
+
+func (x *SystemView) GetMemoryTotalBytes() uint64 {
+	if x != nil && x.MemoryTotalBytes != nil {
+		return *x.MemoryTotalBytes
+	}
+	return 0
+}
+
+func (x *SystemView) GetSwapUsedBytes() uint64 {
+	if x != nil && x.SwapUsedBytes != nil {
+		return *x.SwapUsedBytes
+	}
+	return 0
+}
+
+func (x *SystemView) GetSwapTotalBytes() uint64 {
+	if x != nil && x.SwapTotalBytes != nil {
+		return *x.SwapTotalBytes
+	}
+	return 0
+}
+
+func (x *SystemView) GetLoad_1MMilli() uint32 {
+	if x != nil && x.Load_1MMilli != nil {
+		return *x.Load_1MMilli
+	}
+	return 0
+}
+
+func (x *SystemView) GetUptimeSeconds() uint64 {
+	if x != nil && x.UptimeSeconds != nil {
+		return *x.UptimeSeconds
+	}
+	return 0
+}
+
+func (x *SystemView) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
 type DeviceView struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Metadata    *Metadata              `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
@@ -473,14 +597,15 @@ type DeviceView struct {
 	// Session details are independent of the active metrics page.
 	SessionsEnabled *bool `protobuf:"varint,13,opt,name=sessions_enabled,json=sessionsEnabled,proto3,oneof" json:"sessions_enabled,omitempty"`
 	// Device-specific override; absent uses the Agent preference.
-	NfcdMetricsLeftPadding *uint32 `protobuf:"varint,14,opt,name=nfcd_metrics_left_padding,json=nfcdMetricsLeftPadding,proto3,oneof" json:"nfcd_metrics_left_padding,omitempty"`
+	NfcdMetricsLeftPadding *uint32     `protobuf:"varint,14,opt,name=nfcd_metrics_left_padding,json=nfcdMetricsLeftPadding,proto3,oneof" json:"nfcd_metrics_left_padding,omitempty"`
+	System                 *SystemView `protobuf:"bytes,15,opt,name=system,proto3" json:"system,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
 
 func (x *DeviceView) Reset() {
 	*x = DeviceView{}
-	mi := &file_orbit_v1_view_proto_msgTypes[4]
+	mi := &file_orbit_v1_view_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -492,7 +617,7 @@ func (x *DeviceView) String() string {
 func (*DeviceView) ProtoMessage() {}
 
 func (x *DeviceView) ProtoReflect() protoreflect.Message {
-	mi := &file_orbit_v1_view_proto_msgTypes[4]
+	mi := &file_orbit_v1_view_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -505,7 +630,7 @@ func (x *DeviceView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceView.ProtoReflect.Descriptor instead.
 func (*DeviceView) Descriptor() ([]byte, []int) {
-	return file_orbit_v1_view_proto_rawDescGZIP(), []int{4}
+	return file_orbit_v1_view_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DeviceView) GetMetadata() *Metadata {
@@ -606,6 +731,13 @@ func (x *DeviceView) GetNfcdMetricsLeftPadding() uint32 {
 	return 0
 }
 
+func (x *DeviceView) GetSystem() *SystemView {
+	if x != nil {
+		return x.System
+	}
+	return nil
+}
+
 var File_orbit_v1_view_proto protoreflect.FileDescriptor
 
 const file_orbit_v1_view_proto_rawDesc = "" +
@@ -648,7 +780,32 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\rrunning_count\x18\x05 \x01(\rR\frunningCount\x12;\n" +
 	"\vobserved_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"observedAt\x12=\n" +
-	"\fweekly_limit\x18\a \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\xd4\x05\n" +
+	"\fweekly_limit\x18\a \x01(\v2\x1a.orbit.v1.CodexWeeklyLimitR\vweeklyLimit\"\xc3\x05\n" +
+	"\n" +
+	"SystemView\x121\n" +
+	"\tfreshness\x18\x01 \x01(\x0e2\x13.orbit.v1.FreshnessR\tfreshness\x12;\n" +
+	"\vfresh_until\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"freshUntil\x121\n" +
+	"\x12cpu_usage_permille\x18\x03 \x01(\rH\x00R\x10cpuUsagePermille\x88\x01\x01\x12 \n" +
+	"\tcpu_cores\x18\x04 \x01(\rH\x01R\bcpuCores\x88\x01\x01\x12/\n" +
+	"\x11memory_used_bytes\x18\x05 \x01(\x04H\x02R\x0fmemoryUsedBytes\x88\x01\x01\x121\n" +
+	"\x12memory_total_bytes\x18\x06 \x01(\x04H\x03R\x10memoryTotalBytes\x88\x01\x01\x12+\n" +
+	"\x0fswap_used_bytes\x18\a \x01(\x04H\x04R\rswapUsedBytes\x88\x01\x01\x12-\n" +
+	"\x10swap_total_bytes\x18\b \x01(\x04H\x05R\x0eswapTotalBytes\x88\x01\x01\x12'\n" +
+	"\rload_1m_milli\x18\t \x01(\rH\x06R\vload1mMilli\x88\x01\x01\x12*\n" +
+	"\x0euptime_seconds\x18\n" +
+	" \x01(\x04H\aR\ruptimeSeconds\x88\x01\x01\x12;\n" +
+	"\vobserved_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAtB\x15\n" +
+	"\x13_cpu_usage_permilleB\f\n" +
+	"\n" +
+	"_cpu_coresB\x14\n" +
+	"\x12_memory_used_bytesB\x15\n" +
+	"\x13_memory_total_bytesB\x12\n" +
+	"\x10_swap_used_bytesB\x13\n" +
+	"\x11_swap_total_bytesB\x10\n" +
+	"\x0e_load_1m_milliB\x11\n" +
+	"\x0f_uptime_seconds\"\x82\x06\n" +
 	"\n" +
 	"DeviceView\x12.\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x12.orbit.v1.MetadataR\bmetadata\x12\x17\n" +
@@ -667,7 +824,8 @@ const file_orbit_v1_view_proto_rawDesc = "" +
 	"\x05codex\x18\v \x01(\v2\x13.orbit.v1.CodexViewR\x05codex\x12!\n" +
 	"\fdisplay_kind\x18\f \x01(\tR\vdisplayKind\x12.\n" +
 	"\x10sessions_enabled\x18\r \x01(\bH\x00R\x0fsessionsEnabled\x88\x01\x01\x12>\n" +
-	"\x19nfcd_metrics_left_padding\x18\x0e \x01(\rH\x01R\x16nfcdMetricsLeftPadding\x88\x01\x01B\x13\n" +
+	"\x19nfcd_metrics_left_padding\x18\x0e \x01(\rH\x01R\x16nfcdMetricsLeftPadding\x88\x01\x01\x12,\n" +
+	"\x06system\x18\x0f \x01(\v2\x14.orbit.v1.SystemViewR\x06systemB\x13\n" +
 	"\x11_sessions_enabledB\x1c\n" +
 	"\x1a_nfcd_metrics_left_padding*g\n" +
 	"\tFreshness\x12\x19\n" +
@@ -694,7 +852,7 @@ func file_orbit_v1_view_proto_rawDescGZIP() []byte {
 }
 
 var file_orbit_v1_view_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_orbit_v1_view_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_orbit_v1_view_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_orbit_v1_view_proto_goTypes = []any{
 	(Freshness)(0),                // 0: orbit.v1.Freshness
 	(Emphasis)(0),                 // 1: orbit.v1.Emphasis
@@ -702,38 +860,43 @@ var file_orbit_v1_view_proto_goTypes = []any{
 	(*UsageView)(nil),             // 3: orbit.v1.UsageView
 	(*CodexSessionView)(nil),      // 4: orbit.v1.CodexSessionView
 	(*CodexView)(nil),             // 5: orbit.v1.CodexView
-	(*DeviceView)(nil),            // 6: orbit.v1.DeviceView
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
-	(CodexSessionStatus)(0),       // 8: orbit.v1.CodexSessionStatus
-	(*CodexWeeklyLimit)(nil),      // 9: orbit.v1.CodexWeeklyLimit
-	(*Metadata)(nil),              // 10: orbit.v1.Metadata
+	(*SystemView)(nil),            // 6: orbit.v1.SystemView
+	(*DeviceView)(nil),            // 7: orbit.v1.DeviceView
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(CodexSessionStatus)(0),       // 9: orbit.v1.CodexSessionStatus
+	(*CodexWeeklyLimit)(nil),      // 10: orbit.v1.CodexWeeklyLimit
+	(*Metadata)(nil),              // 11: orbit.v1.Metadata
 }
 var file_orbit_v1_view_proto_depIdxs = []int32{
 	1,  // 0: orbit.v1.DisplaySlot.emphasis:type_name -> orbit.v1.Emphasis
 	0,  // 1: orbit.v1.UsageView.freshness:type_name -> orbit.v1.Freshness
-	7,  // 2: orbit.v1.UsageView.fresh_until:type_name -> google.protobuf.Timestamp
-	7,  // 3: orbit.v1.UsageView.observed_at:type_name -> google.protobuf.Timestamp
-	8,  // 4: orbit.v1.CodexSessionView.status:type_name -> orbit.v1.CodexSessionStatus
-	7,  // 5: orbit.v1.CodexSessionView.updated_at:type_name -> google.protobuf.Timestamp
+	8,  // 2: orbit.v1.UsageView.fresh_until:type_name -> google.protobuf.Timestamp
+	8,  // 3: orbit.v1.UsageView.observed_at:type_name -> google.protobuf.Timestamp
+	9,  // 4: orbit.v1.CodexSessionView.status:type_name -> orbit.v1.CodexSessionStatus
+	8,  // 5: orbit.v1.CodexSessionView.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 6: orbit.v1.CodexView.freshness:type_name -> orbit.v1.Freshness
-	7,  // 7: orbit.v1.CodexView.fresh_until:type_name -> google.protobuf.Timestamp
+	8,  // 7: orbit.v1.CodexView.fresh_until:type_name -> google.protobuf.Timestamp
 	4,  // 8: orbit.v1.CodexView.sessions:type_name -> orbit.v1.CodexSessionView
-	7,  // 9: orbit.v1.CodexView.observed_at:type_name -> google.protobuf.Timestamp
-	9,  // 10: orbit.v1.CodexView.weekly_limit:type_name -> orbit.v1.CodexWeeklyLimit
-	10, // 11: orbit.v1.DeviceView.metadata:type_name -> orbit.v1.Metadata
-	0,  // 12: orbit.v1.DeviceView.freshness:type_name -> orbit.v1.Freshness
-	7,  // 13: orbit.v1.DeviceView.fresh_until:type_name -> google.protobuf.Timestamp
-	7,  // 14: orbit.v1.DeviceView.retain_until:type_name -> google.protobuf.Timestamp
-	2,  // 15: orbit.v1.DeviceView.primary:type_name -> orbit.v1.DisplaySlot
-	2,  // 16: orbit.v1.DeviceView.secondary:type_name -> orbit.v1.DisplaySlot
-	2,  // 17: orbit.v1.DeviceView.footer:type_name -> orbit.v1.DisplaySlot
-	3,  // 18: orbit.v1.DeviceView.usage:type_name -> orbit.v1.UsageView
-	5,  // 19: orbit.v1.DeviceView.codex:type_name -> orbit.v1.CodexView
-	20, // [20:20] is the sub-list for method output_type
-	20, // [20:20] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	8,  // 9: orbit.v1.CodexView.observed_at:type_name -> google.protobuf.Timestamp
+	10, // 10: orbit.v1.CodexView.weekly_limit:type_name -> orbit.v1.CodexWeeklyLimit
+	0,  // 11: orbit.v1.SystemView.freshness:type_name -> orbit.v1.Freshness
+	8,  // 12: orbit.v1.SystemView.fresh_until:type_name -> google.protobuf.Timestamp
+	8,  // 13: orbit.v1.SystemView.observed_at:type_name -> google.protobuf.Timestamp
+	11, // 14: orbit.v1.DeviceView.metadata:type_name -> orbit.v1.Metadata
+	0,  // 15: orbit.v1.DeviceView.freshness:type_name -> orbit.v1.Freshness
+	8,  // 16: orbit.v1.DeviceView.fresh_until:type_name -> google.protobuf.Timestamp
+	8,  // 17: orbit.v1.DeviceView.retain_until:type_name -> google.protobuf.Timestamp
+	2,  // 18: orbit.v1.DeviceView.primary:type_name -> orbit.v1.DisplaySlot
+	2,  // 19: orbit.v1.DeviceView.secondary:type_name -> orbit.v1.DisplaySlot
+	2,  // 20: orbit.v1.DeviceView.footer:type_name -> orbit.v1.DisplaySlot
+	3,  // 21: orbit.v1.DeviceView.usage:type_name -> orbit.v1.UsageView
+	5,  // 22: orbit.v1.DeviceView.codex:type_name -> orbit.v1.CodexView
+	6,  // 23: orbit.v1.DeviceView.system:type_name -> orbit.v1.SystemView
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_orbit_v1_view_proto_init() }
@@ -745,13 +908,14 @@ func file_orbit_v1_view_proto_init() {
 	file_orbit_v1_observation_proto_init()
 	file_orbit_v1_view_proto_msgTypes[1].OneofWrappers = []any{}
 	file_orbit_v1_view_proto_msgTypes[4].OneofWrappers = []any{}
+	file_orbit_v1_view_proto_msgTypes[5].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_orbit_v1_view_proto_rawDesc), len(file_orbit_v1_view_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

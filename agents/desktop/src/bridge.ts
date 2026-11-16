@@ -7,6 +7,9 @@ const empty = {
   error: "",
   sessions: null,
   runningSessions: null,
+  cpuUsagePermille: null,
+  memoryUsedBytes: null,
+  memoryTotalBytes: null,
 };
 const settings: Settings = {
   config: {
@@ -49,6 +52,11 @@ const settings: Settings = {
       refreshEndpoint: "",
       usageEndpoint: "",
     },
+    system: {
+      enabled: true,
+      interval: 5,
+      ttl: 30,
+    },
     inference: {
       enabled: false,
       modelId: "qwen3-asr-0.6b-q8_0",
@@ -71,6 +79,7 @@ const status: Status = {
   message: "请完成连接设置",
   codex: empty,
   usage: empty,
+  system: empty,
   weeklyError: "",
   weeklyDiagnostics: {
     lastAttempt: null,

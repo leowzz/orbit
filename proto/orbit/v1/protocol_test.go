@@ -160,3 +160,60 @@ func TestDeviceViewMatchesFirmwareGoldenBytes(t *testing.T) {
 		t.Fatalf("DeviceView bytes changed: %x", encoded)
 	}
 }
+
+func TestSystemObservationAndViewRoundTripWithZeroPresence(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+	zeroCPU := uint32(0)
+	cores := uint32(8)
+	memUsed := uint64(0)
+	memTotal := uint64(16 << 30)
+	original := &orbitv1.Observation{
+		Metadata:   &orbitv1.Metadata{MessageId: "msg-sys", ProducerId: "agent-local", Revision: 3},
+		AgentEpoch: "epoch-sys",
+		Payload: &orbitv1.Observation_System{System: &orbitv1.SystemObservation{
+			CpuUsagePermille: &zeroCPU,
+			CpuCores:         &cores,
+			MemoryUsedBytes:  &memUsed,
+			MemoryTotalBytes: &memTotal,
+			ObservedAt:       timestamppb.New(now),
+		}},
+	}
+	encoded, err := proto.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded orbitv1.Observation
+	if err := proto.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	sys := decoded.GetSystem()
+	if sys == nil || sys.CpuUsagePermille == nil || *sys.CpuUsagePermille != 0 || sys.MemoryUsedBytes == nil || *sys.MemoryUsedBytes != 0 || sys.Load_1MMilli != nil {
+		t.Fatalf("unexpected decoded system observation: %#v", sys)
+	}
+
+	view := &orbitv1.DeviceView{
+		NodeId:      "web-1",
+		DisplayKind: "system",
+		System: &orbitv1.SystemView{
+			Freshness:        orbitv1.Freshness_FRESHNESS_FRESH,
+			FreshUntil:       timestamppb.New(now.Add(time.Minute)),
+			CpuUsagePermille: &zeroCPU,
+			CpuCores:         &cores,
+			MemoryUsedBytes:  &memUsed,
+			MemoryTotalBytes: &memTotal,
+			ObservedAt:       timestamppb.New(now),
+		},
+	}
+	rawView, err := proto.Marshal(view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decodedView orbitv1.DeviceView
+	if err := proto.Unmarshal(rawView, &decodedView); err != nil {
+		t.Fatal(err)
+	}
+	if decodedView.GetSystem() == nil || decodedView.GetSystem().CpuUsagePermille == nil || *decodedView.GetSystem().CpuUsagePermille != 0 {
+		t.Fatalf("unexpected decoded system view: %#v", decodedView.GetSystem())
+	}
+}

@@ -19,6 +19,7 @@ pub struct Config {
     pub mqtt: Mqtt,
     pub codex: Codex,
     pub usage: Usage,
+    pub system: System,
     pub inference: Inference,
     pub allow_open: bool,
     pub ntp_server: String,
@@ -69,6 +70,22 @@ pub struct Usage {
     pub login_endpoint: String,
     pub refresh_endpoint: String,
     pub usage_endpoint: String,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct System {
+    pub enabled: bool,
+    pub interval: u64,
+    pub ttl: u64,
+}
+impl Default for System {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            interval: 5,
+            ttl: 30,
+        }
+    }
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -146,6 +163,7 @@ impl Default for Config {
             mqtt: Mqtt::default(),
             codex: Codex::default(),
             usage: Usage::default(),
+            system: System::default(),
             inference: Inference::default(),
             allow_open: false,
             ntp_server: "ntp.aliyun.com".into(),
@@ -256,8 +274,19 @@ impl Config {
         if self.mqtt.cert_file.is_empty() != self.mqtt.key_file.is_empty() {
             return Err("客户端证书和私钥需要同时填写".into());
         }
-        if !self.codex.enabled && !self.usage.enabled && !self.inference.enabled {
+        if !self.codex.enabled
+            && !self.usage.enabled
+            && !self.system.enabled
+            && !self.inference.enabled
+        {
             return Err("请至少启用一种数据来源或本地推理".into());
+        }
+        if self.system.enabled
+            && (self.system.interval == 0
+                || self.system.ttl < self.system.interval
+                || self.system.ttl > 300)
+        {
+            return Err("系统资源采集间隔需大于 0，保留时间应介于采集间隔和 300 秒之间".into());
         }
         if self.allow_open && !self.codex.enabled {
             return Err("允许打开会话前需启用 Codex 来源".into());
@@ -503,6 +532,9 @@ pub fn import_yaml(path: &Path) -> Result<Settings, String> {
     c.usage.login_endpoint = text(&["sources", "sub2api", "login_endpoint"]);
     c.usage.refresh_endpoint = text(&["sources", "sub2api", "refresh_endpoint"]);
     c.usage.usage_endpoint = text(&["sources", "sub2api", "usage_endpoint"]);
+    c.system.enabled = boolean(&["sources", "system", "enabled"], true);
+    c.system.interval = duration(&["sources", "system", "poll_interval"], 5)?;
+    c.system.ttl = duration(&["sources", "system", "observation_ttl"], 30)?;
     c.inference.enabled = boolean(&["inference", "enabled"], false);
     c.inference.model_id = text(&["inference", "model_id"]);
     if c.inference.model_id.is_empty() {
@@ -680,10 +712,50 @@ mod tests {
         c.mqtt.url = "mqtts://example.test:8883".into();
         c.codex.enabled = false;
         c.usage.enabled = false;
+        c.system.enabled = false;
         c.inference.enabled = true;
         assert!(c.validate(&Secrets::default()).is_ok());
+        c.inference.enabled = false;
+        assert!(c.validate(&Secrets::default()).is_err());
+        c.inference.enabled = true;
         c.inference.device = "cuda".into();
         assert!(c.validate(&Secrets::default()).is_err());
+    }
+    #[test]
+    fn system_can_be_the_only_enabled_source_and_validates_ttl() {
+        let mut c = Config::default();
+        c.mqtt.url = "mqtts://example.test:8883".into();
+        c.codex.enabled = false;
+        c.usage.enabled = false;
+        c.inference.enabled = false;
+        c.system.enabled = true;
+        assert!(c.validate(&Secrets::default()).is_ok());
+        c.system.ttl = c.system.interval - 1;
+        assert!(c.validate(&Secrets::default()).is_err());
+    }
+    #[test]
+    fn import_reads_system_source_with_default_enabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent.yaml");
+        fs::write(
+            &path,
+            "agent:\n  host_label: Test\nmqtt:\n  url: mqtts://example.test:8883\n",
+        )
+        .unwrap();
+        let imported = import_yaml(&path).unwrap();
+        assert!(imported.config.system.enabled);
+        assert_eq!(imported.config.system.interval, 5);
+        assert_eq!(imported.config.system.ttl, 30);
+
+        fs::write(
+            &path,
+            "agent:\n  host_label: Test\nmqtt:\n  url: mqtts://example.test:8883\nsources:\n  system:\n    enabled: true\n    poll_interval: 10s\n    observation_ttl: 45s\n",
+        )
+        .unwrap();
+        let imported = import_yaml(&path).unwrap();
+        assert!(imported.config.system.enabled);
+        assert_eq!(imported.config.system.interval, 10);
+        assert_eq!(imported.config.system.ttl, 45);
     }
     #[test]
     fn core_provisioning_can_supply_mqtt_on_first_start() {

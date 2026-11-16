@@ -140,11 +140,57 @@ func TestLoadAgentRejectsWhenAllSourcesAreDisabled(t *testing.T) {
 	dir := t.TempDir()
 	writeFixtureFiles(t, dir, true)
 	yaml := strings.Replace(validAgentYAML, "  sub2api:\n    enabled: true", "  sub2api:\n    enabled: false", 1)
+	yaml = strings.Replace(yaml, "logging:\n", "  system:\n    enabled: false\nlogging:\n", 1)
 	path := writeConfig(t, dir, "agent.yaml", yaml)
 
 	_, err := LoadAgent(path)
-	if err == nil || !strings.Contains(err.Error(), "at least one of sources.sub2api or sources.codex") {
+	if err == nil || !strings.Contains(err.Error(), "at least one of sources.sub2api, sources.codex, or sources.system") {
 		t.Fatalf("LoadAgent() error = %v, want source requirement", err)
+	}
+}
+
+func TestLoadAgentDefaultsSystemSourceAndValidatesOverrides(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	if err := os.Mkdir(filepath.Join(dir, "codex-home"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadAgent(writeConfig(t, dir, "agent.yaml", validCodexOnlyYAML))
+	if err != nil {
+		t.Fatalf("LoadAgent() error = %v", err)
+	}
+	if !cfg.Sources.System.IsEnabled() {
+		t.Fatal("expected sources.system to default to enabled")
+	}
+	if cfg.Sources.System.PollInterval.Duration != 5*time.Second || cfg.Sources.System.ObservationTTL.Duration != 30*time.Second {
+		t.Fatalf("unexpected default system durations: %#v", cfg.Sources.System)
+	}
+
+	systemOnly := `agent:
+  id: agent-sys
+  host_label: Sys Host
+mqtt:
+  url: mqtts://broker.example.com:8883
+  credentials:
+    username_file: mqtt-username
+    password_file: mqtt-password
+sources:
+  system:
+    enabled: true
+    poll_interval: 10s
+    observation_ttl: 45s
+`
+	sysCfg, err := LoadAgent(writeConfig(t, dir, "system-only.yaml", systemOnly))
+	if err != nil {
+		t.Fatalf("system-only LoadAgent() error = %v", err)
+	}
+	if !sysCfg.Sources.System.IsEnabled() || sysCfg.Sources.System.PollInterval.Duration != 10*time.Second || sysCfg.Sources.System.ObservationTTL.Duration != 45*time.Second {
+		t.Fatalf("unexpected custom system config: %#v", sysCfg.Sources.System)
+	}
+
+	invalidTTL := strings.Replace(systemOnly, "observation_ttl: 45s", "observation_ttl: 5s", 1)
+	if _, err := LoadAgent(writeConfig(t, dir, "bad-system.yaml", invalidTTL)); err == nil || !strings.Contains(err.Error(), "sources.system") {
+		t.Fatalf("expected invalid system TTL error, got %v", err)
 	}
 }
 

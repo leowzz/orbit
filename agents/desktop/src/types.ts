@@ -53,6 +53,11 @@ export interface Config {
     refreshEndpoint: string;
     usageEndpoint: string;
   };
+  system: {
+    enabled: boolean;
+    interval: number;
+    ttl: number;
+  };
   inference: {
     enabled: boolean;
     modelId: string;
@@ -76,6 +81,9 @@ export interface Source {
   error: string;
   sessions: number | null;
   runningSessions: number | null;
+  cpuUsagePermille: number | null;
+  memoryUsedBytes: number | null;
+  memoryTotalBytes: number | null;
 }
 export interface Status {
   running: boolean;
@@ -83,6 +91,7 @@ export interface Status {
   message: string;
   codex: Source;
   usage: Source;
+  system: Source;
   weeklyError: string;
   weeklyDiagnostics: {
     lastAttempt: number | null;

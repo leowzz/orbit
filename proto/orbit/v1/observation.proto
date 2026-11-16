@@ -11,6 +11,7 @@ enum ObservationType {
   OBSERVATION_TYPE_UNSPECIFIED = 0;
   OBSERVATION_TYPE_USAGE = 1;
   OBSERVATION_TYPE_CODEX = 2;
+  OBSERVATION_TYPE_SYSTEM = 3;
 }
 
 enum CodexSessionStatus {
@@ -58,6 +59,20 @@ message CodexObservation {
   CodexWeeklyLimit weekly_limit = 5;
 }
 
+message SystemObservation {
+  // CPU utilization across all logical cores, in permille (0..1000 => 0.0%..100.0%).
+  optional uint32 cpu_usage_permille = 1;
+  optional uint32 cpu_cores = 2;
+  optional uint64 memory_used_bytes = 3;
+  optional uint64 memory_total_bytes = 4;
+  optional uint64 swap_used_bytes = 5;
+  optional uint64 swap_total_bytes = 6;
+  // 1-minute load average scaled by 1000 when reported by the host OS.
+  optional uint32 load_1m_milli = 7;
+  optional uint64 uptime_seconds = 8;
+  google.protobuf.Timestamp observed_at = 9;
+}
+
 message Observation {
   Metadata metadata = 1;
   string agent_epoch = 2;
@@ -65,5 +80,6 @@ message Observation {
   oneof payload {
     UsageObservation usage = 3;
     CodexObservation codex = 4;
+    SystemObservation system = 5;
   }
 }

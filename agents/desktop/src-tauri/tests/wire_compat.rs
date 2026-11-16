@@ -24,3 +24,17 @@ fn go_optional_zeroes_and_micros_roundtrip() {
     assert_eq!(usage.actual_cost_micros, Some(1234567));
     assert_eq!(observation.encode_to_vec(), bytes);
 }
+#[test]
+fn go_system_observation_zeroes_roundtrip() {
+    let bytes = include_bytes!("../../testdata/go-system-observation.bin");
+    let observation = Observation::decode(&bytes[..]).unwrap();
+    let Some(Payload::System(ref system)) = observation.payload else {
+        panic!()
+    };
+    assert_eq!(system.cpu_usage_permille, Some(0));
+    assert_eq!(system.cpu_cores, Some(8));
+    assert_eq!(system.memory_used_bytes, Some(0));
+    assert_eq!(system.memory_total_bytes, Some(32u64 << 30));
+    assert_eq!(system.load_1m_milli, None);
+    assert_eq!(observation.encode_to_vec(), bytes);
+}

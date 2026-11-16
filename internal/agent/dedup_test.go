@@ -11,6 +11,7 @@ import (
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
+	"orbit/internal/sources/system"
 )
 
 func TestUsageDedupRefreshAndDayChange(t *testing.T) {
@@ -136,5 +137,51 @@ func TestDedupRetriesFailedPublishAndReportsHealthTransitions(t *testing.T) {
 	}
 	if state.Sources[0].Health != orbitv1.SourceHealth_SOURCE_HEALTH_HEALTHY {
 		t.Fatal("health did not recover")
+	}
+}
+
+func TestSystemDedupDeadbandAndRefresh(t *testing.T) {
+	now := time.Date(2026, 9, 15, 1, 0, 0, 0, time.UTC)
+	source := &stubSystemSource{snapshot: system.Snapshot{
+		CPUUsagePermille: 242,
+		CPUCores:         8,
+		MemoryUsedBytes:  1600 * (1 << 20),
+		MemoryTotalBytes: 32 * (1 << 30),
+		Load1mMilli:      1010,
+		HasLoad1m:        true,
+		UptimeSeconds:    100,
+	}}
+	publisher := &recordingPublisher{}
+	runner := newSystemTestRunner(t, source, publisher)
+	runner.now = func() time.Time { return now }
+
+	if err := runner.PollSystemOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(publisher.Messages()) != 2 {
+		t.Fatalf("initial publish count = %d, want 2", len(publisher.Messages()))
+	}
+	publisher.Reset()
+
+	// Within deadband & TTL (uptime change + sub-1% CPU + sub-16MiB memory + sub-0.05 load).
+	now = now.Add(5 * time.Second)
+	source.snapshot.UptimeSeconds = 105
+	source.snapshot.CPUUsagePermille = 244
+	source.snapshot.MemoryUsedBytes += 2 * (1 << 20)
+	source.snapshot.Load1mMilli = 1020
+	if err := runner.PollSystemOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(publisher.Messages()) != 0 {
+		t.Fatalf("small jitter triggered publish: %d", len(publisher.Messages()))
+	}
+
+	// Crossing CPU deadband triggers immediate publish.
+	source.snapshot.CPUUsagePermille = 260
+	if err := runner.PollSystemOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(publisher.Messages()) != 1 {
+		t.Fatalf("cpu deadband change publish count = %d, want 1", len(publisher.Messages()))
 	}
 }

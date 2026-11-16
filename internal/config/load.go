@@ -56,6 +56,12 @@ func (d *Duration) UnmarshalYAML(node *yaml.Node) error {
 
 func LoadAgent(path string) (*AgentConfig, error) {
 	cfg := AgentConfig{
+		Sources: AgentSources{
+			System: SystemConfig{
+				PollInterval:   Duration{5 * time.Second},
+				ObservationTTL: Duration{30 * time.Second},
+			},
+		},
 		MQTT:    MQTTConfig{TLS: MQTTTLSConfig{Enabled: true}},
 		NTP:     defaultNTPConfig(),
 		Logging: LoggingConfig{Level: "info"},
@@ -125,8 +131,8 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 	if strings.TrimSpace(cfg.Agent.HostLabel) == "" {
 		return errors.New("agent.host_label is required")
 	}
-	if !cfg.Sources.Sub2API.Enabled && !cfg.Sources.Codex.Enabled {
-		return errors.New("at least one of sources.sub2api or sources.codex must be enabled")
+	if !cfg.Sources.Sub2API.Enabled && !cfg.Sources.Codex.Enabled && !cfg.Sources.System.IsEnabled() {
+		return errors.New("at least one of sources.sub2api, sources.codex, or sources.system must be enabled")
 	}
 	if cfg.Capabilities.OpenCodexSession.Enabled && !cfg.Sources.Codex.Enabled {
 		return errors.New("capabilities.open_codex_session requires sources.codex")
@@ -142,6 +148,11 @@ func (cfg *AgentConfig) validate(baseDir string) error {
 	if cfg.Sources.Codex.Enabled {
 		if err := cfg.Sources.Codex.validate(baseDir); err != nil {
 			return fmt.Errorf("sources.codex: %w", err)
+		}
+	}
+	if cfg.Sources.System.IsEnabled() {
+		if err := cfg.Sources.System.validate(); err != nil {
+			return fmt.Errorf("sources.system: %w", err)
 		}
 	}
 	return validateLogLevel(cfg.Logging.Level)
@@ -515,6 +526,22 @@ func (cfg *CodexConfig) validate(baseDir string) error {
 		return err
 	}
 	return validateNonEmptyStrings("ignore.source", cfg.Ignore.Source)
+}
+
+func (cfg *SystemConfig) validate() error {
+	if cfg.PollInterval.Duration <= 0 {
+		return errors.New("poll_interval must be positive")
+	}
+	if cfg.ObservationTTL.Duration <= 0 {
+		return errors.New("observation_ttl must be positive")
+	}
+	if cfg.ObservationTTL.Duration < cfg.PollInterval.Duration {
+		return errors.New("observation_ttl must be at least poll_interval")
+	}
+	if cfg.ObservationTTL.Duration > 5*time.Minute {
+		return errors.New("observation_ttl must be at most 5m")
+	}
+	return nil
 }
 
 func parseHTTPSURL(name, raw string) (*url.URL, error) {

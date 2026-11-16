@@ -49,6 +49,18 @@ type AgentIdentity struct {
 type AgentSources struct {
 	Sub2API Sub2APIConfig `yaml:"sub2api"`
 	Codex   CodexConfig   `yaml:"codex"`
+	System  SystemConfig  `yaml:"system"`
+}
+
+type SystemConfig struct {
+	Enabled        *bool    `yaml:"enabled"`
+	PollInterval   Duration `yaml:"poll_interval"`
+	ObservationTTL Duration `yaml:"observation_ttl"`
+}
+
+// IsEnabled defaults to true when omitted so hosts publish system telemetry without extra config.
+func (cfg SystemConfig) IsEnabled() bool {
+	return cfg.Enabled == nil || *cfg.Enabled
 }
 
 type AgentCapabilities struct {

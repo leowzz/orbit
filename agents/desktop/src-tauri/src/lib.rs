@@ -7,6 +7,7 @@ pub mod inference;
 pub mod recent_apps;
 pub mod runtime;
 pub mod shortcuts;
+pub mod system;
 pub mod update;
 pub mod usage;
 pub mod website_icon;
@@ -66,7 +67,7 @@ impl Agent {
         let inference_cancel = cancel.clone();
         let task = tauri::async_runtime::spawn(async move {
             let ordinary = async move {
-                if config.codex.enabled || config.usage.enabled {
+                if config.codex.enabled || config.usage.enabled || config.system.enabled {
                     runtime::run(config, secrets, ordinary_status, ordinary_cancel).await;
                 } else {
                     ordinary_cancel.cancelled().await;

@@ -14,6 +14,7 @@ import (
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
+	"orbit/internal/sources/system"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -39,6 +40,18 @@ type stubCodexSource struct {
 }
 
 func (source *stubCodexSource) Fetch(context.Context) (codex.Snapshot, error) {
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	return source.snapshot, source.err
+}
+
+type stubSystemSource struct {
+	mu       sync.Mutex
+	snapshot system.Snapshot
+	err      error
+}
+
+func (source *stubSystemSource) Fetch(context.Context) (system.Snapshot, error) {
 	source.mu.Lock()
 	defer source.mu.Unlock()
 	return source.snapshot, source.err
@@ -546,6 +559,66 @@ func waitForMessages(t *testing.T, publisher *recordingPublisher, count int) []m
 	}
 	t.Fatalf("timed out waiting for %d messages; got %d", count, len(publisher.Messages()))
 	return nil
+}
+
+func systemConfig() Config {
+	return Config{
+		AgentID:              "agent-a",
+		AgentEpoch:           "epoch-a",
+		AgentVersion:         "test",
+		HostLabel:            "test host",
+		SystemPollInterval:   5 * time.Second,
+		SystemObservationTTL: 30 * time.Second,
+	}
+}
+
+func newSystemTestRunner(t *testing.T, source SystemSource, publisher Transport) *Runner {
+	t.Helper()
+	runner, err := New(systemConfig(), Sources{System: source}, Capabilities{}, publisher, zap.NewNop())
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return runner
+}
+
+func TestPollSystemOncePublishesObservationAndHealth(t *testing.T) {
+	now := time.Date(2026, 9, 15, 1, 0, 0, 0, time.UTC)
+	source := &stubSystemSource{snapshot: system.Snapshot{
+		CPUUsagePermille: 245,
+		CPUCores:         8,
+		MemoryUsedBytes:  12 * (1 << 30),
+		MemoryTotalBytes: 32 * (1 << 30),
+		SwapUsedBytes:    1 << 30,
+		SwapTotalBytes:   4 * (1 << 30),
+		Load1mMilli:      1250,
+		HasLoad1m:        true,
+		UptimeSeconds:    3600,
+	}}
+	publisher := &recordingPublisher{}
+	runner := newSystemTestRunner(t, source, publisher)
+	runner.now = func() time.Time { return now }
+
+	if err := runner.PollSystemOnce(context.Background()); err != nil {
+		t.Fatalf("PollSystemOnce: %v", err)
+	}
+	messages := publisher.Messages()
+	if len(messages) != 2 {
+		t.Fatalf("got %d messages, want 2 (state + system observation)", len(messages))
+	}
+	if messages[0].Topic != "orbit/v1/agents/agent-a/observations/system" {
+		t.Fatalf("topic = %q", messages[0].Topic)
+	}
+	if messages[1].Topic != "orbit/v1/agents/agent-a/state" {
+		t.Fatalf("state topic = %q", messages[1].Topic)
+	}
+	var obs orbitv1.Observation
+	if err := proto.Unmarshal(messages[0].Payload, &obs); err != nil {
+		t.Fatal(err)
+	}
+	got := obs.GetSystem()
+	if got == nil || got.GetCpuUsagePermille() != 245 || got.GetCpuCores() != 8 || got.GetMemoryUsedBytes() != 12*(1<<30) || got.GetLoad_1MMilli() != 1250 {
+		t.Fatalf("unexpected system observation: %#v", got)
+	}
 }
 
 func equalUint64s(left, right []uint64) bool {

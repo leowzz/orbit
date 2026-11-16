@@ -175,3 +175,40 @@ async fn scenario() {
     assert!(!status.connected);
     assert!(status.message.contains("另一实例"));
 }
+
+#[tokio::test]
+async fn system_source_publishes_system_observation() {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut c = Config {
+            agent_id: "sys-agent".into(),
+            ntp_server: "127.0.0.1".into(),
+            ntp_timeout: 1,
+            ..Default::default()
+        };
+        c.mqtt.url = format!("mqtt://{}", listener.local_addr().unwrap());
+        c.codex.enabled = false;
+        c.usage.enabled = false;
+        c.system.enabled = true;
+        c.system.interval = 1;
+        c.system.ttl = 30;
+        let status = Arc::new(Mutex::new(Status::default()));
+        let cancel = CancellationToken::new();
+        let task = tokio::spawn(run(c, Secrets::default(), status.clone(), cancel.clone()));
+        let mut peer = Peer::connect(&listener).await;
+        let state = wire::AgentState::decode(peer.publication("/state").await.payload).unwrap();
+        let message = peer.publication("/observations/system").await;
+        assert!(!message.retain);
+        let observation = wire::Observation::decode(message.payload).unwrap();
+        assert_eq!(observation.agent_epoch, state.agent_epoch);
+        let Some(wire::observation::Payload::System(sys)) = observation.payload else {
+            panic!("expected system payload");
+        };
+        assert!(sys.memory_total_bytes.unwrap_or(0) > 0);
+        assert!(sys.cpu_cores.unwrap_or(0) >= 1);
+        cancel.cancel();
+        task.await.unwrap();
+    })
+    .await
+    .expect("system MQTT test timed out");
+}
