@@ -145,7 +145,7 @@ func (s *RouteStore) save(d RouteDocument) error {
 func RoutesFromConfig(routes map[string]config.ProjectionRoute) []Route {
 	result := make([]Route, 0, len(routes))
 	for id, r := range routes {
-		item := Route{NodeID: id, Profile: r.Profile, DisplayMode: r.DisplayMode, SystemPrimary: r.SystemPrimary, SessionsEnabled: r.SessionsEnabled, NFCDMetricsLeftPadding: r.NFCDMetricsLeftPadding, DisplayBrightnessPercent: r.DisplayBrightnessPercent, RotationSeconds: r.RotationSeconds}
+		item := Route{NodeID: id, Profile: r.Profile, DisplayMode: r.DisplayMode, SystemPrimary: r.SystemPrimary, SessionsEnabled: r.SessionsEnabled, NFCDMetricsLeftPadding: r.NFCDMetricsLeftPadding, DisplayBrightnessPercent: r.DisplayBrightnessPercent, DisplayOffOnSourceOffline: r.DisplayOffOnSourceOffline, DisplayOffSchedule: r.DisplayOffSchedule, RotationSeconds: r.RotationSeconds}
 		for _, input := range r.Inputs {
 			kind := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
 			switch input.ObservationType {
@@ -266,8 +266,8 @@ func (e *Engine) consoleState(now time.Time) map[string]any {
 	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i]["id"].(string) < agents[j]["id"].(string) })
 	for _, route := range e.config.Routes {
-		if view, step, total, ok := e.buildDeviceViewLocked(now, route, e.viewRevision[route.NodeID], false); ok {
-			if preview := consoleNodePreview(now, view, step, total); preview != nil {
+		if view, step, total, offReason, ok := e.buildDeviceViewLocked(now, route, e.viewRevision[route.NodeID], false); ok {
+			if preview := consoleNodePreview(now, view, step, total, offReason); preview != nil {
 				nodeViews[route.NodeID] = preview
 			}
 		}

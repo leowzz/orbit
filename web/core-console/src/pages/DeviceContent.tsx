@@ -40,6 +40,12 @@ function validateRoute(route: Route) {
         "循环间隔需为 1–3600 秒的整数，填写后会自动保存。",
       );
   }
+  if (
+    route.display_off_schedule?.enabled &&
+    route.display_off_schedule.start === route.display_off_schedule.end
+  ) {
+    throw new InvalidRoute("定时息屏的开始与结束时间不能相同。");
+  }
 }
 
 function suggestedInputs(state: NetworkState): Route["inputs"] {
@@ -147,11 +153,14 @@ export default function DeviceContent({
   }, [document, nodeId, profile, state, auto.queue, busy]);
   function update(patch: Partial<Route>) {
     const next = { ...draft, ...patch };
-    if (
-      "display_brightness_percent" in patch &&
-      patch.display_brightness_percent === undefined
-    ) {
-      delete next.display_brightness_percent;
+    for (const key of [
+      "display_brightness_percent",
+      "display_off_on_source_offline",
+      "display_off_schedule",
+    ] as const) {
+      if (key in patch && patch[key] === undefined) {
+        delete next[key];
+      }
     }
     if (patch.display_mode && patch.display_mode !== "rotating")
       delete next.rotation_seconds;
@@ -195,6 +204,9 @@ export default function DeviceContent({
   const sliderBrightness = screenOff
     ? (lastActiveBrightnessRef.current ?? defaultBrightness)
     : (draft.display_brightness_percent ?? defaultBrightness);
+  const scheduleEnabled = Boolean(draft.display_off_schedule?.enabled);
+  const scheduleStart = draft.display_off_schedule?.start || "22:00";
+  const scheduleEnd = draft.display_off_schedule?.end || "10:00";
   const hasSystemInput = draft.inputs.some(
     (i) => i.observation_type === "system",
   );
@@ -450,6 +462,69 @@ export default function DeviceContent({
                 >
                   恢复默认
                 </button>
+              </div>
+            </div>
+            <SettingSwitch
+              title="数据源离线自动息屏"
+              description="电脑休眠或数据来源全部过期离线后自动息屏，恢复上报后自动亮屏。"
+              checked={Boolean(draft.display_off_on_source_offline)}
+              onChange={(checked) =>
+                update({
+                  display_off_on_source_offline: checked ? true : undefined,
+                })
+              }
+            />
+            <SettingSwitch
+              title="定时息屏"
+              description="按每日息屏区间自动熄灭屏幕（北京时间，默认 22:00 至次日 10:00）。"
+              checked={scheduleEnabled}
+              onChange={(checked) =>
+                update({
+                  display_off_schedule: checked
+                    ? { enabled: true, start: scheduleStart, end: scheduleEnd }
+                    : undefined,
+                })
+              }
+            />
+            <div className="setting-row schedule-row">
+              <span>
+                <strong>息屏区间</strong>
+                <small>开始时间晚于结束时间表示跨夜至次日</small>
+              </span>
+              <div className="schedule-inputs">
+                <input
+                  type="time"
+                  aria-label="息屏开始时间"
+                  disabled={!scheduleEnabled}
+                  value={scheduleStart}
+                  onChange={(event) => {
+                    if (!event.target.value) return;
+                    update({
+                      display_off_schedule: {
+                        enabled: true,
+                        start: event.target.value,
+                        end: scheduleEnd,
+                      },
+                    });
+                  }}
+                />
+                <span>至</span>
+                <input
+                  type="time"
+                  aria-label="息屏结束时间"
+                  disabled={!scheduleEnabled}
+                  value={scheduleEnd}
+                  onChange={(event) => {
+                    if (!event.target.value) return;
+                    update({
+                      display_off_schedule: {
+                        enabled: true,
+                        start: scheduleStart,
+                        end: event.target.value,
+                      },
+                    });
+                  }}
+                />
               </div>
             </div>
           </>

@@ -2606,6 +2606,18 @@ main.device-page {
   min-height: 32px;
   font-size: 13px;
 }
+.schedule-inputs {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.schedule-inputs input[type="time"] {
+  width: 110px;
+}
 .content-sources {
   margin-top: 12px;
   display: grid;
@@ -2686,11 +2698,13 @@ main.device-page {
   .setting-row {
     gap: 16px;
   }
-  .brightness-row {
+  .brightness-row,
+  .schedule-row {
     flex-direction: column;
     align-items: stretch;
   }
-  .brightness-control {
+  .brightness-control,
+  .schedule-inputs {
     width: 100%;
     justify-content: flex-start;
   }

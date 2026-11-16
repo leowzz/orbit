@@ -200,15 +200,29 @@ type CoreIdentity struct {
 	ID string `yaml:"id"`
 }
 
+const (
+	DefaultDisplayOffStart = "22:00"
+	DefaultDisplayOffEnd   = "10:00"
+)
+
+// DisplayOffSchedule defines a daily local-time window during which a physical screen turns off.
+type DisplayOffSchedule struct {
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	Start   string `yaml:"start" json:"start"`
+	End     string `yaml:"end" json:"end"`
+}
+
 type ProjectionRoute struct {
-	NFCDMetricsLeftPadding   *uint32           `yaml:"nfcd_metrics_left_padding,omitempty" json:"nfcd_metrics_left_padding,omitempty"`
-	DisplayBrightnessPercent *uint32           `yaml:"display_brightness_percent,omitempty" json:"display_brightness_percent,omitempty"`
-	SessionsEnabled          *bool             `yaml:"sessions_enabled,omitempty" json:"sessions_enabled,omitempty"`
-	DisplayMode              string            `yaml:"display_mode,omitempty" json:"display_mode,omitempty"`
-	SystemPrimary            string            `yaml:"system_primary,omitempty" json:"system_primary,omitempty"`
-	Profile                  string            `yaml:"profile" json:"profile"`
-	Inputs                   []ProjectionInput `yaml:"inputs" json:"inputs"`
-	RotationSeconds          int               `yaml:"rotation_seconds,omitempty" json:"rotation_seconds,omitempty"`
+	NFCDMetricsLeftPadding    *uint32             `yaml:"nfcd_metrics_left_padding,omitempty" json:"nfcd_metrics_left_padding,omitempty"`
+	DisplayBrightnessPercent  *uint32             `yaml:"display_brightness_percent,omitempty" json:"display_brightness_percent,omitempty"`
+	DisplayOffOnSourceOffline bool                `yaml:"display_off_on_source_offline,omitempty" json:"display_off_on_source_offline,omitempty"`
+	DisplayOffSchedule        *DisplayOffSchedule `yaml:"display_off_schedule,omitempty" json:"display_off_schedule,omitempty"`
+	SessionsEnabled           *bool               `yaml:"sessions_enabled,omitempty" json:"sessions_enabled,omitempty"`
+	DisplayMode               string              `yaml:"display_mode,omitempty" json:"display_mode,omitempty"`
+	SystemPrimary             string              `yaml:"system_primary,omitempty" json:"system_primary,omitempty"`
+	Profile                   string              `yaml:"profile" json:"profile"`
+	Inputs                    []ProjectionInput   `yaml:"inputs" json:"inputs"`
+	RotationSeconds           int                 `yaml:"rotation_seconds,omitempty" json:"rotation_seconds,omitempty"`
 }
 
 type ProjectionInput struct {

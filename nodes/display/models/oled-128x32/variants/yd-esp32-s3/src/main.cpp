@@ -115,7 +115,8 @@ void loop() {
             : generated_config::kDisplayBrightnessPercent;
     applyDisplayBrightness(target_brightness);
     if (applied_brightness != 0) {
-      orbit_display::renderUi(display, snapshot, full_refresh_needed);
+      orbit_display::renderUi(display, snapshot, full_refresh_needed,
+                              orbit_display::computePixelShift(now));
       full_refresh_needed = false;
     }
   }

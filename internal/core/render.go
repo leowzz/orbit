@@ -215,7 +215,7 @@ func freshnessLabel(f orbitv1.Freshness) string {
 	}
 }
 
-func consoleNodePreview(now time.Time, view *orbitv1.DeviceView, step, total int) map[string]any {
+func consoleNodePreview(now time.Time, view *orbitv1.DeviceView, step, total int, offReason string) map[string]any {
 	if view == nil {
 		return nil
 	}
@@ -233,6 +233,9 @@ func consoleNodePreview(now time.Time, view *orbitv1.DeviceView, step, total int
 	}
 	if view.DisplayBrightnessPercent != nil {
 		preview["brightness_percent"] = view.GetDisplayBrightnessPercent()
+	}
+	if offReason != "" {
+		preview["brightness_off_reason"] = offReason
 	}
 	return preview
 }

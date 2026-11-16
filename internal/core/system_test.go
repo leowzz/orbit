@@ -495,3 +495,84 @@ func TestDisplayBrightnessValidationAndProjection(t *testing.T) {
 		t.Fatalf("expected console preview brightness_percent=100, got %#v", state.NodeViews["xz-bright"])
 	}
 }
+
+func TestDisplayAutoOffOfflineAndScheduleWindow(t *testing.T) {
+	shanghai := time.FixedZone("Asia/Shanghai", 8*60*60)
+	t2159 := time.Date(2026, 11, 16, 21, 59, 0, 0, shanghai).UTC()
+	uintPtr := func(v uint32) *uint32 { return &v }
+
+	e, err := New(Config{
+		CoreID:    "core",
+		CoreEpoch: "epoch",
+		Routes: []Route{{
+			NodeID:                    "oled-1",
+			Profile:                   usageProfile,
+			DisplayMode:               "system",
+			DisplayBrightnessPercent:  uintPtr(35),
+			DisplayOffOnSourceOffline: true,
+			DisplayOffSchedule:        &config.DisplayOffSchedule{Enabled: true, Start: "22:00", End: "10:00"},
+			Inputs:                    []RouteInput{{AgentID: "agent-a", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM}},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.ApplyAgentState(testSystemAgentState(t2159, "agent-a")); err != nil {
+		t.Fatal(err)
+	}
+	// Before any observation arrives, source is missing/offline -> auto screen-off 0%.
+	missingViews, err := e.ApplyNodeState(t2159, &orbitv1.NodeState{
+		Metadata:        &orbitv1.Metadata{MessageId: "ns-1", ProducerId: "oled-1", Revision: 1, ProducedAt: timestamppb.New(t2159)},
+		NodeId:          "oled-1",
+		NodeEpoch:       "ne-1",
+		SeriesId:        displaySeries,
+		ModelId:         oledModel,
+		VariantId:       ydVariant,
+		FirmwareVersion: "0.4.6",
+	})
+	if err != nil || len(missingViews) != 1 || missingViews[0].DisplayBrightnessPercent == nil || *missingViews[0].DisplayBrightnessPercent != 0 {
+		t.Fatalf("expected offline initial screen-off 0%%, got views=%v err=%v", missingViews, err)
+	}
+
+	// Fresh observation wakes screen back to configured 35%.
+	obs := testSystemObservation(t2159, "agent-a", 1)
+	obs.Metadata.ExpiresAt = timestamppb.New(t2159.Add(2 * time.Minute))
+	views, err := e.ApplyObservation(t2159, obs)
+	if err != nil || len(views) != 1 || views[0].DisplayBrightnessPercent == nil || *views[0].DisplayBrightnessPercent != 35 {
+		t.Fatalf("expected awake 35%%, got %#v err=%v", views, err)
+	}
+
+	// Crossing into 22:00 triggers schedule off (0%) on Refresh even while observation is fresh.
+	t2200 := time.Date(2026, 11, 16, 22, 0, 0, 0, shanghai).UTC()
+	views, err = e.Refresh(t2200)
+	if err != nil || len(views) != 1 || views[0].DisplayBrightnessPercent == nil || *views[0].DisplayBrightnessPercent != 0 {
+		t.Fatalf("expected 22:00 schedule off 0%%, got %#v err=%v", views, err)
+	}
+	rawSchedule, _ := json.Marshal(e.consoleState(t2200))
+	if !strings.Contains(string(rawSchedule), `"brightness_off_reason":"schedule"`) {
+		t.Fatalf("expected console preview schedule reason, got %s", rawSchedule)
+	}
+
+	// Overnight 02:30 stays off; crossing 10:00 wakes back up when a fresh observation exists.
+	obsMorning := testSystemObservation(time.Date(2026, 11, 17, 9, 59, 30, 0, shanghai).UTC(), "agent-a", 2)
+	obsMorning.Metadata.ExpiresAt = timestamppb.New(time.Date(2026, 11, 17, 10, 5, 0, 0, shanghai).UTC())
+	views, err = e.ApplyObservation(time.Date(2026, 11, 17, 9, 59, 30, 0, shanghai).UTC(), obsMorning)
+	if err != nil || len(views) != 1 || views[0].GetDisplayBrightnessPercent() != 0 {
+		t.Fatalf("expected 09:59:30 still in schedule off, got %#v err=%v", views, err)
+	}
+	views, err = e.Refresh(time.Date(2026, 11, 17, 10, 0, 0, 0, shanghai).UTC())
+	if err != nil || len(views) != 1 || views[0].DisplayBrightnessPercent == nil || *views[0].DisplayBrightnessPercent != 35 {
+		t.Fatalf("expected 10:00 wake to 35%%, got %#v err=%v", views, err)
+	}
+
+	// Observation expires at 10:05:01 -> Refresh flips to offline 0%.
+	tStale := time.Date(2026, 11, 17, 10, 5, 1, 0, shanghai).UTC()
+	views, err = e.Refresh(tStale)
+	if err != nil || len(views) != 1 || views[0].DisplayBrightnessPercent == nil || *views[0].DisplayBrightnessPercent != 0 {
+		t.Fatalf("expected offline off 0%% after expiry, got %#v err=%v", views, err)
+	}
+	rawOffline, _ := json.Marshal(e.consoleState(tStale))
+	if !strings.Contains(string(rawOffline), `"brightness_off_reason":"offline"`) {
+		t.Fatalf("expected console preview offline reason, got %s", rawOffline)
+	}
+}

@@ -255,6 +255,53 @@ func (cfg *CoreConfig) validate(baseDir string) error {
 	return validateLogLevel(cfg.Logging.Level)
 }
 
+// IsPhysicalDisplayProfile reports whether profile drives an embedded physical screen.
+func IsPhysicalDisplayProfile(profile string) bool {
+	return strings.HasSuffix(profile, "-oled-128x32") || profile == "metrics-xiaozhi-320x240"
+}
+
+// ParseClockMinutes parses a 24-hour HH:MM string into minutes since midnight.
+func ParseClockMinutes(value string) (int, error) {
+	if len(value) != 5 || value[2] != ':' {
+		return 0, fmt.Errorf("expected HH:MM, got %q", value)
+	}
+	hour, err := strconv.Atoi(value[:2])
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, fmt.Errorf("invalid hour in %q", value)
+	}
+	minute, err := strconv.Atoi(value[3:])
+	if err != nil || minute < 0 || minute > 59 {
+		return 0, fmt.Errorf("invalid minute in %q", value)
+	}
+	return hour*60 + minute, nil
+}
+
+// NormalizeDisplayOffSchedule applies default 22:00-10:00 bounds and validates HH:MM format.
+func NormalizeDisplayOffSchedule(schedule *DisplayOffSchedule) (*DisplayOffSchedule, error) {
+	if schedule == nil {
+		return nil, nil
+	}
+	copySchedule := *schedule
+	if copySchedule.Start == "" {
+		copySchedule.Start = DefaultDisplayOffStart
+	}
+	if copySchedule.End == "" {
+		copySchedule.End = DefaultDisplayOffEnd
+	}
+	startMin, err := ParseClockMinutes(copySchedule.Start)
+	if err != nil {
+		return nil, fmt.Errorf("display_off_schedule.start: %w", err)
+	}
+	endMin, err := ParseClockMinutes(copySchedule.End)
+	if err != nil {
+		return nil, fmt.Errorf("display_off_schedule.end: %w", err)
+	}
+	if copySchedule.Enabled && startMin == endMin {
+		return nil, errors.New("display_off_schedule start and end must differ when enabled")
+	}
+	return &copySchedule, nil
+}
+
 // ValidateRoutes checks editable routing against deployment observation policies.
 func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 
@@ -262,8 +309,22 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		if route.NFCDMetricsLeftPadding != nil && (route.Profile != "overview-app" || *route.NFCDMetricsLeftPadding > 64) {
 			return fmt.Errorf("projection route %q: NFCD metrics padding requires an App route and a value from 0 to 64", nodeID)
 		}
-		if route.DisplayBrightnessPercent != nil && ((!strings.HasSuffix(route.Profile, "-oled-128x32") && route.Profile != "metrics-xiaozhi-320x240") || *route.DisplayBrightnessPercent > 100) {
+		if route.DisplayBrightnessPercent != nil && (!IsPhysicalDisplayProfile(route.Profile) || *route.DisplayBrightnessPercent > 100) {
 			return fmt.Errorf("projection route %q: display brightness requires a screen route and a value from 0 to 100", nodeID)
+		}
+		if route.DisplayOffOnSourceOffline && !IsPhysicalDisplayProfile(route.Profile) {
+			return fmt.Errorf("projection route %q: display_off_on_source_offline requires a screen route", nodeID)
+		}
+		if route.DisplayOffSchedule != nil {
+			if !IsPhysicalDisplayProfile(route.Profile) {
+				return fmt.Errorf("projection route %q: display_off_schedule requires a screen route", nodeID)
+			}
+			normalized, err := NormalizeDisplayOffSchedule(route.DisplayOffSchedule)
+			if err != nil {
+				return fmt.Errorf("projection route %q: %w", nodeID, err)
+			}
+			route.DisplayOffSchedule = normalized
+			routes[nodeID] = route
 		}
 		if _, ok := cfg.App.Devices[nodeID]; ok && route.Profile != "overview-app" {
 			return errors.New("app devices require overview-app routes")

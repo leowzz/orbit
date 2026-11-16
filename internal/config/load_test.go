@@ -438,6 +438,51 @@ func TestValidateRoutesDisplayBrightnessPercent(t *testing.T) {
 	if err := cfg.ValidateRoutes(nonDisplay); err == nil {
 		t.Fatal("accepted display_brightness_percent on overview-web")
 	}
+
+	autoOffValid := map[string]ProjectionRoute{
+		"desk-oled-01": {
+			Profile:                   "usage-oled-128x32",
+			DisplayMode:               "system",
+			DisplayOffOnSourceOffline: true,
+			DisplayOffSchedule:        &DisplayOffSchedule{Enabled: true},
+			Inputs:                    []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+		},
+	}
+	if err := cfg.ValidateRoutes(autoOffValid); err != nil {
+		t.Fatalf("ValidateRoutes auto-off defaults failed: %v", err)
+	}
+	if got := autoOffValid["desk-oled-01"].DisplayOffSchedule; got.Start != "22:00" || got.End != "10:00" {
+		t.Fatalf("expected default schedule 22:00-10:00, got %+v", got)
+	}
+	for _, invalid := range []map[string]ProjectionRoute{
+		{
+			"desk-web-01": {
+				Profile:                   "overview-web",
+				DisplayOffOnSourceOffline: true,
+				Inputs:                    []ProjectionInput{{AgentID: "agent-a", ObservationType: "usage"}},
+			},
+		},
+		{
+			"desk-oled-01": {
+				Profile:            "usage-oled-128x32",
+				DisplayMode:        "system",
+				DisplayOffSchedule: &DisplayOffSchedule{Enabled: true, Start: "25:00", End: "10:00"},
+				Inputs:             []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+			},
+		},
+		{
+			"desk-oled-01": {
+				Profile:            "usage-oled-128x32",
+				DisplayMode:        "system",
+				DisplayOffSchedule: &DisplayOffSchedule{Enabled: true, Start: "22:00", End: "22:00"},
+				Inputs:             []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+			},
+		},
+	} {
+		if err := cfg.ValidateRoutes(invalid); err == nil {
+			t.Fatalf("accepted invalid auto-off route: %#v", invalid)
+		}
+	}
 }
 
 func writeFixtureFiles(t *testing.T, dir string, includeSub2API bool) {

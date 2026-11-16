@@ -2,6 +2,7 @@
 
 #include <U8g2lib.h>
 
+#include "orbit_display/oled_pixel_shift.h"
 #include "orbit_display/view_state.h"
 
 namespace orbit_display {
@@ -13,6 +14,6 @@ inline constexpr uint8_t kOledTileHeight = kOledHeight / 8U;
 inline constexpr uint8_t kOledStaleMarkerX = 124U;
 
 void renderUi(U8G2& display, const DisplaySnapshot& snapshot,
-              bool force_full_refresh = false);
+              bool force_full_refresh = false, PixelShift shift = {});
 
 }  // namespace orbit_display

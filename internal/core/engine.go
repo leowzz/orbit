@@ -10,6 +10,7 @@ import (
 	"time"
 
 	orbitv1 "orbit/gen/go/orbit/v1"
+	orbitconfig "orbit/internal/config"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -40,16 +41,18 @@ type RouteInput struct {
 }
 
 type Route struct {
-	NFCDMetricsLeftPadding   *uint32
-	DisplayBrightnessPercent *uint32
-	SessionsEnabled          *bool
-	DisplayMode              string
-	SystemPrimary            string
-	NodeID                   string
-	AgentID                  string
-	Profile                  string
-	Inputs                   []RouteInput
-	RotationSeconds          int
+	NFCDMetricsLeftPadding    *uint32
+	DisplayBrightnessPercent  *uint32
+	DisplayOffOnSourceOffline bool
+	DisplayOffSchedule        *orbitconfig.DisplayOffSchedule
+	SessionsEnabled           *bool
+	DisplayMode               string
+	SystemPrimary             string
+	NodeID                    string
+	AgentID                   string
+	Profile                   string
+	Inputs                    []RouteInput
+	RotationSeconds           int
 }
 
 type UsagePolicy struct {
@@ -138,6 +141,19 @@ func New(config Config) (*Engine, error) {
 		}
 		if route.DisplayBrightnessPercent != nil && (!isPhysicalDisplayProfile(route.Profile) || *route.DisplayBrightnessPercent > 100) {
 			return nil, fmt.Errorf("invalid display brightness for node %q", route.NodeID)
+		}
+		if route.DisplayOffOnSourceOffline && !isPhysicalDisplayProfile(route.Profile) {
+			return nil, fmt.Errorf("display_off_on_source_offline unsupported for node %q", route.NodeID)
+		}
+		if route.DisplayOffSchedule != nil {
+			if !isPhysicalDisplayProfile(route.Profile) {
+				return nil, fmt.Errorf("display_off_schedule unsupported for node %q", route.NodeID)
+			}
+			normalized, schedErr := orbitconfig.NormalizeDisplayOffSchedule(route.DisplayOffSchedule)
+			if schedErr != nil {
+				return nil, fmt.Errorf("invalid display_off_schedule for node %q: %w", route.NodeID, schedErr)
+			}
+			route.DisplayOffSchedule = normalized
 		}
 		if len(route.Inputs) == 0 && route.AgentID != "" {
 			route.Inputs = []RouteInput{{AgentID: route.AgentID, ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_USAGE}}
@@ -559,7 +575,7 @@ func isPhysicalDisplayProfile(profile string) bool {
 	return profile == usageProfile || profile == codexWeeklyProfile || profile == rotatingOLEDProfile || profile == xiaozhiProfile
 }
 
-func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision uint64, recordStart bool) (*orbitv1.DeviceView, int, int, bool) {
+func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision uint64, recordStart bool) (*orbitv1.DeviceView, int, int, string, bool) {
 	explicitPage := configured.displayMode() == "rotating" || configured.DisplayMode != ""
 	route, step, total := e.displayRouteAt(now, configured, recordStart)
 	nodeID := route.NodeID
@@ -567,8 +583,9 @@ func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision
 	codex, hasCodex := e.codexForRoute(route)
 	sys, hasSystem := e.systemForRoute(route)
 	if !hasUsage && !hasCodex && !hasSystem && !explicitPage {
-		return nil, step, total, false
+		return nil, step, total, "", false
 	}
+	brightness, offReason := e.effectiveBrightnessLocked(now, configured, route)
 	freshness, freshUntil, retainUntil := e.routeFreshness(now, route, usage, hasUsage, codex, hasCodex, sys, hasSystem)
 	view := &orbitv1.DeviceView{
 		Metadata: &orbitv1.Metadata{
@@ -580,7 +597,7 @@ func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision
 		},
 		SessionsEnabled:          proto.Bool(configured.sessionsEnabled()),
 		NfcdMetricsLeftPadding:   configured.NFCDMetricsLeftPadding,
-		DisplayBrightnessPercent: configured.DisplayBrightnessPercent,
+		DisplayBrightnessPercent: brightness,
 		DisplayKind:              route.DisplayMode,
 		NodeId:                   nodeID,
 		CoreEpoch:                e.config.CoreEpoch,
@@ -651,12 +668,12 @@ func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision
 	case explicitPage:
 		applyRenderedSlots(view, emptySlots())
 	}
-	return view, step, total, true
+	return view, step, total, offReason, true
 }
 
 func (e *Engine) projectRouteLocked(now time.Time, configured Route) ([]*orbitv1.DeviceView, error) {
 	nodeID := configured.NodeID
-	view, _, _, ok := e.buildDeviceViewLocked(now, configured, e.viewRevision[nodeID]+1, true)
+	view, _, _, _, ok := e.buildDeviceViewLocked(now, configured, e.viewRevision[nodeID]+1, true)
 	if !ok {
 		return nil, nil
 	}
@@ -747,11 +764,91 @@ func (e *Engine) routeFreshness(now time.Time, route Route, usage canonicalUsage
 	return freshness, freshUntil, retainUntil.Add(e.config.RetainFor)
 }
 
-func (e *Engine) freshnessSignature(now time.Time, route Route) string {
-	if route.displayMode() == "rotating" {
-		active, _, _ := e.displayRouteAt(now, route, true)
-		return active.DisplayMode + ":" + e.freshnessSignature(now, active)
+var displayScheduleLocation = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+func inDisplayOffWindow(now time.Time, schedule *orbitconfig.DisplayOffSchedule) bool {
+	if schedule == nil || !schedule.Enabled {
+		return false
 	}
+	startMin, err := orbitconfig.ParseClockMinutes(schedule.Start)
+	if err != nil {
+		return false
+	}
+	endMin, err := orbitconfig.ParseClockMinutes(schedule.End)
+	if err != nil || startMin == endMin {
+		return false
+	}
+	local := now.In(displayScheduleLocation)
+	cur := local.Hour()*60 + local.Minute()
+	if startMin < endMin {
+		return cur >= startMin && cur < endMin
+	}
+	return cur >= startMin || cur < endMin
+}
+
+func (e *Engine) routeSourcesOfflineLocked(now time.Time, configured, active Route) bool {
+	inputs := active.Inputs
+	if configured.displayMode() == "rotating" {
+		inputs = configured.Inputs
+	}
+	for _, input := range inputs {
+		switch input.ObservationType {
+		case orbitv1.ObservationType_OBSERVATION_TYPE_USAGE:
+			if v, ok := e.usage[input.AgentID]; ok && !now.After(v.expiresAt) {
+				return false
+			}
+		case orbitv1.ObservationType_OBSERVATION_TYPE_CODEX:
+			if v, ok := e.codex[input.AgentID]; ok && !now.After(v.expiresAt) {
+				return false
+			}
+		case orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM:
+			if v, ok := e.system[input.AgentID]; ok && !now.After(v.expiresAt) {
+				return false
+			}
+		}
+	}
+	return len(inputs) > 0
+}
+
+func (e *Engine) effectiveBrightnessLocked(now time.Time, configured, active Route) (*uint32, string) {
+	if !isPhysicalDisplayProfile(configured.Profile) {
+		return configured.DisplayBrightnessPercent, ""
+	}
+	if configured.DisplayBrightnessPercent != nil && *configured.DisplayBrightnessPercent == 0 {
+		v := uint32(0)
+		return &v, "manual"
+	}
+	if inDisplayOffWindow(now, configured.DisplayOffSchedule) {
+		v := uint32(0)
+		return &v, "schedule"
+	}
+	if configured.DisplayOffOnSourceOffline && e.routeSourcesOfflineLocked(now, configured, active) {
+		v := uint32(0)
+		return &v, "offline"
+	}
+	return configured.DisplayBrightnessPercent, ""
+}
+
+func (e *Engine) freshnessSignature(now time.Time, configured Route) string {
+	active := configured
+	prefix := ""
+	if configured.displayMode() == "rotating" {
+		active, _, _ = e.displayRouteAt(now, configured, true)
+		prefix = active.DisplayMode + ":"
+	}
+	signature := prefix + e.freshnessPartsLocked(now, active)
+	if isPhysicalDisplayProfile(configured.Profile) {
+		brightness, reason := e.effectiveBrightnessLocked(now, configured, active)
+		brightKey := "default"
+		if brightness != nil {
+			brightKey = fmt.Sprintf("%d", *brightness)
+		}
+		signature += "|bright=" + brightKey + ":" + reason
+	}
+	return signature
+}
+
+func (e *Engine) freshnessPartsLocked(now time.Time, route Route) string {
 	parts := make([]string, 0, len(route.Inputs))
 	for _, input := range route.Inputs {
 		switch input.ObservationType {

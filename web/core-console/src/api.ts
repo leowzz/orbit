@@ -2,6 +2,11 @@ export type InputKind = "usage" | "codex" | "system";
 export type DisplayMode =
   "usage" | "codex" | "sessions" | "system" | "rotating";
 export type SystemPrimary = "cpu" | "memory" | "load" | "lav";
+export interface DisplayOffSchedule {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
 export interface Route {
   profile: string;
   sessions_enabled?: boolean;
@@ -10,6 +15,8 @@ export interface Route {
   system_primary?: SystemPrimary;
   rotation_seconds?: number;
   display_brightness_percent?: number;
+  display_off_on_source_offline?: boolean;
+  display_off_schedule?: DisplayOffSchedule;
   inputs: { agent_id: string; observation_type: InputKind }[];
 }
 export interface RouteDocument {
@@ -47,6 +54,7 @@ export interface NodePreview {
   rotation_step?: number;
   rotation_total?: number;
   brightness_percent?: number;
+  brightness_off_reason?: "manual" | "schedule" | "offline";
 }
 export interface Agent {
   id: string;

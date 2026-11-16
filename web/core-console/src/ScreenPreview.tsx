@@ -169,16 +169,28 @@ export default function ScreenPreview({
 }: Props) {
   const isOled = profile.endsWith("-oled-128x32");
   const isXiaozhi = profile === "metrics-xiaozhi-320x240";
+  const effectiveBrightness =
+    brightnessPercent === 0
+      ? 0
+      : preview.brightness_percent === 0
+        ? 0
+        : (brightnessPercent ?? preview.brightness_percent);
+  const offLabel =
+    brightnessPercent === 0
+      ? "已息屏"
+      : preview.brightness_percent === 0
+        ? preview.brightness_off_reason === "schedule"
+          ? "定时息屏"
+          : preview.brightness_off_reason === "offline"
+            ? "离线息屏"
+            : "已息屏"
+        : "";
   const status = [
     preview.rotation_total && preview.rotation_total > 1
       ? `${preview.rotation_step}/${preview.rotation_total}`
       : "",
     isOled ? "128×32" : isXiaozhi ? "320×240" : kindLabel(preview.display_kind),
-    brightnessPercent === 0
-      ? "已息屏"
-      : preview.freshness === "fresh"
-        ? "新鲜"
-        : "已过期",
+    offLabel || (preview.freshness === "fresh" ? "新鲜" : "已过期"),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -192,12 +204,12 @@ export default function ScreenPreview({
       {isOled ? (
         <OledPixelCanvas
           preview={preview}
-          brightnessPercent={brightnessPercent}
+          brightnessPercent={effectiveBrightness}
         />
       ) : isXiaozhi ? (
         <XiaozhiPixelCanvas
           preview={preview}
-          brightnessPercent={brightnessPercent}
+          brightnessPercent={effectiveBrightness}
         />
       ) : (
         <div className="screen-preview-slots">

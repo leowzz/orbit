@@ -137,6 +137,22 @@ export default function DeviceSummary({
             </dd>
           </div>
         )}
+        {(route.display_off_on_source_offline ||
+          route.display_off_schedule?.enabled) && (
+          <div>
+            <dt>自动息屏</dt>
+            <dd>
+              {[
+                route.display_off_on_source_offline ? "离线息屏" : "",
+                route.display_off_schedule?.enabled
+                  ? `${route.display_off_schedule.start || "22:00"}–${route.display_off_schedule.end || "10:00"}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </dd>
+          </div>
+        )}
         {system && route.system_primary && (
           <div>
             <dt>主指标</dt>

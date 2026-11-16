@@ -408,4 +408,10 @@ func TestConsoleRoutesDisplayBrightnessHotApply(t *testing.T) {
 	if defaultView.DisplayBrightnessPercent != nil {
 		t.Fatalf("expected cleared DeviceView brightness nil, got %#v", *defaultView.DisplayBrightnessPercent)
 	}
+
+	if w := put(`{"revision":3,"routes":{"node-a":{"profile":"usage-oled-128x32","display_off_on_source_offline":true,"display_off_schedule":{"enabled":true,"start":"","end":""},"inputs":[{"agent_id":"agent-a","observation_type":"usage"}]}}}`); w.Code != 200 {
+		t.Fatalf("expected 200 saving auto-off schedule, got %d %s", w.Code, w.Body.String())
+	} else if !strings.Contains(w.Body.String(), `"start":"22:00"`) || !strings.Contains(w.Body.String(), `"end":"10:00"`) {
+		t.Fatalf("expected normalized default schedule in response, got %s", w.Body.String())
+	}
 }
