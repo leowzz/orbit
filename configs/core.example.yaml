@@ -66,6 +66,11 @@ observation_policies:
     max_ttl: 1m
     max_future_skew: 10s
 
+  # Optional host resource policy; defaults to max_ttl: 5m and max_future_skew: 10s when omitted.
+  system:
+    max_ttl: 5m
+    max_future_skew: 10s
+
 # Optional; defaults to info. Supported values: debug, info, warn, error.
 # logging:
 #   level: info

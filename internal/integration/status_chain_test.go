@@ -17,6 +17,7 @@ import (
 	"orbit/internal/mqtt"
 	"orbit/internal/sources/codex"
 	"orbit/internal/sources/sub2api"
+	"orbit/internal/sources/system"
 
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -202,7 +203,7 @@ func (broker *memoryBroker) Subscribe(ctx context.Context, filter string, handle
 	}
 	count := len(broker.subscriptions)
 	broker.mu.Unlock()
-	if count >= 3 {
+	if count >= 6 {
 		broker.readyOnce.Do(func() { close(broker.ready) })
 	}
 	for _, message := range retained {
@@ -352,5 +353,94 @@ func receiveMessage(t *testing.T, events <-chan mqtt.Message) mqtt.Message {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for Agent MQTT message")
 		return mqtt.Message{}
+	}
+}
+
+func TestSystemSourceToRetainedDeviceView(t *testing.T) {
+	t.Parallel()
+	engine, err := core.New(core.Config{
+		CoreID:    "core-sys",
+		CoreEpoch: "core-epoch-sys",
+		Routes: []core.Route{{
+			NodeID:      "oled-sys",
+			Profile:     "usage-oled-128x32",
+			DisplayMode: "system",
+			Inputs:      []core.RouteInput{{AgentID: "agent-sys", ObservationType: orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM}},
+		}},
+		RetainFor: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker := newMemoryBroker()
+	coreRunner, err := core.NewRunner(engine, broker, zap.NewNop(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentRunner, err := agent.New(agent.Config{
+		AgentID:              "agent-sys",
+		AgentEpoch:           "agent-epoch-sys",
+		AgentVersion:         "test",
+		HostLabel:            "integration host",
+		SystemPollInterval:   time.Minute,
+		SystemObservationTTL: 2 * time.Minute,
+	}, agent.Sources{System: system.New()}, agent.Capabilities{}, broker, zap.NewNop())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	coreDone := make(chan error, 1)
+	go func() { coreDone <- coreRunner.Run(ctx) }()
+	select {
+	case <-broker.ready:
+	case <-time.After(time.Second):
+		t.Fatal("core subscriptions were not registered")
+	}
+
+	viewReceived := make(chan mqtt.Message, 2)
+	if err := broker.Subscribe(ctx, "orbit/v1/nodes/oled-sys/view", func(_ context.Context, message mqtt.Message) error {
+		viewReceived <- message
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	nodePayload, _ := proto.Marshal(&orbitv1.NodeState{
+		Metadata:        &orbitv1.Metadata{MessageId: "ns-sys", ProducerId: "oled-sys", Revision: 1, ProducedAt: timestamppb.New(now)},
+		NodeId:          "oled-sys",
+		NodeEpoch:       "ne-sys",
+		SeriesId:        "display",
+		ModelId:         "oled-128x32",
+		VariantId:       "yd-esp32-s3",
+		FirmwareVersion: "0.1.0",
+	})
+	if err := broker.Publish(ctx, mqtt.Message{Topic: "orbit/v1/nodes/oled-sys/state", Payload: nodePayload, Retain: true}); err != nil {
+		t.Fatal(err)
+	}
+	agentDone := make(chan error, 1)
+	go func() { agentDone <- agentRunner.Run(ctx) }()
+
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case msg := <-viewReceived:
+			var view orbitv1.DeviceView
+			if err := proto.Unmarshal(msg.Payload, &view); err != nil {
+				t.Fatal(err)
+			}
+			if view.Freshness == orbitv1.Freshness_FRESHNESS_FRESH {
+				if view.DisplayKind != "system" || !strings.HasSuffix(view.Primary.Text, "%") || !strings.HasPrefix(view.Secondary.Text, "MEM ") || proto.Size(&view) > 1024 {
+					t.Fatalf("unexpected fresh system DeviceView: %+v", &view)
+				}
+				cancel()
+				<-coreDone
+				<-agentDone
+				return
+			}
+		case <-deadline:
+			t.Fatal("timed out waiting for fresh system DeviceView")
+		}
 	}
 }

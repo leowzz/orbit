@@ -145,11 +145,14 @@ func (s *RouteStore) save(d RouteDocument) error {
 func RoutesFromConfig(routes map[string]config.ProjectionRoute) []Route {
 	result := make([]Route, 0, len(routes))
 	for id, r := range routes {
-		item := Route{NodeID: id, Profile: r.Profile, DisplayMode: r.DisplayMode, SessionsEnabled: r.SessionsEnabled, NFCDMetricsLeftPadding: r.NFCDMetricsLeftPadding, RotationSeconds: r.RotationSeconds}
+		item := Route{NodeID: id, Profile: r.Profile, DisplayMode: r.DisplayMode, SystemPrimary: r.SystemPrimary, SessionsEnabled: r.SessionsEnabled, NFCDMetricsLeftPadding: r.NFCDMetricsLeftPadding, RotationSeconds: r.RotationSeconds}
 		for _, input := range r.Inputs {
 			kind := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
-			if input.ObservationType == "codex" {
+			switch input.ObservationType {
+			case "codex":
 				kind = orbitv1.ObservationType_OBSERVATION_TYPE_CODEX
+			case "system":
+				kind = orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM
 			}
 			item.Inputs = append(item.Inputs, RouteInput{AgentID: input.AgentID, ObservationType: kind})
 		}
@@ -246,11 +249,29 @@ func (e *Engine) consoleState(now time.Time) map[string]any {
 	defer e.mu.Unlock()
 	agents := make([]map[string]any, 0, len(e.agentDetails))
 	nodes := make([]json.RawMessage, 0, len(e.nodeProducts))
+	nodeViews := make(map[string]any, len(e.config.Routes))
 	for id, state := range e.agentDetails {
 		data, _ := protojson.Marshal(state)
-		agents = append(agents, map[string]any{"id": id, "state": json.RawMessage(data), "usage_fresh": e.usage[id].expiresAt.After(now), "codex_fresh": e.codex[id].expiresAt.After(now)})
+		entry := map[string]any{
+			"id":           id,
+			"state":        json.RawMessage(data),
+			"usage_fresh":  e.usage[id].expiresAt.After(now),
+			"codex_fresh":  e.codex[id].expiresAt.After(now),
+			"system_fresh": e.system[id].expiresAt.After(now),
+		}
+		if summary := consoleSystemSummary(e.system[id], now); summary != nil {
+			entry["system"] = summary
+		}
+		agents = append(agents, entry)
 	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i]["id"].(string) < agents[j]["id"].(string) })
+	for _, route := range e.config.Routes {
+		if view, step, total, ok := e.buildDeviceViewLocked(now, route, e.viewRevision[route.NodeID], false); ok {
+			if preview := consoleNodePreview(now, view, step, total); preview != nil {
+				nodeViews[route.NodeID] = preview
+			}
+		}
+	}
 	ids := make([]string, 0, len(e.nodeProducts))
 	for id := range e.nodeProducts {
 		ids = append(ids, id)
@@ -260,7 +281,7 @@ func (e *Engine) consoleState(now time.Time) map[string]any {
 		data, _ := protojson.Marshal(e.nodeProducts[id])
 		nodes = append(nodes, data)
 	}
-	return map[string]any{"core_id": e.config.CoreID, "core_epoch": e.config.CoreEpoch, "agents": agents, "nodes": nodes, "now": now}
+	return map[string]any{"core_id": e.config.CoreID, "core_epoch": e.config.CoreEpoch, "agents": agents, "nodes": nodes, "node_views": nodeViews, "now": now}
 }
 
 // InboxConsoleHandler serves device authorization and inbox administration
@@ -306,7 +327,7 @@ func ConsoleHandler(runner *Runner, store *RouteStore, cfg *config.CoreConfig, a
 	})
 	mux.HandleFunc("GET /api/system", func(w http.ResponseWriter, r *http.Request) {
 		policies := map[string]map[string]string{}
-		for kind, policy := range cfg.ObservationPolicies {
+		for kind, policy := range config.EffectiveObservationPolicies(cfg.ObservationPolicies) {
 			policies[kind] = map[string]string{"max_ttl": policy.MaxTTL.Duration.String(), "max_future_skew": policy.MaxFutureSkew.Duration.String()}
 		}
 		writeConsoleJSON(w, map[string]any{"started_at": startedAt, "policies": policies, "session_hours": cfg.Console.SessionHours})

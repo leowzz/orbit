@@ -43,6 +43,7 @@ type Route struct {
 	NFCDMetricsLeftPadding *uint32
 	SessionsEnabled        *bool
 	DisplayMode            string
+	SystemPrimary          string
 	NodeID                 string
 	AgentID                string
 	Profile                string
@@ -61,12 +62,13 @@ type CodexPolicy struct {
 }
 
 type Config struct {
-	CoreID      string
-	CoreEpoch   string
-	Routes      []Route
-	UsagePolicy UsagePolicy
-	CodexPolicy CodexPolicy
-	RetainFor   time.Duration
+	CoreID       string
+	CoreEpoch    string
+	Routes       []Route
+	UsagePolicy  UsagePolicy
+	CodexPolicy  CodexPolicy
+	SystemPolicy SystemPolicy
+	RetainFor    time.Duration
 }
 
 type participantState struct {
@@ -105,6 +107,7 @@ type Engine struct {
 	nodeProducts    map[string]*orbitv1.NodeState
 	usage           map[string]canonicalUsage
 	codex           map[string]canonicalCodex
+	system          map[string]canonicalSystem
 	viewRevision    map[string]uint64
 	lastFresh       map[string]string
 	rotationStarted map[string]time.Time
@@ -121,6 +124,11 @@ func New(config Config) (*Engine, error) {
 	if config.RetainFor <= 0 {
 		config.RetainFor = 24 * time.Hour
 	}
+	var policyErr error
+	config.SystemPolicy, policyErr = effectiveSystemPolicy(config.SystemPolicy)
+	if policyErr != nil {
+		return nil, policyErr
+	}
 	seen := make(map[string]struct{}, len(config.Routes))
 	for index := range config.Routes {
 		route := &config.Routes[index]
@@ -134,11 +142,14 @@ func New(config Config) (*Engine, error) {
 			return nil, fmt.Errorf("invalid route for node %q", route.NodeID)
 		}
 		inputTypes := make(map[orbitv1.ObservationType]struct{}, len(route.Inputs))
-		if route.Profile == xiaozhiProfile && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "rotating" {
-			return nil, fmt.Errorf("xiaozhi route requires usage, codex or rotating display mode")
+		if route.Profile == xiaozhiProfile && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "system" && route.DisplayMode != "rotating" {
+			return nil, fmt.Errorf("xiaozhi route requires usage, codex, system or rotating display mode")
+		}
+		if route.SystemPrimary != "" && route.SystemPrimary != "cpu" && route.SystemPrimary != "memory" {
+			return nil, fmt.Errorf("invalid system primary metric for node %q", route.NodeID)
 		}
 		for _, input := range route.Inputs {
-			if input.AgentID == "" || (input.ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_USAGE && input.ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
+			if input.AgentID == "" || (input.ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_USAGE && input.ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_CODEX && input.ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM) {
 				return nil, fmt.Errorf("invalid route input for node %q", route.NodeID)
 			}
 			if _, duplicate := inputTypes[input.ObservationType]; duplicate {
@@ -154,12 +165,12 @@ func New(config Config) (*Engine, error) {
 		if route.DisplayMode == "" && route.Profile == codexWeeklyProfile && (len(route.Inputs) != 1 || route.Inputs[0].ObservationType != orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) {
 			return nil, fmt.Errorf("invalid Codex weekly route for node %q", route.NodeID)
 		}
-		if route.DisplayMode != "" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "sessions" && route.DisplayMode != "rotating" {
+		if route.DisplayMode != "" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "sessions" && route.DisplayMode != "system" && route.DisplayMode != "rotating" {
 			return nil, fmt.Errorf("invalid display mode for node %q", route.NodeID)
 		}
 		required := orbitv1.ObservationType_OBSERVATION_TYPE_UNSPECIFIED
 		if route.SessionsEnabled != nil && *route.SessionsEnabled {
-			if route.Profile != webProfile && route.Profile != androidProfile && route.Profile != appProfile {
+			if !isRichProfile(route.Profile) {
 				return nil, fmt.Errorf("session details unsupported for node %q", route.NodeID)
 			}
 			if _, ok := inputTypes[orbitv1.ObservationType_OBSERVATION_TYPE_CODEX]; !ok {
@@ -172,14 +183,17 @@ func New(config Config) (*Engine, error) {
 		if route.DisplayMode == "codex" || route.DisplayMode == "sessions" {
 			required = orbitv1.ObservationType_OBSERVATION_TYPE_CODEX
 		}
+		if route.DisplayMode == "system" {
+			required = orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM
+		}
 		if required != orbitv1.ObservationType_OBSERVATION_TYPE_UNSPECIFIED {
 			if _, ok := inputTypes[required]; !ok {
 				return nil, fmt.Errorf("missing display source for node %q", route.NodeID)
 			}
 		}
 		if route.displayMode() == "rotating" {
-			if len(inputTypes) != 2 || route.RotationSeconds < 0 || route.RotationSeconds > 3600 {
-				return nil, fmt.Errorf("invalid rotating OLED route for node %q", route.NodeID)
+			if len(inputTypes) < 2 || route.RotationSeconds < 0 || route.RotationSeconds > 3600 {
+				return nil, fmt.Errorf("invalid rotating display route for node %q", route.NodeID)
 			}
 			if route.RotationSeconds == 0 {
 				route.RotationSeconds = 3
@@ -208,6 +222,7 @@ func New(config Config) (*Engine, error) {
 		nodeProducts:    make(map[string]*orbitv1.NodeState),
 		usage:           make(map[string]canonicalUsage),
 		codex:           make(map[string]canonicalCodex),
+		system:          make(map[string]canonicalSystem),
 		viewRevision:    make(map[string]uint64),
 		lastFresh:       make(map[string]string),
 		rotationStarted: make(map[string]time.Time),
@@ -232,7 +247,8 @@ func (e *Engine) ApplyAgentState(state *orbitv1.AgentState) error {
 	sourceEnabled := false
 	for _, source := range state.Sources {
 		if (source.ObservationType == orbitv1.ObservationType_OBSERVATION_TYPE_USAGE ||
-			source.ObservationType == orbitv1.ObservationType_OBSERVATION_TYPE_CODEX) && source.Enabled {
+			source.ObservationType == orbitv1.ObservationType_OBSERVATION_TYPE_CODEX ||
+			source.ObservationType == orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM) && source.Enabled {
 			sourceEnabled = true
 		}
 	}
@@ -254,6 +270,7 @@ func (e *Engine) ApplyAgentState(state *orbitv1.AgentState) error {
 		if current.epoch != state.AgentEpoch {
 			delete(e.usage, state.AgentId)
 			delete(e.codex, state.AgentId)
+			delete(e.system, state.AgentId)
 		}
 	}
 	e.agentDetails[state.AgentId] = proto.Clone(state).(*orbitv1.AgentState)
@@ -349,6 +366,21 @@ func (e *Engine) ApplyObservation(now time.Time, observation *orbitv1.Observatio
 		}
 		e.codex[metadata.ProducerId] = canonicalCodex{
 			value:      proto.Clone(payload.Codex).(*orbitv1.CodexObservation),
+			expiresAt:  expiresAt,
+			revision:   metadata.Revision,
+			agentEpoch: observation.AgentEpoch,
+		}
+	case *orbitv1.Observation_System:
+		observationType = orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM
+		if current, exists := e.system[metadata.ProducerId]; exists && current.agentEpoch == observation.AgentEpoch && metadata.Revision <= current.revision {
+			return nil, errors.New("stale observation revision")
+		}
+		expiresAt, err := e.validateSystem(now, metadata, payload.System)
+		if err != nil {
+			return nil, err
+		}
+		e.system[metadata.ProducerId] = canonicalSystem{
+			value:      proto.Clone(payload.System).(*orbitv1.SystemObservation),
 			expiresAt:  expiresAt,
 			revision:   metadata.Revision,
 			agentEpoch: observation.AgentEpoch,
@@ -515,22 +547,26 @@ func (e *Engine) AppView(now time.Time, nodeID string) *orbitv1.DeviceView {
 	return views[0]
 }
 
-func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.DeviceView, error) {
-	configured := route
-	explicitPage := route.displayMode() == "rotating" || route.DisplayMode != ""
-	route = e.displayRoute(now, route)
+func isRichProfile(profile string) bool {
+	return profile == webProfile || profile == androidProfile || profile == appProfile
+}
+
+func (e *Engine) buildDeviceViewLocked(now time.Time, configured Route, revision uint64, recordStart bool) (*orbitv1.DeviceView, int, int, bool) {
+	explicitPage := configured.displayMode() == "rotating" || configured.DisplayMode != ""
+	route, step, total := e.displayRouteAt(now, configured, recordStart)
 	nodeID := route.NodeID
 	usage, hasUsage := e.usageForRoute(route)
 	codex, hasCodex := e.codexForRoute(route)
-	if !hasUsage && !hasCodex && !explicitPage {
-		return nil, nil
+	sys, hasSystem := e.systemForRoute(route)
+	if !hasUsage && !hasCodex && !hasSystem && !explicitPage {
+		return nil, step, total, false
 	}
-	freshness, freshUntil, retainUntil := e.routeFreshness(now, route, usage, hasUsage, codex, hasCodex)
+	freshness, freshUntil, retainUntil := e.routeFreshness(now, route, usage, hasUsage, codex, hasCodex, sys, hasSystem)
 	view := &orbitv1.DeviceView{
 		Metadata: &orbitv1.Metadata{
 			MessageId:  newID(),
 			ProducerId: e.config.CoreID,
-			Revision:   e.viewRevision[nodeID] + 1,
+			Revision:   revision,
 			ProducedAt: timestamppb.New(now),
 			ExpiresAt:  timestamppb.New(retainUntil),
 		},
@@ -543,32 +579,19 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 		FreshUntil:             timestamppb.New(freshUntil),
 		RetainUntil:            timestamppb.New(retainUntil),
 	}
-	if explicitPage && !hasUsage && !hasCodex {
-		view.Primary = &orbitv1.DisplaySlot{Text: "--"}
-		view.Secondary = &orbitv1.DisplaySlot{Text: "--"}
-		view.Footer = &orbitv1.DisplaySlot{Text: "--"}
-	}
-	if hasUsage {
+	if hasUsage && isRichProfile(route.Profile) {
 		cost := usage.value.GetActualCostMicros()
 		tokens := usage.value.GetTokenCount()
 		tpm := usage.value.GetTpm()
-		if route.Profile == webProfile || route.Profile == androidProfile || route.Profile == appProfile {
-			view.Usage = &orbitv1.UsageView{
-				Freshness:        freshnessAt(now, usage.expiresAt),
-				FreshUntil:       timestamppb.New(usage.expiresAt),
-				ActualCostMicros: &cost,
-				CurrencyCode:     usage.value.CurrencyCode,
-				TokenCount:       &tokens,
-				Tpm:              &tpm,
-				ObservedAt:       usage.value.ObservedAt,
-			}
+		view.Usage = &orbitv1.UsageView{
+			Freshness:        freshnessAt(now, usage.expiresAt),
+			FreshUntil:       timestamppb.New(usage.expiresAt),
+			ActualCostMicros: &cost,
+			CurrencyCode:     usage.value.CurrencyCode,
+			TokenCount:       &tokens,
+			Tpm:              &tpm,
+			ObservedAt:       usage.value.ObservedAt,
 		}
-		view.Primary = &orbitv1.DisplaySlot{Text: formatCost(cost), Emphasis: orbitv1.Emphasis_EMPHASIS_STRONG}
-		if route.Profile == xiaozhiProfile {
-			view.Primary.Text = formatXiaozhiCost(cost)
-		}
-		view.Secondary = &orbitv1.DisplaySlot{Text: formatMetric(tokens), Emphasis: orbitv1.Emphasis_EMPHASIS_NORMAL}
-		view.Footer = &orbitv1.DisplaySlot{Text: formatMetric(tpm), Emphasis: orbitv1.Emphasis_EMPHASIS_DIM}
 	}
 	if hasCodex {
 		view.Codex = &orbitv1.CodexView{
@@ -593,21 +616,42 @@ func (e *Engine) projectRouteLocked(now time.Time, route Route) ([]*orbitv1.Devi
 			})
 		}
 	}
+	if hasSystem && isRichProfile(route.Profile) {
+		view.System = buildSystemView(now, sys)
+	}
 	if view.Codex != nil && !configured.sessionsEnabled() {
 		view.Codex.Sessions = nil
 		view.Codex.TotalCount = 0
 		view.Codex.RunningCount = 0
-		if route.DisplayMode == "usage" {
+		if route.DisplayMode == "usage" || route.DisplayMode == "system" {
 			view.Codex = nil
 		}
 	}
-	if route.DisplayMode == "codex" || route.Profile == codexWeeklyProfile {
+	switch {
+	case route.DisplayMode == "codex" || route.Profile == codexWeeklyProfile:
 		projectWeeklyLimit(now, codex.value.GetWeeklyLimit(), view)
 		if route.Profile == codexWeeklyProfile {
 			view.Codex = nil
 		}
+	case route.DisplayMode == "system":
+		applyRenderedSlots(view, renderSystemSlots(configured.SystemPrimary, sys.value, hasSystem))
+	case route.DisplayMode == "usage" || hasUsage:
+		applyRenderedSlots(view, renderUsageSlots(route.Profile, usage, hasUsage))
+	case hasSystem:
+		applyRenderedSlots(view, renderSystemSlots(configured.SystemPrimary, sys.value, true))
+	case explicitPage:
+		applyRenderedSlots(view, emptySlots())
 	}
-	if route.Profile == androidProfile {
+	return view, step, total, true
+}
+
+func (e *Engine) projectRouteLocked(now time.Time, configured Route) ([]*orbitv1.DeviceView, error) {
+	nodeID := configured.NodeID
+	view, _, _, ok := e.buildDeviceViewLocked(now, configured, e.viewRevision[nodeID]+1, true)
+	if !ok {
+		return nil, nil
+	}
+	if configured.Profile == androidProfile {
 		if !publishAndroid(now, e.lastAndroid[nodeID], view) {
 			return nil, nil
 		}
@@ -647,7 +691,7 @@ func (e *Engine) codexForRoute(route Route) (canonicalCodex, bool) {
 	return canonicalCodex{}, false
 }
 
-func (e *Engine) routeFreshness(now time.Time, route Route, usage canonicalUsage, hasUsage bool, codex canonicalCodex, hasCodex bool) (orbitv1.Freshness, time.Time, time.Time) {
+func (e *Engine) routeFreshness(now time.Time, route Route, usage canonicalUsage, hasUsage bool, codex canonicalCodex, hasCodex bool, sys canonicalSystem, hasSystem bool) (orbitv1.Freshness, time.Time, time.Time) {
 	freshness := orbitv1.Freshness_FRESHNESS_FRESH
 	var expiries []time.Time
 	for _, input := range route.Inputs {
@@ -670,6 +714,15 @@ func (e *Engine) routeFreshness(now time.Time, route Route, usage canonicalUsage
 			if freshnessAt(now, codex.expiresAt) == orbitv1.Freshness_FRESHNESS_STALE {
 				freshness = orbitv1.Freshness_FRESHNESS_STALE
 			}
+		case orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM:
+			if !hasSystem {
+				freshness = orbitv1.Freshness_FRESHNESS_STALE
+				continue
+			}
+			expiries = append(expiries, sys.expiresAt)
+			if freshnessAt(now, sys.expiresAt) == orbitv1.Freshness_FRESHNESS_STALE {
+				freshness = orbitv1.Freshness_FRESHNESS_STALE
+			}
 		}
 	}
 	if len(expiries) == 0 {
@@ -687,7 +740,7 @@ func (e *Engine) routeFreshness(now time.Time, route Route, usage canonicalUsage
 
 func (e *Engine) freshnessSignature(now time.Time, route Route) string {
 	if route.displayMode() == "rotating" {
-		active := e.displayRoute(now, route)
+		active, _, _ := e.displayRouteAt(now, route, true)
 		return active.DisplayMode + ":" + e.freshnessSignature(now, active)
 	}
 	parts := make([]string, 0, len(route.Inputs))
@@ -707,12 +760,14 @@ func (e *Engine) freshnessSignature(now time.Time, route Route) string {
 					parts = append(parts, fmt.Sprintf("%d/%d", days, hours))
 				}
 			}
+		case orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM:
+			value, ok := e.system[input.AgentID]
+			parts = append(parts, freshnessPart(ok, now, value.expiresAt))
 		}
 	}
 	return fmt.Sprint(parts)
 }
 
-// displayMode accepts existing OLED profiles without changing saved configurations.
 func (r Route) sessionsEnabled() bool {
 	if r.Profile != webProfile && r.Profile != androidProfile && r.Profile != appProfile {
 		return false
@@ -750,32 +805,60 @@ func (r Route) displayMode() string {
 	return ""
 }
 
-// displayRoute selects the same page for every destination, preserving configured sources.
-func (e *Engine) displayRoute(now time.Time, route Route) Route {
+func (r Route) rotationModes() []string {
+	has := map[orbitv1.ObservationType]bool{}
+	for _, input := range r.Inputs {
+		has[input.ObservationType] = true
+	}
+	modes := make([]string, 0, 3)
+	if has[orbitv1.ObservationType_OBSERVATION_TYPE_USAGE] {
+		modes = append(modes, "usage")
+	}
+	if has[orbitv1.ObservationType_OBSERVATION_TYPE_CODEX] {
+		modes = append(modes, "codex")
+	}
+	if has[orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM] {
+		modes = append(modes, "system")
+	}
+	return modes
+}
+
+// displayRouteAt selects the active page for a node. recordStart must be false
+// for read-only Console previews so inspecting state never alters rotation phase.
+func (e *Engine) displayRouteAt(now time.Time, route Route, recordStart bool) (Route, int, int) {
 	sessions := route.sessionsEnabled()
 	mode := route.displayMode()
 	if mode == "" {
-		return route
+		return route, 0, 0
 	}
+	step, total := 0, 0
 	if mode == "rotating" {
 		start, ok := e.rotationStarted[route.NodeID]
 		if !ok || now.Before(start) {
 			start = now
-			e.rotationStarted[route.NodeID] = start
+			if recordStart {
+				e.rotationStarted[route.NodeID] = start
+			}
 		}
 		seconds := route.RotationSeconds
 		if seconds == 0 {
 			seconds = 3
 		}
-		mode = "usage"
-		if int64(now.Sub(start)/(time.Duration(seconds)*time.Second))%2 == 1 {
-			mode = "codex"
+		modes := route.rotationModes()
+		if len(modes) > 0 {
+			total = len(modes)
+			index := int(int64(now.Sub(start)/(time.Duration(seconds)*time.Second)) % int64(total))
+			mode = modes[index]
+			step = index + 1
 		}
 	}
 	route.DisplayMode = mode
 	kind := orbitv1.ObservationType_OBSERVATION_TYPE_USAGE
-	if mode == "codex" {
+	switch mode {
+	case "codex":
 		kind = orbitv1.ObservationType_OBSERVATION_TYPE_CODEX
+	case "system":
+		kind = orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM
 	}
 	if route.Profile == usageProfile || route.Profile == codexWeeklyProfile || route.Profile == rotatingOLEDProfile {
 		route.Profile = usageProfile
@@ -790,7 +873,7 @@ func (e *Engine) displayRoute(now time.Time, route Route) Route {
 		}
 	}
 	route.Inputs = inputs
-	return route
+	return route, step, total
 }
 
 func freshnessPart(exists bool, now, expiresAt time.Time) string {

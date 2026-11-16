@@ -274,15 +274,18 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		if len(route.Inputs) == 0 {
 			return fmt.Errorf("projection route %q: inputs must not be empty", nodeID)
 		}
-		if route.Profile == "metrics-xiaozhi-320x240" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "rotating" {
-			return fmt.Errorf("projection route %q: xiaozhi requires usage, codex or rotating display mode", nodeID)
+		if route.Profile == "metrics-xiaozhi-320x240" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "system" && route.DisplayMode != "rotating" {
+			return fmt.Errorf("projection route %q: xiaozhi requires usage, codex, system or rotating display mode", nodeID)
+		}
+		if route.SystemPrimary != "" && route.SystemPrimary != "cpu" && route.SystemPrimary != "memory" {
+			return fmt.Errorf("projection route %q: invalid system_primary %q", nodeID, route.SystemPrimary)
 		}
 		seen := make(map[string]struct{}, len(route.Inputs))
 		for i, input := range route.Inputs {
 			if err := validateID("agent_id", input.AgentID); err != nil {
 				return fmt.Errorf("projection route %q input %d: %w", nodeID, i, err)
 			}
-			if input.ObservationType != "usage" && input.ObservationType != "codex" {
+			if input.ObservationType != "usage" && input.ObservationType != "codex" && input.ObservationType != "system" {
 				return fmt.Errorf("projection route %q input %d: unsupported observation_type %q", nodeID, i, input.ObservationType)
 			}
 			if _, ok := seen[input.ObservationType]; ok {
@@ -304,10 +307,10 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 				return fmt.Errorf("projection route %q: missing session source", nodeID)
 			}
 		}
-		if route.DisplayMode != "" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "sessions" && route.DisplayMode != "rotating" {
+		if route.DisplayMode != "" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "sessions" && route.DisplayMode != "system" && route.DisplayMode != "rotating" {
 			return fmt.Errorf("projection route %q: invalid display_mode", nodeID)
 		}
-		if route.DisplayMode == "usage" || route.DisplayMode == "codex" || route.DisplayMode == "sessions" {
+		if route.DisplayMode == "usage" || route.DisplayMode == "codex" || route.DisplayMode == "sessions" || route.DisplayMode == "system" {
 			kind := route.DisplayMode
 			if kind == "sessions" {
 				kind = "codex"
@@ -317,8 +320,8 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 			}
 		}
 		if route.DisplayMode == "rotating" || (route.DisplayMode == "" && route.Profile == "rotating-oled-128x32") {
-			if len(seen) != 2 || route.RotationSeconds < 0 || route.RotationSeconds > 3600 {
-				return fmt.Errorf("projection route %q: rotating OLED requires usage and codex inputs and an interval of 1–3600 seconds (0 defaults to 3)", nodeID)
+			if len(seen) < 2 || route.RotationSeconds < 0 || route.RotationSeconds > 3600 {
+				return fmt.Errorf("projection route %q: rotating display requires at least 2 inputs and an interval of 1–3600 seconds (0 defaults to 3)", nodeID)
 			}
 		} else if route.RotationSeconds != 0 {
 			return fmt.Errorf("projection route %q: rotation_seconds requires rotating display", nodeID)
@@ -334,6 +337,10 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 	for name := range requiredPolicies {
 		policy, ok := cfg.ObservationPolicies[name]
 		if !ok {
+			if name == "system" {
+				// System telemetry defaults safely when older deployments omit observation_policies.system.
+				continue
+			}
 			return fmt.Errorf("observation_policies.%s is required", name)
 		}
 		if policy.MaxTTL.Duration <= 0 {
@@ -344,11 +351,33 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		}
 	}
 	for name := range cfg.ObservationPolicies {
-		if name != "usage" && name != "codex" {
+		if name != "usage" && name != "codex" && name != "system" {
 			return fmt.Errorf("observation_policies contains unsupported type %q", name)
+		}
+		policy := cfg.ObservationPolicies[name]
+		if policy.MaxTTL.Duration <= 0 {
+			return fmt.Errorf("observation_policies.%s.max_ttl must be positive", name)
+		}
+		if policy.MaxFutureSkew.Duration < 0 {
+			return fmt.Errorf("observation_policies.%s.max_future_skew must not be negative", name)
 		}
 	}
 	return nil
+}
+
+// EffectiveObservationPolicies returns configured policies filled with safe defaults for optional types.
+func EffectiveObservationPolicies(policies map[string]ObservationPolicy) map[string]ObservationPolicy {
+	out := make(map[string]ObservationPolicy, len(policies)+1)
+	for k, v := range policies {
+		out[k] = v
+	}
+	if _, ok := out["system"]; !ok {
+		out["system"] = ObservationPolicy{
+			MaxTTL:        Duration{5 * time.Minute},
+			MaxFutureSkew: Duration{10 * time.Second},
+		}
+	}
+	return out
 }
 
 func (cfg *NTPConfig) validate() error {

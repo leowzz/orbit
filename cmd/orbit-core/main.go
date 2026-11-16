@@ -88,8 +88,10 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	for _, route := range routes {
 		nodeIDs = append(nodeIDs, route.NodeID)
 	}
-	usagePolicy := cfg.ObservationPolicies["usage"]
-	codexPolicy := cfg.ObservationPolicies["codex"]
+	policies := config.EffectiveObservationPolicies(cfg.ObservationPolicies)
+	usagePolicy := policies["usage"]
+	codexPolicy := policies["codex"]
+	systemPolicy := policies["system"]
 	coreEpoch := core.NewEpoch()
 	engine, err := core.New(core.Config{
 		CoreID:    cfg.Core.ID,
@@ -102,6 +104,10 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 		CodexPolicy: core.CodexPolicy{
 			MaxTTL:        codexPolicy.MaxTTL.Duration,
 			MaxFutureSkew: codexPolicy.MaxFutureSkew.Duration,
+		},
+		SystemPolicy: core.SystemPolicy{
+			MaxTTL:        systemPolicy.MaxTTL.Duration,
+			MaxFutureSkew: systemPolicy.MaxFutureSkew.Duration,
 		},
 		RetainFor: 24 * time.Hour,
 	})

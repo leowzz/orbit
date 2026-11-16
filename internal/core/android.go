@@ -15,7 +15,8 @@ func publishAndroid(now time.Time, previous, next *orbitv1.DeviceView) bool {
 	}
 	if (previous.NfcdMetricsLeftPadding == nil) != (next.NfcdMetricsLeftPadding == nil) || previous.GetNfcdMetricsLeftPadding() != next.GetNfcdMetricsLeftPadding() || previous.GetSessionsEnabled() != next.GetSessionsEnabled() || previous.DisplayKind != next.DisplayKind || previous.Freshness != next.Freshness || previous.GetUsage().GetFreshness() != next.GetUsage().GetFreshness() ||
 		previous.GetCodex().GetFreshness() != next.GetCodex().GetFreshness() ||
-		(previous.Usage == nil) != (next.Usage == nil) || !proto.Equal(androidSessions(previous.Codex), androidSessions(next.Codex)) {
+		previous.GetSystem().GetFreshness() != next.GetSystem().GetFreshness() ||
+		(previous.Usage == nil) != (next.Usage == nil) || (previous.System == nil) != (next.System == nil) || !proto.Equal(androidSessions(previous.Codex), androidSessions(next.Codex)) {
 		return true
 	}
 	elapsed := now.Sub(previous.Metadata.ProducedAt.AsTime())
@@ -25,7 +26,8 @@ func publishAndroid(now time.Time, previous, next *orbitv1.DeviceView) bool {
 			elapsed >= old.AsTime().Sub(previous.Metadata.ProducedAt.AsTime())/2
 	}
 	if leaseDue(previous.GetUsage().GetFreshUntil(), next.GetUsage().GetFreshUntil(), next.GetUsage().GetFreshness()) ||
-		leaseDue(previous.GetCodex().GetFreshUntil(), next.GetCodex().GetFreshUntil(), next.GetCodex().GetFreshness()) {
+		leaseDue(previous.GetCodex().GetFreshUntil(), next.GetCodex().GetFreshUntil(), next.GetCodex().GetFreshness()) ||
+		leaseDue(previous.GetSystem().GetFreshUntil(), next.GetSystem().GetFreshUntil(), next.GetSystem().GetFreshness()) {
 		return true
 	}
 	if elapsed < time.Minute {
@@ -51,6 +53,9 @@ func androidContent(value *orbitv1.DeviceView) *orbitv1.DeviceView {
 	copy.Metadata, copy.FreshUntil, copy.RetainUntil = nil, nil, nil
 	if copy.Usage != nil {
 		copy.Usage.ObservedAt, copy.Usage.FreshUntil = nil, nil
+	}
+	if copy.System != nil {
+		copy.System.ObservedAt, copy.System.FreshUntil = nil, nil
 	}
 	copy.Codex = androidSessions(copy.Codex)
 	return copy

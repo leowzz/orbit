@@ -56,6 +56,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		{filter: "orbit/v1/nodes/+/state", handler: r.handleNodeState},
 		{filter: "orbit/v1/agents/+/observations/usage", handler: r.handleObservation},
 		{filter: "orbit/v1/agents/+/observations/codex", handler: r.handleCodexObservation},
+		{filter: "orbit/v1/agents/+/observations/system", handler: r.handleSystemObservation},
 		{filter: "orbit/v1/nodes/+/intents", handler: r.handleIntent},
 	} {
 		if err := r.transport.Subscribe(ctx, item.filter, func(ctx context.Context, message mqtt.Message) error {
@@ -66,7 +67,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			return err
 		}
 	}
-	r.logger.Info("core subscriptions ready", zap.Int("subscriptions", 5), zap.Int("qos", 1))
+	r.logger.Info("core subscriptions ready", zap.Int("subscriptions", 6), zap.Int("qos", 1))
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -199,6 +200,10 @@ func (r *Runner) handleCodexObservation(ctx context.Context, message mqtt.Messag
 	return r.handleTypedObservation(ctx, message, "codex", orbitv1.ObservationType_OBSERVATION_TYPE_CODEX)
 }
 
+func (r *Runner) handleSystemObservation(ctx context.Context, message mqtt.Message) error {
+	return r.handleTypedObservation(ctx, message, "system", orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM)
+}
+
 func (r *Runner) handleTypedObservation(ctx context.Context, message mqtt.Message, name string, observationType orbitv1.ObservationType) error {
 	agentID, err := topicIdentity(message.Topic, "agents", "observations", name)
 	if err != nil {
@@ -212,7 +217,8 @@ func (r *Runner) handleTypedObservation(ctx context.Context, message mqtt.Messag
 		return errors.New("observation topic identity does not match payload")
 	}
 	if (observationType == orbitv1.ObservationType_OBSERVATION_TYPE_USAGE && observation.GetUsage() == nil) ||
-		(observationType == orbitv1.ObservationType_OBSERVATION_TYPE_CODEX && observation.GetCodex() == nil) {
+		(observationType == orbitv1.ObservationType_OBSERVATION_TYPE_CODEX && observation.GetCodex() == nil) ||
+		(observationType == orbitv1.ObservationType_OBSERVATION_TYPE_SYSTEM && observation.GetSystem() == nil) {
 		return fmt.Errorf("%s topic contains a different observation payload", name)
 	}
 	views, err := r.engine.ApplyObservation(r.now().UTC(), &observation)

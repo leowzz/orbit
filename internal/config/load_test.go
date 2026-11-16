@@ -343,6 +343,46 @@ func TestLoadCoreAcceptsWebProjection(t *testing.T) {
 	}
 }
 
+func TestLoadCoreAllowsSystemRouteAndRotatingWithoutExplicitSystemPolicy(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFiles(t, dir, false)
+	cfg, err := LoadCore(writeConfig(t, dir, "core.yaml", validWebCoreYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	routes := map[string]ProjectionRoute{
+		"desk-oled-01": {
+			Profile:       "usage-oled-128x32",
+			DisplayMode:   "system",
+			SystemPrimary: "memory",
+			Inputs:        []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+		},
+		"desk-xiaozhi-01": {
+			Profile:         "metrics-xiaozhi-320x240",
+			DisplayMode:     "rotating",
+			RotationSeconds: 5,
+			SystemPrimary:   "cpu",
+			Inputs: []ProjectionInput{
+				{AgentID: "agent-a", ObservationType: "usage"},
+				{AgentID: "agent-a", ObservationType: "codex"},
+				{AgentID: "agent-a", ObservationType: "system"},
+			},
+		},
+	}
+	if err := cfg.ValidateRoutes(routes); err != nil {
+		t.Fatalf("ValidateRoutes with omitted system policy failed: %v", err)
+	}
+	routes["desk-oled-01"] = ProjectionRoute{
+		Profile:       "usage-oled-128x32",
+		DisplayMode:   "system",
+		SystemPrimary: "disk",
+		Inputs:        []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+	}
+	if err := cfg.ValidateRoutes(routes); err == nil {
+		t.Fatal("accepted invalid system_primary")
+	}
+}
+
 func writeFixtureFiles(t *testing.T, dir string, includeSub2API bool) {
 	t.Helper()
 	files := map[string]string{
