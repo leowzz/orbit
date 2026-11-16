@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { agentSource, appConnectionLabel, visibleDeviceRoutes } from "./api.ts";
+import {
+  agentFresh,
+  agentSource,
+  appConnectionLabel,
+  displayMode,
+  visibleDeviceRoutes,
+} from "./api.ts";
 import type { Agent, Source, NetworkState, RouteDocument } from "./api.ts";
 
 function agent(sources?: Source[]): Agent {
@@ -43,12 +49,25 @@ test("HTTP polling activity is distinct from a persistent connection", () => {
 test("recognizes the protobuf JSON source types returned by Core", () => {
   const sources: Source[] = JSON.parse(`[
     {"observationType":"OBSERVATION_TYPE_USAGE","enabled":true,"health":"SOURCE_HEALTH_HEALTHY"},
-    {"observationType":"OBSERVATION_TYPE_CODEX","enabled":true,"health":"SOURCE_HEALTH_HEALTHY"}
+    {"observationType":"OBSERVATION_TYPE_CODEX","enabled":true,"health":"SOURCE_HEALTH_HEALTHY"},
+    {"observationType":"OBSERVATION_TYPE_SYSTEM","enabled":true,"health":"SOURCE_HEALTH_HEALTHY"}
   ]`);
-  assert.equal(agentSource(agent(sources), "usage"), sources[0]);
-  assert.equal(agentSource(agent(sources), "codex"), sources[1]);
-  assert.equal(agentSource(agent(sources), "usage")?.enabled, true);
-  assert.equal(agentSource(agent(sources), "codex")?.enabled, true);
+  const a: Agent = { ...agent(sources), system_fresh: true };
+  assert.equal(agentSource(a, "usage"), sources[0]);
+  assert.equal(agentSource(a, "codex"), sources[1]);
+  assert.equal(agentSource(a, "system"), sources[2]);
+  assert.equal(agentFresh(a, "system"), true);
+  assert.equal(agentSource(a, "usage")?.enabled, true);
+  assert.equal(agentSource(a, "codex")?.enabled, true);
+  assert.equal(
+    displayMode({
+      profile: "usage-oled-128x32",
+      display_mode: "system",
+      system_primary: "memory",
+      inputs: [{ agent_id: "desktop", observation_type: "system" }],
+    }),
+    "system",
+  );
 });
 
 test("a reported disabled source stays distinct from an unreported source", () => {

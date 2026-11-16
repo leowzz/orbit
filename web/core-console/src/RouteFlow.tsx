@@ -1,9 +1,12 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { ArrowRight, Cpu, Pause, Play, Server } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { NetworkState, RouteDocument } from "./api";
-import { profileName } from "./api";
+import type { InputKind, NetworkState, RouteDocument } from "./api";
+import { agentFresh, profileName } from "./api";
 import { DeviceIcon, Empty } from "./components";
+
+const kindLabel = (kind: string) =>
+  kind === "usage" ? "Usage" : kind === "system" ? "System" : "Codex";
 
 type Edge = {
   key: string;
@@ -40,10 +43,13 @@ export default function RouteFlow({
   ];
   const agents = new Map(state.agents.map((a) => [a.id, a]));
   const nodes = new Map(state.nodes.map((n) => [n.nodeId, n]));
-  const isFresh = (input: { agent_id: string; observation_type: string }) =>
-    !!agents.get(input.agent_id)?.[
-      input.observation_type === "usage" ? "usage_fresh" : "codex_fresh"
-    ];
+  const isFresh = (input: {
+    agent_id: string;
+    observation_type: InputKind;
+  }) => {
+    const agent = agents.get(input.agent_id);
+    return agent ? agentFresh(agent, input.observation_type) : false;
+  };
   const layoutKey = JSON.stringify([
     sources.map(([id]) => id),
     visible.map(([id, route]) => [id, route.inputs]),
@@ -75,7 +81,7 @@ export default function RouteFlow({
               core.top +
               core.height / 2 -
               bounds.top +
-              (kind === "usage" ? -12 : 12);
+              (kind === "usage" ? -14 : kind === "system" ? 0 : 14);
             const y = rect.top + rect.height / 2 - bounds.top;
             return {
               key: card.dataset.flowAnchor!,
@@ -146,6 +152,10 @@ export default function RouteFlow({
           <span className="codex">
             <i />
             Codex
+          </span>
+          <span className="system">
+            <i />
+            System
           </span>
         </div>
         <button
@@ -223,7 +233,7 @@ export default function RouteFlow({
                   <div>
                     <strong>{agent?.state.hostLabel || input.agent_id}</strong>
                     <small>
-                      {input.observation_type === "usage" ? "Usage" : "Codex"} ·{" "}
+                      {kindLabel(input.observation_type)} ·{" "}
                       {isFresh(input)
                         ? "新鲜"
                         : agent
@@ -287,9 +297,7 @@ export default function RouteFlow({
                     <small>{profileName(route.profile)}</small>
                     <small className="topology-input-label">
                       {route.inputs
-                        .map((i) =>
-                          i.observation_type === "usage" ? "Usage" : "Codex",
-                        )
+                        .map((i) => kindLabel(i.observation_type))
                         .join(" + ")}
                       {document.publish_pending
                         ? " · 投递待重试"

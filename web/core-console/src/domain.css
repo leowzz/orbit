@@ -1511,6 +1511,7 @@ dt,
 .routing-map {
   --signal-usage: #189982;
   --signal-codex: #5187df;
+  --signal-system: #d97706;
   --signal-output: #7994b8;
   overflow: hidden;
 }
@@ -1550,6 +1551,9 @@ dt,
 }
 .codex {
   --edge-color: var(--signal-codex);
+}
+.system {
+  --edge-color: var(--signal-system);
 }
 .output {
   --edge-color: var(--signal-output);
@@ -1641,6 +1645,9 @@ dt,
 }
 .codex.is-fresh .signal-pulse {
   animation-delay: -1.6s;
+}
+.system.is-fresh .signal-pulse {
+  animation-delay: -2.4s;
 }
 .output.is-fresh .signal-pulse {
   animation-delay: -0.8s;
@@ -2441,6 +2448,65 @@ main.device-page {
   color: var(--text-muted);
   font-size: 14px;
   min-height: 22px;
+}
+.screen-preview {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.screen-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.screen-preview-head span {
+  font-weight: 600;
+  color: var(--text);
+}
+.screen-preview-head small {
+  color: var(--text-muted);
+}
+.screen-preview-slots {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #101518;
+  color: #f4f7f5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.screen-preview-primary {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.screen-preview-meta {
+  display: grid;
+  gap: 4px;
+  text-align: right;
+  font-size: 13px;
+  color: #c2d0ca;
+}
+.agent-system-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 .setting-row:last-child {
   border-bottom: 0;

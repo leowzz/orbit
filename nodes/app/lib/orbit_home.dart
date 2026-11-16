@@ -340,6 +340,7 @@ class _ConnectionStatus extends StatelessWidget {
       final view = controller?.view;
       final usage = view?['usage'] as Map?;
       final codex = view?['codex'] as Map?;
+      final system = view?['system'] as Map?;
       final until = DateTime.tryParse(view?['freshUntil'] ?? '');
       final fresh =
           (controller?.online ?? false) &&
@@ -397,8 +398,16 @@ class _ConnectionStatus extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
-                  if (usage == null && codex == null)
+                  if (usage == null && codex == null && system == null)
                     const Text('尚未收到当前展示的数据，请检查管理台中的数据来源。'),
+                  if (system != null)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('系统资源'),
+                      subtitle: Text(
+                        'CPU ${((num.tryParse('${system['cpuUsagePermille']}') ?? 0) / 10).toStringAsFixed(1)}% · 内存 ${((num.tryParse('${system['memoryUsedBytes']}') ?? 0) / (1024 * 1024 * 1024)).toStringAsFixed(1)}/${((num.tryParse('${system['memoryTotalBytes']}') ?? 0) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GiB',
+                      ),
+                    ),
                   if (usage != null)
                     ListTile(
                       contentPadding: EdgeInsets.zero,

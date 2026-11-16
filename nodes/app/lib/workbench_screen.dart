@@ -724,6 +724,30 @@ List<_Metric> _metrics(Json? view) {
       ),
     ];
   }
+  final sys = view?['system'] as Map?;
+  if (view?['displayKind'] == 'system' ||
+      (view?['displayKind'] == null && sys != null && view?['usage'] == null)) {
+    final cpu = num.tryParse('${sys?['cpuUsagePermille']}');
+    final used = num.tryParse('${sys?['memoryUsedBytes']}');
+    final total = num.tryParse('${sys?['memoryTotalBytes']}');
+    final memPct = (used != null && total != null && total > 0)
+        ? '${(used * 100 / total).round()}%'
+        : '--%';
+    final memRatio = (used != null && total != null && total > 0)
+        ? '${(used / (1024 * 1024 * 1024)).toStringAsFixed(1)}/${(total / (1024 * 1024 * 1024)).round()}G'
+        : view?['footer']?['text'] ?? '--/--G';
+    return [
+      _Metric(
+        'CPU',
+        cpu == null
+            ? (view?['primary']?['text'] ?? '--%')
+            : '${(cpu / 10).round()}%',
+        prominent: true,
+      ),
+      _Metric('内存', memPct),
+      _Metric('用量', memRatio, accent: true),
+    ];
+  }
   final usage = view?['usage'] as Map?;
   final cost = num.tryParse('${usage?['actualCostMicros']}');
   return [

@@ -1,9 +1,13 @@
-export type InputKind = "usage" | "codex";
+export type InputKind = "usage" | "codex" | "system";
+export type DisplayMode =
+  "usage" | "codex" | "sessions" | "system" | "rotating";
+export type SystemPrimary = "cpu" | "memory";
 export interface Route {
   profile: string;
   sessions_enabled?: boolean;
   nfcd_metrics_left_padding?: number;
-  display_mode?: "usage" | "codex" | "sessions" | "rotating";
+  display_mode?: DisplayMode;
+  system_primary?: SystemPrimary;
   rotation_seconds?: number;
   inputs: { agent_id: string; observation_type: InputKind }[];
 }
@@ -19,10 +23,35 @@ export interface Source {
   lastSuccessAt?: string;
   errorCode?: string;
 }
+export interface AgentSystemSummary {
+  fresh: boolean;
+  cpu_usage_permille: number;
+  cpu_cores: number;
+  memory_used_bytes: number;
+  memory_total_bytes: number;
+  swap_used_bytes?: number;
+  swap_total_bytes?: number;
+  load_1m_milli?: number;
+  uptime_seconds?: number;
+  observed_at?: string;
+  fresh_until?: string;
+}
+export interface NodePreview {
+  display_kind: string;
+  primary: string;
+  secondary: string;
+  footer: string;
+  freshness: string;
+  updated_at?: string;
+  rotation_step?: number;
+  rotation_total?: number;
+}
 export interface Agent {
   id: string;
   usage_fresh: boolean;
   codex_fresh: boolean;
+  system_fresh?: boolean;
+  system?: AgentSystemSummary;
   state: {
     agentId: string;
     hostLabel: string;
@@ -34,10 +63,25 @@ export interface Agent {
 }
 export function agentSource(agent: Agent, kind: InputKind): Source | undefined {
   const observationType =
-    kind === "usage" ? "OBSERVATION_TYPE_USAGE" : "OBSERVATION_TYPE_CODEX";
+    kind === "usage"
+      ? "OBSERVATION_TYPE_USAGE"
+      : kind === "codex"
+        ? "OBSERVATION_TYPE_CODEX"
+        : "OBSERVATION_TYPE_SYSTEM";
   return agent.state.sources?.find(
     (source) => source.observationType === observationType,
   );
+}
+export function agentFresh(agent: Agent, kind: InputKind): boolean {
+  if (kind === "usage") return agent.usage_fresh;
+  if (kind === "codex") return agent.codex_fresh;
+  return Boolean(agent.system_fresh);
+}
+export function agentAnyFresh(agent: Agent): boolean {
+  return agent.usage_fresh || agent.codex_fresh || Boolean(agent.system_fresh);
+}
+export function formatBytesGiB(bytes: number): string {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }
 export interface Node {
   nodeId: string;
@@ -55,6 +99,7 @@ export interface NetworkState {
   nodes: Node[];
   node_labels?: Record<string, string>;
   archived_nodes?: string[];
+  node_views?: Record<string, NodePreview>;
   now: string;
 }
 export function visibleDeviceRoutes(
@@ -151,7 +196,7 @@ export function errorText(error: unknown) {
 
 export const displayMode = (
   route: Route,
-): "usage" | "codex" | "sessions" | "rotating" | "" =>
+): "usage" | "codex" | "sessions" | "system" | "rotating" | "" =>
   (route.display_mode === "sessions" ? "codex" : route.display_mode) ??
   (
     {
@@ -164,6 +209,7 @@ export const displayMode = (
 export const displayModes = [
   { value: "usage", label: "API 用量" },
   { value: "codex", label: "账号周限" },
+  { value: "system", label: "系统资源" },
   { value: "rotating", label: "循环显示" },
 ] as const;
 

@@ -1,14 +1,16 @@
-import type { Agent, InputKind, Route } from "./api";
+import type { Agent, InputKind, NodePreview, Route } from "./api";
 import { displayMode, sessionsEnabled, supportsSessions } from "./api";
 
 export default function DeviceSummary({
   route,
   agents,
   app,
+  preview,
 }: {
   route?: Route;
   agents: Agent[];
   app: boolean;
+  preview?: NodePreview;
 }) {
   if (!route)
     return (
@@ -24,18 +26,25 @@ export default function DeviceSummary({
 
   const mode = displayMode(route);
   const sessions = sessionsEnabled(route);
+  const hasKind = (kind: InputKind) =>
+    route.inputs.some((i) => i.observation_type === kind);
   const usage =
     mode === "usage" ||
-    mode === "rotating" ||
-    (!mode && route.inputs.some((i) => i.observation_type === "usage"));
+    (mode === "rotating" && hasKind("usage")) ||
+    (!mode && hasKind("usage"));
   const codex =
     mode === "codex" ||
-    mode === "rotating" ||
+    (mode === "rotating" && hasKind("codex")) ||
     sessions ||
-    (!mode && route.inputs.some((i) => i.observation_type === "codex"));
+    (!mode && hasKind("codex"));
+  const system =
+    mode === "system" ||
+    (mode === "rotating" && hasKind("system")) ||
+    (!mode && hasKind("system"));
   const kinds: InputKind[] = [
     ...(usage ? (["usage"] as const) : []),
     ...(codex ? (["codex"] as const) : []),
+    ...(system ? (["system"] as const) : []),
   ];
   const sources = kinds.map((kind) => ({
     kind,
@@ -66,11 +75,17 @@ export default function DeviceSummary({
         ? "API 用量"
         : mode === "codex"
           ? "账号周限"
-          : usage && codex
-            ? "用量与周限"
-            : usage
-              ? "API 用量"
-              : "账号周限";
+          : mode === "system"
+            ? "系统资源"
+            : usage && codex && system
+              ? "综合指标"
+              : usage && codex
+                ? "用量与周限"
+                : system
+                  ? "系统资源"
+                  : usage
+                    ? "API 用量"
+                    : "账号周限";
 
   return (
     <div className="node-summary">
@@ -92,13 +107,25 @@ export default function DeviceSummary({
               <dt>
                 {source.kind === "usage"
                   ? "用量来源"
-                  : mode === "usage"
-                    ? "会话来源"
-                    : "周限来源"}
+                  : source.kind === "system"
+                    ? "资源来源"
+                    : mode === "usage" || mode === "system"
+                      ? "会话来源"
+                      : "周限来源"}
               </dt>
               <dd>{names(source.ids)}</dd>
             </div>
           ))
+        )}
+        {preview && (
+          <div>
+            <dt>当前文本</dt>
+            <dd className="mono">
+              {[preview.primary, preview.secondary, preview.footer]
+                .filter(Boolean)
+                .join(" · ")}
+            </dd>
+          </div>
         )}
         {supportsSessions(route) && (
           <div>

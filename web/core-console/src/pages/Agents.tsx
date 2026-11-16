@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { Search, Server, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { date, type NetworkState, type RouteDocument } from "../api";
+import {
+  agentAnyFresh,
+  agentFresh,
+  date,
+  formatBytesGiB,
+  type NetworkState,
+  type RouteDocument,
+} from "../api";
 import AudioWorkers, { useAudioWorkers } from "../AudioWorkers";
 import { Badge, Empty, PageHead } from "../components";
 export default function Agents({
@@ -56,8 +63,8 @@ export default function Agents({
                   <h2>{a.state.hostLabel}</h2>
                   <span className="mono">{a.id}</span>
                 </div>
-                <Badge tone={a.usage_fresh || a.codex_fresh ? "good" : "warn"}>
-                  {a.usage_fresh || a.codex_fresh ? "有新鲜数据" : "无新鲜数据"}
+                <Badge tone={agentAnyFresh(a) ? "good" : "warn"}>
+                  {agentAnyFresh(a) ? "有新鲜数据" : "无新鲜数据"}
                 </Badge>
               </div>
               <div className="agent-details">
@@ -74,6 +81,26 @@ export default function Agents({
                   <strong>{targets.length} 台设备</strong>
                 </div>
               </div>
+              {a.system && (
+                <div className="agent-system-strip">
+                  <span>
+                    CPU {(a.system.cpu_usage_permille / 10).toFixed(1)}%
+                    {a.system.cpu_cores ? ` (${a.system.cpu_cores}核)` : ""}
+                  </span>
+                  <span>
+                    内存 {formatBytesGiB(a.system.memory_used_bytes)} /{" "}
+                    {formatBytesGiB(a.system.memory_total_bytes)}
+                    {a.system.memory_total_bytes > 0
+                      ? ` (${Math.round((a.system.memory_used_bytes * 100) / a.system.memory_total_bytes)}%)`
+                      : ""}
+                  </span>
+                  {a.system.load_1m_milli !== undefined && (
+                    <span>
+                      负载 {(a.system.load_1m_milli / 1000).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="source-table">
                 <div className="source-table-head">
                   <span>数据来源</span>
@@ -85,15 +112,23 @@ export default function Agents({
                   const kind =
                     s.observationType === "OBSERVATION_TYPE_CODEX"
                       ? "codex"
-                      : "usage";
+                      : s.observationType === "OBSERVATION_TYPE_SYSTEM"
+                        ? "system"
+                        : "usage";
+                  const glyph =
+                    kind === "usage" ? "U" : kind === "codex" ? "C" : "S";
+                  const title =
+                    kind === "usage"
+                      ? "Usage 用量"
+                      : kind === "codex"
+                        ? "Codex 会话"
+                        : "System 系统资源";
                   const healthy = s.health === "SOURCE_HEALTH_HEALTHY";
                   return (
                     <div className="source-table-row" key={i}>
                       <strong>
-                        <span className="source-glyph">
-                          {kind === "usage" ? "U" : "C"}
-                        </span>
-                        {kind === "usage" ? "Usage 用量" : "Codex 会话"}
+                        <span className="source-glyph">{glyph}</span>
+                        {title}
                       </strong>
                       <span>
                         <Badge
@@ -116,7 +151,7 @@ export default function Agents({
                         )}
                       </span>
                       <span>
-                        {a[`${kind}_fresh`] ? (
+                        {agentFresh(a, kind) ? (
                           <Badge tone="good">新鲜</Badge>
                         ) : (
                           <Badge>暂无新鲜数据</Badge>

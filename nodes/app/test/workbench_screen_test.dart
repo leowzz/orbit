@@ -734,6 +734,44 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('system displayKind renders CPU and memory metrics', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 360);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    controller.view = {
+      'coreEpoch': 'epoch-a',
+      'metadata': {
+        'revision': '43',
+        'producedAt': DateTime.now().toIso8601String(),
+      },
+      'displayKind': 'system',
+      'freshUntil': DateTime.now()
+          .add(const Duration(minutes: 2))
+          .toIso8601String(),
+      'primary': {'text': '24%'},
+      'secondary': {'text': 'MEM 39%'},
+      'footer': {'text': '12.4/32G'},
+      'system': {
+        'cpuUsagePermille': 244,
+        'cpuCores': 12,
+        'memoryUsedBytes': '${13314398618}',
+        'memoryTotalBytes': '${32 * 1024 * 1024 * 1024}',
+      },
+    };
+    await tester.pumpWidget(
+      MaterialApp(home: WorkbenchScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('CPU'), findsOneWidget);
+    expect(find.text('24%'), findsOneWidget);
+    expect(find.text('39%'), findsOneWidget);
+    expect(find.text('12.4/32G'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('metrics width and visibility reflow session columns live', (
     tester,
   ) async {

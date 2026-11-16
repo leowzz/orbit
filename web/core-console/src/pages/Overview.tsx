@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { AppDevice, NetworkState, RouteDocument } from "../api";
-import { api, modelName, visibleDeviceRoutes } from "../api";
+import { agentAnyFresh, api, modelName, visibleDeviceRoutes } from "../api";
 import RouteFlow from "../RouteFlow";
 import { Badge, DeviceIcon, Empty, SectionTitle } from "../components";
 export default function Overview({
@@ -20,9 +20,7 @@ export default function Overview({
   state: NetworkState;
   document: RouteDocument;
 }) {
-  const fresh = state.agents.filter(
-    (a) => a.usage_fresh || a.codex_fresh,
-  ).length;
+  const fresh = state.agents.filter(agentAnyFresh).length;
   const [apps, setApps] = useState<AppDevice[]>([]),
     [deviceError, setDeviceError] = useState("");
   useEffect(() => {

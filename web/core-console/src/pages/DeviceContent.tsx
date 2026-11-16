@@ -18,30 +18,31 @@ import SettingSwitch from "../SettingSwitch";
 class InvalidRoute extends Error {}
 function validateRoute(route: Route) {
   const mode = displayMode(route);
-  const kinds: InputKind[] = [];
-  if (mode === "usage" || mode === "rotating") kinds.push("usage");
-  if (mode === "codex" || mode === "rotating" || sessionsEnabled(route))
-    kinds.push("codex");
-  if (
-    kinds.some(
-      (kind) =>
-        !route.inputs.some(
-          (input) => input.observation_type === kind && input.agent_id,
-        ),
-    )
-  )
-    throw new InvalidRoute("请选择显示内容所需的电脑，选好后会自动保存。");
-  if (
-    mode === "rotating" &&
-    (!Number.isInteger(route.rotation_seconds) ||
+  const configured = new Set(
+    route.inputs.filter((i) => i.agent_id).map((i) => i.observation_type),
+  );
+  if (mode === "usage" && !configured.has("usage"))
+    throw new InvalidRoute("请选择 API 用量来源电脑，选好后会自动保存。");
+  if ((mode === "codex" || sessionsEnabled(route)) && !configured.has("codex"))
+    throw new InvalidRoute("请选择 Codex 来源电脑，选好后会自动保存。");
+  if (mode === "system" && !configured.has("system"))
+    throw new InvalidRoute("请选择系统资源来源电脑，选好后会自动保存。");
+  if (mode === "rotating") {
+    if (configured.size < 2)
+      throw new InvalidRoute("循环显示至少需要选择 2 种数据来源。");
+    if (
+      !Number.isInteger(route.rotation_seconds) ||
       route.rotation_seconds! < 1 ||
-      route.rotation_seconds! > 3600)
-  )
-    throw new InvalidRoute("循环间隔需为 1–3600 秒的整数，填写后会自动保存。");
+      route.rotation_seconds! > 3600
+    )
+      throw new InvalidRoute(
+        "循环间隔需为 1–3600 秒的整数，填写后会自动保存。",
+      );
+  }
 }
 
 function suggestedInputs(state: NetworkState): Route["inputs"] {
-  return (["usage", "codex"] as const).flatMap((kind) => {
+  return (["usage", "codex", "system"] as const).flatMap((kind) => {
     const candidates = state.agents.filter(
       (a) => agentSource(a, kind)?.enabled,
     );
@@ -69,9 +70,11 @@ function initialRoute(
     profile,
     display_mode: inputs.some((i) => i.observation_type === "usage")
       ? "usage"
-      : inputs.length
+      : inputs.some((i) => i.observation_type === "codex")
         ? "codex"
-        : "usage",
+        : inputs.some((i) => i.observation_type === "system")
+          ? "system"
+          : "usage",
     sessions_enabled: false,
     inputs,
   };
@@ -155,11 +158,9 @@ export default function DeviceContent({
               (existing) =>
                 existing.observation_type === input.observation_type,
             ) &&
-            (input.observation_type === "usage"
-              ? mode === "usage" || mode === "rotating"
-              : mode === "codex" ||
-                mode === "rotating" ||
-                sessionsEnabled(next)),
+            (mode === "rotating" ||
+              input.observation_type === mode ||
+              (input.observation_type === "codex" && sessionsEnabled(next))),
         ),
       ];
     }
@@ -170,6 +171,9 @@ export default function DeviceContent({
   const sessions = sessionsEnabled(draft);
   const metricsOnly =
     profile.endsWith("-oled-128x32") || profile === "metrics-xiaozhi-320x240";
+  const hasSystemInput = draft.inputs.some(
+    (i) => i.observation_type === "system",
+  );
   const needsUsage =
     mode === "usage" ||
     mode === "rotating" ||
@@ -179,6 +183,11 @@ export default function DeviceContent({
     mode === "rotating" ||
     sessions ||
     (mode === "" && draft.inputs.some((i) => i.observation_type === "codex"));
+  const needsSystem =
+    mode === "system" || mode === "rotating" || (mode === "" && hasSystemInput);
+  const showSystemPrimary =
+    mode === "system" || (needsSystem && hasSystemInput);
+  const preview = state.node_views?.[nodeId];
   function source(kind: InputKind) {
     return (
       draft.inputs.find((i) => i.observation_type === kind)?.agent_id ?? ""
@@ -234,7 +243,7 @@ export default function DeviceContent({
       setBusy(false);
     }
   }
-  function sourceSelect(kind: InputKind, label: string) {
+  function sourceSelect(kind: InputKind, label: string, optional = false) {
     const selected = source(kind);
     return (
       <label className="content-source" key={kind}>
@@ -244,21 +253,25 @@ export default function DeviceContent({
           value={selected}
           onChange={(e) => selectSource(kind, e.target.value)}
         >
-          <option value="">选择电脑</option>
+          <option value="">{optional ? "不参与轮换" : "选择电脑"}</option>
           {selected && !state.agents.some((a) => a.id === selected) && (
             <option value={selected}>{selected}（暂未发现）</option>
           )}
           {state.agents.map((a) => {
             const status = agentSource(a, kind);
+            const disabledLabel =
+              kind === "usage"
+                ? "（未开启用量采集）"
+                : kind === "codex"
+                  ? "（未开启 Codex 采集）"
+                  : "（未开启系统资源采集）";
             return (
               <option key={a.id} value={a.id}>
                 {a.state.hostLabel || a.id}
                 {status
                   ? status.enabled
                     ? ""
-                    : kind === "usage"
-                      ? "（未开启用量采集）"
-                      : "（未开启 Codex 采集）"
+                    : disabledLabel
                   : "（未报告采集状态）"}
               </option>
             );
@@ -302,7 +315,7 @@ export default function DeviceContent({
           <div className="setting-row">
             <span>
               <strong>切换间隔</strong>
-              <small>两种指标自动轮换</small>
+              <small>至少选择 2 种数据来源，按间隔自动轮换</small>
             </span>
             <span className="interval-input">
               <input
@@ -320,6 +333,42 @@ export default function DeviceContent({
             </span>
           </div>
         )}
+        {showSystemPrimary && (
+          <div className="setting-row">
+            <span>
+              <strong>系统资源主指标</strong>
+              <small>决定小屏左侧大字优先显示 CPU 还是内存占比</small>
+            </span>
+            <div
+              className="content-modes"
+              role="group"
+              aria-label="系统资源主指标"
+            >
+              {(
+                [
+                  { value: "cpu", label: "CPU 优先" },
+                  { value: "memory", label: "内存优先" },
+                ] as const
+              ).map((item) => {
+                const active = (draft.system_primary || "cpu") === item.value;
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className="content-mode"
+                    aria-pressed={active}
+                    onClick={() => update({ system_primary: item.value })}
+                  >
+                    <strong>
+                      {item.label}
+                      {active && <Check size={15} />}
+                    </strong>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {!metricsOnly && (
           <SettingSwitch
             title="显示 Codex 会话"
@@ -330,8 +379,12 @@ export default function DeviceContent({
         )}
         <div className="content-sources">
           <h3>数据来自</h3>
-          {needsUsage && sourceSelect("usage", "API 用量来源")}
-          {needsCodex && sourceSelect("codex", "Codex 来源")}
+          {needsUsage &&
+            sourceSelect("usage", "API 用量来源", mode === "rotating")}
+          {needsCodex &&
+            sourceSelect("codex", "Codex 来源", mode === "rotating")}
+          {needsSystem &&
+            sourceSelect("system", "系统资源来源", mode === "rotating")}
           {!state.agents.length && !route && (
             <Empty title="还没有可用电脑">
               先连接 Orbit Agent，再选择数据来源。
@@ -342,6 +395,36 @@ export default function DeviceContent({
             </Empty>
           )}
         </div>
+        {preview && (
+          <div className="screen-preview" aria-label="当前屏幕文本预览">
+            <div className="screen-preview-head">
+              <span>当前渲染输出</span>
+              <small>
+                {preview.rotation_total && preview.rotation_total > 1
+                  ? `第 ${preview.rotation_step}/${preview.rotation_total} 页 · `
+                  : ""}
+                {preview.display_kind === "system"
+                  ? "系统资源"
+                  : preview.display_kind === "codex"
+                    ? "账号周限"
+                    : preview.display_kind === "usage"
+                      ? "API 用量"
+                      : "默认"}
+                {" · "}
+                {preview.freshness === "fresh" ? "新鲜" : "已过期/等待"}
+              </small>
+            </div>
+            <div className="screen-preview-slots">
+              <strong className="screen-preview-primary">
+                {preview.primary || "--"}
+              </strong>
+              <div className="screen-preview-meta">
+                <span>{preview.secondary || "--"}</span>
+                <span>{preview.footer || "--"}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </fieldset>
       {error ? (
         <div className="banner error" role="alert">

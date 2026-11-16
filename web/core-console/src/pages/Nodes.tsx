@@ -454,6 +454,7 @@ export default function Nodes({
                   route={document.routes[device.id]}
                   agents={state.agents}
                   app={!!device.app}
+                  preview={state.node_views?.[device.id]}
                 />
                 {device.app && (
                   <Link

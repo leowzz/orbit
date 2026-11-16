@@ -107,6 +107,21 @@ export default function App() {
       clearTimeout(timer);
     };
   }, [auth, refresh, independent]);
+  const syncState = useCallback(() => {
+    api<NetworkState>("/state")
+      .then((s) => {
+        setState(s);
+        setLastSync(new Date());
+      })
+      .catch(() => {});
+  }, []);
+  const handleRoutesChange = useCallback(
+    (next: RouteDocument) => {
+      setRoutes(next);
+      syncState();
+    },
+    [syncState],
+  );
   const updateNodeLabel = useCallback((id: string, label: string) => {
     setState((current) =>
       current
@@ -253,7 +268,7 @@ export default function App() {
                       <Nodes
                         state={state}
                         document={routes}
-                        onChange={setRoutes}
+                        onChange={handleRoutesChange}
                         onLabelChange={updateNodeLabel}
                         onArchiveChange={updateNodeArchive}
                       />
@@ -265,7 +280,7 @@ export default function App() {
                       <Nodes
                         state={state}
                         document={routes}
-                        onChange={setRoutes}
+                        onChange={handleRoutesChange}
                         onLabelChange={updateNodeLabel}
                         onArchiveChange={updateNodeArchive}
                       />
