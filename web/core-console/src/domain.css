@@ -2450,10 +2450,10 @@ main.device-page {
   min-height: 22px;
 }
 .screen-preview {
-  width: 100%;
-  max-width: 380px;
+  width: fit-content;
+  max-width: 100%;
   margin-top: 16px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--surface-soft);
@@ -2463,8 +2463,8 @@ main.device-page {
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 10px;
-  font-size: 13px;
+  margin-bottom: 8px;
+  font-size: 12px;
 }
 .screen-preview-head span {
   font-weight: 600;
@@ -2473,11 +2473,30 @@ main.device-page {
 .screen-preview-head small {
   color: var(--text-muted);
 }
+.screen-preview-canvas {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+  background: #070a0c;
+  image-rendering: pixelated;
+}
+.screen-preview-oled {
+  width: 256px;
+  height: auto;
+  aspect-ratio: 128 / 32;
+}
+.screen-preview-xiaozhi {
+  width: 320px;
+  height: auto;
+  aspect-ratio: 320 / 240;
+}
 .screen-preview-slots {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-width: 240px;
+  max-width: 320px;
   padding: 10px 14px;
   border-radius: 8px;
   background: #101518;

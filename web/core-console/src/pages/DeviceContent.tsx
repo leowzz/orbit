@@ -13,6 +13,7 @@ import type { InputKind, NetworkState, Route, RouteDocument } from "../api";
 import { Empty } from "../components";
 import useAutoSave from "../useAutoSave";
 import AutoSaveStatus from "../AutoSaveStatus";
+import ScreenPreview from "../ScreenPreview";
 import SettingSwitch from "../SettingSwitch";
 
 class InvalidRoute extends Error {}
@@ -480,34 +481,11 @@ export default function DeviceContent({
           )}
         </div>
         {preview && (
-          <div className="screen-preview" aria-label="当前屏幕文本预览">
-            <div className="screen-preview-head">
-              <span>当前渲染输出</span>
-              <small>
-                {preview.rotation_total && preview.rotation_total > 1
-                  ? `第 ${preview.rotation_step}/${preview.rotation_total} 页 · `
-                  : ""}
-                {preview.display_kind === "system"
-                  ? "系统资源"
-                  : preview.display_kind === "codex"
-                    ? "账号周限"
-                    : preview.display_kind === "usage"
-                      ? "API 用量"
-                      : "默认"}
-                {" · "}
-                {preview.freshness === "fresh" ? "新鲜" : "已过期/等待"}
-              </small>
-            </div>
-            <div className="screen-preview-slots">
-              <strong className="screen-preview-primary">
-                {preview.primary || "--"}
-              </strong>
-              <div className="screen-preview-meta">
-                <span>{preview.secondary || "--"}</span>
-                <span>{preview.footer || "--"}</span>
-              </div>
-            </div>
-          </div>
+          <ScreenPreview
+            profile={profile}
+            preview={preview}
+            brightnessPercent={draft.display_brightness_percent}
+          />
         )}
       </fieldset>
       {error ? (
