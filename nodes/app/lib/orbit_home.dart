@@ -405,7 +405,7 @@ class _ConnectionStatus extends StatelessWidget {
                       contentPadding: EdgeInsets.zero,
                       title: const Text('系统资源'),
                       subtitle: Text(
-                        'CPU ${((num.tryParse('${system['cpuUsagePermille']}') ?? 0) / 10).toStringAsFixed(1)}% · 内存 ${((num.tryParse('${system['memoryUsedBytes']}') ?? 0) / (1024 * 1024 * 1024)).toStringAsFixed(1)}/${((num.tryParse('${system['memoryTotalBytes']}') ?? 0) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GiB',
+                        'CPU ${((num.tryParse('${system['cpuUsagePermille']}') ?? 0) / 10).toStringAsFixed(1)}% · 内存 ${((num.tryParse('${system['memoryUsedBytes']}') ?? 0) / (1024 * 1024 * 1024)).toStringAsFixed(1)}/${((num.tryParse('${system['memoryTotalBytes']}') ?? 0) / (1024 * 1024 * 1024)).toStringAsFixed(1)} GiB${system['load1mMilli'] != null ? ' · LAV ${((num.tryParse('${system['load1mMilli']}') ?? 0) / 1000).toStringAsFixed(2)}' : ''}',
                       ),
                     ),
                   if (usage != null)

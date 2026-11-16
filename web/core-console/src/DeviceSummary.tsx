@@ -127,6 +127,19 @@ export default function DeviceSummary({
             </dd>
           </div>
         )}
+        {system && route.system_primary && (
+          <div>
+            <dt>主指标</dt>
+            <dd>
+              {route.system_primary === "memory"
+                ? "内存优先"
+                : route.system_primary === "load" ||
+                    route.system_primary === "lav"
+                  ? "LAV 优先"
+                  : "CPU 优先"}
+            </dd>
+          </div>
+        )}
         {supportsSessions(route) && (
           <div>
             <dt>Codex 会话</dt>

@@ -751,13 +751,14 @@ void main() {
           .add(const Duration(minutes: 2))
           .toIso8601String(),
       'primary': {'text': '24%'},
-      'secondary': {'text': 'MEM 39%'},
-      'footer': {'text': '12.4/32G'},
+      'secondary': {'text': 'M39% 12/32G'},
+      'footer': {'text': 'LAV 1.42'},
       'system': {
         'cpuUsagePermille': 244,
         'cpuCores': 12,
         'memoryUsedBytes': '${13314398618}',
         'memoryTotalBytes': '${32 * 1024 * 1024 * 1024}',
+        'load1mMilli': 1420,
       },
     };
     await tester.pumpWidget(
@@ -768,6 +769,18 @@ void main() {
     expect(find.text('24%'), findsOneWidget);
     expect(find.text('39%'), findsOneWidget);
     expect(find.text('12.4/32G'), findsOneWidget);
+    expect(find.text('LAV'), findsOneWidget);
+    expect(find.text('1.42'), findsOneWidget);
+
+    controller.view!['primary'] = {'text': '1.42'};
+    controller.view!['secondary'] = {'text': 'C24% M39%'};
+    controller.view!['footer'] = {'text': '12.4/32G'};
+    await tester.pumpWidget(
+      MaterialApp(home: WorkbenchScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('LAV'), findsOneWidget);
+    expect(find.text('1.42'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

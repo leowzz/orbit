@@ -372,6 +372,15 @@ func TestLoadCoreAllowsSystemRouteAndRotatingWithoutExplicitSystemPolicy(t *test
 	if err := cfg.ValidateRoutes(routes); err != nil {
 		t.Fatalf("ValidateRoutes with omitted system policy failed: %v", err)
 	}
+	routes["desk-xiaozhi-01"] = ProjectionRoute{
+		Profile:       "metrics-xiaozhi-320x240",
+		DisplayMode:   "system",
+		SystemPrimary: "load",
+		Inputs:        []ProjectionInput{{AgentID: "agent-a", ObservationType: "system"}},
+	}
+	if err := cfg.ValidateRoutes(routes); err != nil {
+		t.Fatalf("ValidateRoutes with system_primary=load failed: %v", err)
+	}
 	routes["desk-oled-01"] = ProjectionRoute{
 		Profile:       "usage-oled-128x32",
 		DisplayMode:   "system",

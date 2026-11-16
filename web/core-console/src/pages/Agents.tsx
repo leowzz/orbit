@@ -96,7 +96,7 @@ export default function Agents({
                   </span>
                   {a.system.load_1m_milli !== undefined && (
                     <span>
-                      负载 {(a.system.load_1m_milli / 1000).toFixed(2)}
+                      LAV {(a.system.load_1m_milli / 1000).toFixed(2)}
                     </span>
                   )}
                 </div>

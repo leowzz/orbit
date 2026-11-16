@@ -145,7 +145,7 @@ func New(config Config) (*Engine, error) {
 		if route.Profile == xiaozhiProfile && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "system" && route.DisplayMode != "rotating" {
 			return nil, fmt.Errorf("xiaozhi route requires usage, codex, system or rotating display mode")
 		}
-		if route.SystemPrimary != "" && route.SystemPrimary != "cpu" && route.SystemPrimary != "memory" {
+		if route.SystemPrimary != "" && route.SystemPrimary != "cpu" && route.SystemPrimary != "memory" && route.SystemPrimary != "load" && route.SystemPrimary != "lav" {
 			return nil, fmt.Errorf("invalid system primary metric for node %q", route.NodeID)
 		}
 		for _, input := range route.Inputs {

@@ -431,7 +431,9 @@ func TestSystemSourceToRetainedDeviceView(t *testing.T) {
 				t.Fatal(err)
 			}
 			if view.Freshness == orbitv1.Freshness_FRESHNESS_FRESH {
-				if view.DisplayKind != "system" || !strings.HasSuffix(view.Primary.Text, "%") || !strings.HasPrefix(view.Secondary.Text, "MEM ") || proto.Size(&view) > 1024 {
+				hasSystemSlots := strings.HasPrefix(view.Secondary.Text, "MEM ") ||
+					(strings.HasPrefix(view.Secondary.Text, "M") && strings.HasPrefix(view.Footer.Text, "LAV "))
+				if view.DisplayKind != "system" || !strings.HasSuffix(view.Primary.Text, "%") || !hasSystemSlots || proto.Size(&view) > 1024 {
 					t.Fatalf("unexpected fresh system DeviceView: %+v", &view)
 				}
 				cancel()

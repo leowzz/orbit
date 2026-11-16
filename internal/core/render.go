@@ -41,17 +41,22 @@ func renderUsageSlots(profile string, usage canonicalUsage, hasUsage bool) rende
 	}
 }
 
-// renderSystemSlots formats CPU and memory metrics to fit both 128x32 OLED
-// screens and the Xiaozhi 320x240 primary font (" $%+,-.0123456789").
+// renderSystemSlots formats CPU, memory, and 1m load average (LAV) metrics to fit
+// both 128x32 OLED screens and the Xiaozhi 320x240 primary font (" $%+,-.0123456789").
 func renderSystemSlots(primaryMetric string, obs *orbitv1.SystemObservation, hasObs bool) renderedSlots {
+	loadFirst := primaryMetric == "load" || primaryMetric == "lav"
 	memoryFirst := primaryMetric == "memory"
 	secondaryMissing := "MEM --%"
+	primaryMissing := "--%"
 	if memoryFirst {
 		secondaryMissing = "CPU --%"
+	} else if loadFirst {
+		primaryMissing = "--.-"
+		secondaryMissing = "C--% M--%"
 	}
 	if !hasObs || obs == nil {
 		return renderedSlots{
-			Primary:   &orbitv1.DisplaySlot{Text: "--%", Emphasis: orbitv1.Emphasis_EMPHASIS_STRONG},
+			Primary:   &orbitv1.DisplaySlot{Text: primaryMissing, Emphasis: orbitv1.Emphasis_EMPHASIS_STRONG},
 			Secondary: &orbitv1.DisplaySlot{Text: secondaryMissing, Emphasis: orbitv1.Emphasis_EMPHASIS_NORMAL},
 			Footer:    &orbitv1.DisplaySlot{Text: "--/--G", Emphasis: orbitv1.Emphasis_EMPHASIS_DIM},
 		}
@@ -60,10 +65,37 @@ func renderSystemSlots(primaryMetric string, obs *orbitv1.SystemObservation, has
 	memPct := systemMemoryPercent(obs)
 	memRatio := formatMemoryRatio(obs.GetMemoryUsedBytes(), obs.GetMemoryTotalBytes())
 
+	if loadFirst {
+		primaryText := "--.-"
+		if obs.Load_1MMilli != nil {
+			primaryText = formatLoadValue(obs.GetLoad_1MMilli())
+		}
+		return renderedSlots{
+			Primary:   &orbitv1.DisplaySlot{Text: primaryText, Emphasis: orbitv1.Emphasis_EMPHASIS_STRONG},
+			Secondary: &orbitv1.DisplaySlot{Text: fmt.Sprintf("C%d%% M%d%%", cpuPct, memPct), Emphasis: orbitv1.Emphasis_EMPHASIS_NORMAL},
+			Footer:    &orbitv1.DisplaySlot{Text: memRatio, Emphasis: orbitv1.Emphasis_EMPHASIS_DIM},
+		}
+	}
+
 	primaryText := fmt.Sprintf("%d%%", cpuPct)
-	secondaryText := fmt.Sprintf("MEM %d%%", memPct)
 	if memoryFirst {
 		primaryText = fmt.Sprintf("%d%%", memPct)
+	}
+	if obs.Load_1MMilli != nil {
+		compactMem := formatCompactMemoryRatio(obs.GetMemoryUsedBytes(), obs.GetMemoryTotalBytes())
+		secondaryText := fmt.Sprintf("M%d%% %s", memPct, compactMem)
+		if memoryFirst {
+			secondaryText = fmt.Sprintf("C%d%% %s", cpuPct, compactMem)
+		}
+		return renderedSlots{
+			Primary:   &orbitv1.DisplaySlot{Text: primaryText, Emphasis: orbitv1.Emphasis_EMPHASIS_STRONG},
+			Secondary: &orbitv1.DisplaySlot{Text: secondaryText, Emphasis: orbitv1.Emphasis_EMPHASIS_NORMAL},
+			Footer:    &orbitv1.DisplaySlot{Text: formatLoadAvg(obs.GetLoad_1MMilli()), Emphasis: orbitv1.Emphasis_EMPHASIS_DIM},
+		}
+	}
+
+	secondaryText := fmt.Sprintf("MEM %d%%", memPct)
+	if memoryFirst {
 		secondaryText = fmt.Sprintf("CPU %d%%", cpuPct)
 	}
 	return renderedSlots{
@@ -71,6 +103,45 @@ func renderSystemSlots(primaryMetric string, obs *orbitv1.SystemObservation, has
 		Secondary: &orbitv1.DisplaySlot{Text: secondaryText, Emphasis: orbitv1.Emphasis_EMPHASIS_NORMAL},
 		Footer:    &orbitv1.DisplaySlot{Text: memRatio, Emphasis: orbitv1.Emphasis_EMPHASIS_DIM},
 	}
+}
+
+func formatLoadValue(milli uint32) string {
+	load := float64(milli) / 1000.0
+	if load >= 100 {
+		return fmt.Sprintf("%.0f", math.Round(load))
+	}
+	if load >= 10 {
+		return fmt.Sprintf("%.1f", load)
+	}
+	return fmt.Sprintf("%.2f", load)
+}
+
+func formatLoadAvg(milli uint32) string {
+	return "LAV " + formatLoadValue(milli)
+}
+
+func formatCompactMemoryRatio(usedBytes, totalBytes uint64) string {
+	if totalBytes == 0 {
+		return "--/--G"
+	}
+	if usedBytes > totalBytes {
+		usedBytes = totalBytes
+	}
+	const mib = 1024 * 1024
+	const gib = 1024 * mib
+	if totalBytes < 1000*mib {
+		return formatMemoryRatio(usedBytes, totalBytes)
+	}
+	usedG := float64(usedBytes) / float64(gib)
+	totalG := float64(totalBytes) / float64(gib)
+	if totalG >= 10 {
+		return fmt.Sprintf("%.0f/%sG", math.Round(usedG), trimDotZero(totalG))
+	}
+	full := fmt.Sprintf("%.1f/%sG", usedG, trimDotZero(totalG))
+	if len(full) <= 6 {
+		return full
+	}
+	return fmt.Sprintf("%.0f/%sG", math.Round(usedG), trimDotZero(totalG))
 }
 
 func systemCPUPercent(obs *orbitv1.SystemObservation) uint32 {

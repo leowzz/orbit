@@ -29,6 +29,7 @@ const emptySource: Source = {
   cpuUsagePermille: null,
   memoryUsedBytes: null,
   memoryTotalBytes: null,
+  load1mMilli: null,
 };
 function formatGiB(bytes: number) {
   return (bytes / 1024 ** 3).toFixed(1);
@@ -308,6 +309,9 @@ function App() {
             CPU {((s.cpuUsagePermille ?? 0) / 10).toFixed(1)}% · 内存{" "}
             {formatGiB(s.memoryUsedBytes ?? 0)}/
             {formatGiB(s.memoryTotalBytes)}G
+            {s.load1mMilli !== null
+              ? ` · LAV ${(s.load1mMilli / 1000).toFixed(2)}`
+              : ""}
           </p>
         )}
       </div>

@@ -94,6 +94,7 @@ pub struct SourceView {
     pub cpu_usage_permille: Option<u32>,
     pub memory_used_bytes: Option<u64>,
     pub memory_total_bytes: Option<u64>,
+    pub load_1m_milli: Option<u32>,
 }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -556,6 +557,7 @@ fn record_source(
                     v.system.cpu_usage_permille = value.cpu_usage_permille;
                     v.system.memory_used_bytes = value.memory_used_bytes;
                     v.system.memory_total_bytes = value.memory_total_bytes;
+                    v.system.load_1m_milli = value.load_1m_milli;
                 });
                 latest[2] = Some(Payload::System(value));
             }

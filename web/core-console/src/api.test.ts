@@ -63,7 +63,7 @@ test("recognizes the protobuf JSON source types returned by Core", () => {
     displayMode({
       profile: "usage-oled-128x32",
       display_mode: "system",
-      system_primary: "memory",
+      system_primary: "load",
       inputs: [{ agent_id: "desktop", observation_type: "system" }],
     }),
     "system",

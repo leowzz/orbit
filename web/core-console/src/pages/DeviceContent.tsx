@@ -337,7 +337,7 @@ export default function DeviceContent({
           <div className="setting-row">
             <span>
               <strong>系统资源主指标</strong>
-              <small>决定小屏左侧大字优先显示 CPU 还是内存占比</small>
+              <small>决定小屏左侧大字优先显示 CPU、内存占比还是 LAV 负载</small>
             </span>
             <div
               className="content-modes"
@@ -348,9 +348,14 @@ export default function DeviceContent({
                 [
                   { value: "cpu", label: "CPU 优先" },
                   { value: "memory", label: "内存优先" },
+                  { value: "load", label: "LAV 优先" },
                 ] as const
               ).map((item) => {
-                const active = (draft.system_primary || "cpu") === item.value;
+                const currentPrimary =
+                  draft.system_primary === "lav"
+                    ? "load"
+                    : draft.system_primary || "cpu";
+                const active = currentPrimary === item.value;
                 return (
                   <button
                     key={item.value}

@@ -65,10 +65,12 @@ func TestSystemObservationValidationAndProjectionToOLEDAndXiaozhi(t *testing.T) 
 		wantSecondary string
 		wantFooter    string
 	}{
-		{"oled cpu primary", usageProfile, oledModel, ydVariant, "", "24%", "MEM 39%", "12.4/32G"},
-		{"oled memory primary", usageProfile, oledModel, ydVariant, "memory", "39%", "CPU 24%", "12.4/32G"},
-		{"xiaozhi cpu primary", xiaozhiProfile, xiaozhiModel, xiaozhiVariant, "cpu", "24%", "MEM 39%", "12.4/32G"},
-		{"xiaozhi memory primary", xiaozhiProfile, xiaozhiModel, xiaozhiVariant, "memory", "39%", "CPU 24%", "12.4/32G"},
+		{"oled cpu primary", usageProfile, oledModel, ydVariant, "", "24%", "M39% 12/32G", "LAV 1.42"},
+		{"oled memory primary", usageProfile, oledModel, ydVariant, "memory", "39%", "C24% 12/32G", "LAV 1.42"},
+		{"oled load primary", usageProfile, oledModel, ydVariant, "load", "1.42", "C24% M39%", "12.4/32G"},
+		{"xiaozhi cpu primary", xiaozhiProfile, xiaozhiModel, xiaozhiVariant, "cpu", "24%", "M39% 12/32G", "LAV 1.42"},
+		{"xiaozhi memory primary", xiaozhiProfile, xiaozhiModel, xiaozhiVariant, "memory", "39%", "C24% 12/32G", "LAV 1.42"},
+		{"xiaozhi lav primary", xiaozhiProfile, xiaozhiModel, xiaozhiVariant, "lav", "1.42", "C24% M39%", "12.4/32G"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e, err := New(Config{
@@ -101,7 +103,11 @@ func TestSystemObservationValidationAndProjectionToOLEDAndXiaozhi(t *testing.T) 
 			if err != nil || len(missingViews) != 1 {
 				t.Fatalf("ApplyNodeState missingViews=%v err=%v", missingViews, err)
 			}
-			if missingViews[0].Primary.Text != "--%" || missingViews[0].Footer.Text != "--/--G" || missingViews[0].Freshness != orbitv1.Freshness_FRESHNESS_STALE {
+			wantMissingPrimary, wantMissingFooter := "--%", "--/--G"
+			if tc.systemPrimary == "load" || tc.systemPrimary == "lav" {
+				wantMissingPrimary = "--.-"
+			}
+			if missingViews[0].Primary.Text != wantMissingPrimary || missingViews[0].Footer.Text != wantMissingFooter || missingViews[0].Freshness != orbitv1.Freshness_FRESHNESS_STALE {
 				t.Fatalf("unexpected missing placeholder view: %#v", missingViews[0])
 			}
 
@@ -138,6 +144,26 @@ func TestSystemObservationValidationAndProjectionToOLEDAndXiaozhi(t *testing.T) 
 			badMem.GetSystem().MemoryUsedBytes = proto.Uint64((32 << 30) + 1)
 			if _, err := e.ApplyObservation(now, badMem); err == nil {
 				t.Fatal("accepted used memory > total memory")
+			}
+
+			// Without load average (e.g. Windows), keep MEM/CPU + detailed GiB ratio.
+			noLoad := testSystemObservation(now, "agent-a", 3)
+			noLoad.GetSystem().Load_1MMilli = nil
+			noLoadViews, err := e.ApplyObservation(now, noLoad)
+			if err != nil || len(noLoadViews) != 1 {
+				t.Fatalf("noLoad ApplyObservation: views=%v err=%v", noLoadViews, err)
+			}
+			wantNoLoadPrimary := "24%"
+			wantNoLoadSec := "MEM 39%"
+			if tc.systemPrimary == "memory" {
+				wantNoLoadPrimary = "39%"
+				wantNoLoadSec = "CPU 24%"
+			} else if tc.systemPrimary == "load" || tc.systemPrimary == "lav" {
+				wantNoLoadPrimary = "--.-"
+				wantNoLoadSec = "C24% M39%"
+			}
+			if noLoadViews[0].Primary.Text != wantNoLoadPrimary || noLoadViews[0].Secondary.Text != wantNoLoadSec || noLoadViews[0].Footer.Text != "12.4/32G" {
+				t.Fatalf("noLoad slots = (%q, %q, %q), want (%q, %q, %q)", noLoadViews[0].Primary.Text, noLoadViews[0].Secondary.Text, noLoadViews[0].Footer.Text, wantNoLoadPrimary, wantNoLoadSec, "12.4/32G")
 			}
 		})
 	}
@@ -337,6 +363,20 @@ func TestFormatMemoryRatioRanges(t *testing.T) {
 	} {
 		if got := formatMemoryRatio(tc.used, tc.total); got != tc.want {
 			t.Errorf("formatMemoryRatio(%d, %d) = %q, want %q", tc.used, tc.total, got, tc.want)
+		}
+	}
+	for _, tc := range []struct {
+		milli uint32
+		want  string
+	}{
+		{0, "LAV 0.00"},
+		{80, "LAV 0.08"},
+		{1420, "LAV 1.42"},
+		{12340, "LAV 12.3"},
+		{105400, "LAV 105"},
+	} {
+		if got := formatLoadAvg(tc.milli); got != tc.want {
+			t.Errorf("formatLoadAvg(%d) = %q, want %q", tc.milli, got, tc.want)
 		}
 	}
 }

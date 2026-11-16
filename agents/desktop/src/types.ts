@@ -84,6 +84,7 @@ export interface Source {
   cpuUsagePermille: number | null;
   memoryUsedBytes: number | null;
   memoryTotalBytes: number | null;
+  load1mMilli: number | null;
 }
 export interface Status {
   running: boolean;

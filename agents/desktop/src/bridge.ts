@@ -10,6 +10,7 @@ const empty = {
   cpuUsagePermille: null,
   memoryUsedBytes: null,
   memoryTotalBytes: null,
+  load1mMilli: null,
 };
 const settings: Settings = {
   config: {

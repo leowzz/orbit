@@ -730,22 +730,51 @@ List<_Metric> _metrics(Json? view) {
     final cpu = num.tryParse('${sys?['cpuUsagePermille']}');
     final used = num.tryParse('${sys?['memoryUsedBytes']}');
     final total = num.tryParse('${sys?['memoryTotalBytes']}');
+    final load = num.tryParse('${sys?['load1mMilli']}');
+    final primaryText = '${view?['primary']?['text'] ?? ''}';
+    final cpuText = cpu == null ? '--%' : '${(cpu / 10).round()}%';
     final memPct = (used != null && total != null && total > 0)
         ? '${(used * 100 / total).round()}%'
         : '--%';
     final memRatio = (used != null && total != null && total > 0)
         ? '${(used / (1024 * 1024 * 1024)).toStringAsFixed(1)}/${(total / (1024 * 1024 * 1024)).round()}G'
         : view?['footer']?['text'] ?? '--/--G';
+    final loadText = load == null
+        ? (primaryText.isNotEmpty && !primaryText.contains('%')
+              ? primaryText
+              : null)
+        : (load / 1000 >= 100
+              ? (load / 1000).round().toString()
+              : (load / 1000 >= 10
+                    ? (load / 1000).toStringAsFixed(1)
+                    : (load / 1000).toStringAsFixed(2)));
+    if (loadText != null &&
+        primaryText.isNotEmpty &&
+        !primaryText.contains('%')) {
+      return [
+        _Metric('LAV', loadText, prominent: true),
+        _Metric('CPU', cpuText),
+        _Metric('内存', memPct),
+        _Metric('用量', memRatio, accent: true),
+      ];
+    }
+    if (primaryText == memPct && memPct != '--%') {
+      return [
+        _Metric('内存', memPct, prominent: true),
+        _Metric('CPU', cpuText),
+        _Metric('用量', memRatio, accent: loadText == null),
+        if (loadText != null) _Metric('LAV', loadText, accent: true),
+      ];
+    }
     return [
       _Metric(
         'CPU',
-        cpu == null
-            ? (view?['primary']?['text'] ?? '--%')
-            : '${(cpu / 10).round()}%',
+        cpu == null ? (primaryText.isEmpty ? '--%' : primaryText) : cpuText,
         prominent: true,
       ),
       _Metric('内存', memPct),
-      _Metric('用量', memRatio, accent: true),
+      _Metric('用量', memRatio, accent: loadText == null),
+      if (loadText != null) _Metric('LAV', loadText, accent: true),
     ];
   }
   final usage = view?['usage'] as Map?;

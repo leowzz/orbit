@@ -1,7 +1,7 @@
 export type InputKind = "usage" | "codex" | "system";
 export type DisplayMode =
   "usage" | "codex" | "sessions" | "system" | "rotating";
-export type SystemPrimary = "cpu" | "memory";
+export type SystemPrimary = "cpu" | "memory" | "load" | "lav";
 export interface Route {
   profile: string;
   sessions_enabled?: boolean;

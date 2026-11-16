@@ -277,7 +277,7 @@ func (cfg *CoreConfig) ValidateRoutes(routes map[string]ProjectionRoute) error {
 		if route.Profile == "metrics-xiaozhi-320x240" && route.DisplayMode != "usage" && route.DisplayMode != "codex" && route.DisplayMode != "system" && route.DisplayMode != "rotating" {
 			return fmt.Errorf("projection route %q: xiaozhi requires usage, codex, system or rotating display mode", nodeID)
 		}
-		if route.SystemPrimary != "" && route.SystemPrimary != "cpu" && route.SystemPrimary != "memory" {
+		if route.SystemPrimary != "" && route.SystemPrimary != "cpu" && route.SystemPrimary != "memory" && route.SystemPrimary != "load" && route.SystemPrimary != "lav" {
 			return fmt.Errorf("projection route %q: invalid system_primary %q", nodeID, route.SystemPrimary)
 		}
 		seen := make(map[string]struct{}, len(route.Inputs))
