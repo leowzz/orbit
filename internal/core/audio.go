@@ -504,8 +504,12 @@ func (r *AudioRunner) Run(ctx context.Context) error {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
-		if e := r.dispatch(ctx); e != nil && ctx.Err() == nil {
-			r.logger.Warn("audio dispatch failed", zap.Error(e))
+		e := r.dispatch(ctx)
+		if ctx.Err() == nil {
+			r.store.metrics.recordWorker("audio_dispatch", e)
+			if e != nil {
+				r.logger.Warn("audio dispatch failed", zap.Error(e))
+			}
 		}
 		select {
 		case <-ctx.Done():

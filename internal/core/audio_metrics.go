@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,25 +14,6 @@ import (
 func addAudioCounter(ctx context.Context, tx *sql.Tx, name, agent, status string, value float64) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO audio_counters VALUES(?,?,?,?) ON CONFLICT(name,agent_id,status) DO UPDATE SET value=value+excluded.value`, name, agent, status, value)
 	return err
-}
-
-// MetricsHandler is served only on the opt-in metrics listener, never the console.
-func (s *RouteStore) MetricsHandler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /metrics", s.audioMetrics)
-	return mux
-}
-
-func (s *RouteStore) audioMetrics(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	body, err := s.collectAudioMetrics(ctx, time.Now())
-	if err != nil {
-		http.Error(w, "metrics unavailable", http.StatusServiceUnavailable)
-		return
-	}
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	_, _ = w.Write([]byte(body))
 }
 
 // One read transaction provides a consistent snapshot. Counters are incremented

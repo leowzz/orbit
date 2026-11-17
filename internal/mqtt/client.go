@@ -33,6 +33,8 @@ type Config struct {
 	Username string
 	Password string
 	TLS      TLSConfig
+	// ConnectionState, if set, reports broker connection transitions. It must not block.
+	ConnectionState func(connected bool)
 }
 
 type Message struct {
@@ -94,12 +96,21 @@ func Connect(ctx context.Context, cfg Config, logger *zap.Logger) (*Client, erro
 		ConnectUsername:               cfg.Username,
 		ConnectPassword:               []byte(cfg.Password),
 		OnConnectionUp: func(manager *autopaho.ConnectionManager, connack *paho.Connack) {
+			if cfg.ConnectionState != nil {
+				cfg.ConnectionState(true)
+			}
 			logger.Info("mqtt connection established",
 				zap.String("client_id", cfg.ClientID),
 				zap.String("broker", serverURL.Host),
 				zap.Bool("session_present", connack.SessionPresent),
 			)
 			client.resubscribe(manager)
+		},
+		OnConnectionDown: func() bool {
+			if cfg.ConnectionState != nil {
+				cfg.ConnectionState(false)
+			}
+			return true
 		},
 		OnConnectError: func(err error) {
 			logger.Warn("mqtt connection failed", zap.Error(err))

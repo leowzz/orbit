@@ -30,7 +30,7 @@ func TestAudioMetricsExposesQueueAndWorkers(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/metrics", nil)
 	res := httptest.NewRecorder()
-	store.audioMetrics(res, req)
+	NewCoreMetrics(store).Handler(nil, time.Now, nil, nil, false).ServeHTTP(res, req)
 	if res.Code != 200 {
 		t.Fatalf("status=%d body=%s", res.Code, res.Body.String())
 	}
@@ -140,7 +140,7 @@ func TestAudioMetricsUnavailableDoesNotReturnPartialScrape(t *testing.T) {
 	}
 	store.Close()
 	res := httptest.NewRecorder()
-	store.MetricsHandler().ServeHTTP(res, httptest.NewRequest("GET", "/metrics", nil))
+	NewCoreMetrics(store).Handler(nil, time.Now, nil, nil, false).ServeHTTP(res, httptest.NewRequest("GET", "/metrics", nil))
 	if res.Code != 503 || strings.Contains(res.Body.String(), "# HELP") {
 		t.Fatal(res.Code, res.Body.String())
 	}

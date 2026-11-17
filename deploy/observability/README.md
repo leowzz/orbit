@@ -1,4 +1,4 @@
-# Orbit ASR observability
+# Orbit observability
 
 ## Runtime
 
@@ -14,18 +14,38 @@ metrics. Do not publish port 7623 to the Internet. Prometheus joins the external
 Docker network `leo_db_core` and scrapes `orbit-core:7623` every 15 seconds.
 
 `compose.override.yml` is an additive example for the existing monitoring stack.
-Copy the Grafana provider and JSON dashboard into its `grafana/provisioning/dashboards/`
+Copy the Grafana provider and both dashboard JSON files into its `grafana/provisioning/dashboards/`
 directory, and merge the `orbit-core` job from `prometheus.yml` into its scrape
-configuration (preserve unrelated jobs). The dashboard uses datasource UID
-`prometheus`; change it if the installation uses another UID.
+configuration (preserve unrelated jobs). The dashboards use datasource UID
+`prometheus` and appear directly in Grafana's dashboard list. Their UIDs
+are `orbit-core` and `orbit-asr`.
 
 Validate with `promtool check config` and `promtool check metrics`. Recreate only
 the services needing network / volume changes; subsequent Prometheus changes
-can reload via SIGHUP, and Grafana polls provisioned dashboard files automatically.
+can reload via SIGHUP. Grafana polls the dashboard JSON files; for a change to
+the provider YAML, reload dashboard provisioning via
+`POST /api/admin/provisioning/dashboards/reload` using a Grafana admin account.
 Update Core before upgrading workers, because older Core versions reject unknown
 WorkerState JSON fields.
 
-## Metric semantics
+## Orbit Core
+
+| Signals | How to read them |
+| --- | --- |
+| `up`, `orbit_core_mqtt_connected` | Prometheus scrape health and Core's broker connection are independent. |
+| `orbit_core_http_requests_total`, `orbit_core_http_request_duration_seconds`, `orbit_core_http_active_requests` | Separate App and console API traffic. The counter records a response when its status is sent; event streams have their own in-flight series and do not contribute to latency percentiles. Routes are HTTP patterns, never raw request paths. |
+| `orbit_core_app_devices`, `orbit_core_source_state` | Active App devices have an open event stream or an authenticated request in the last 10 minutes. Configured sources are classified as missing (0), stale (1), or fresh (2) by the same expiry used by Core. |
+| `orbit_core_mqtt_operations_total`, `orbit_core_pending_views` | MQTT send/receive outcomes use fixed message kinds. Pending views count the latest view per device waiting to be sent and acknowledged. A known participant has sent a valid state since Core started; that count is not online presence. |
+| `orbit_core_worker_*`, `orbit_core_review_windows`, `orbit_core_review_model_*` | Last successful cycle, failures, review backlog, model request latency and reported tokens from validated responses. Review panels depend on analysis being enabled. |
+| `process_*`, `go_*`, `orbit_core_sqlite_*` | Core CPU, RSS, Go heap and goroutines; allocated SQLite pages and time waiting for a Core or Inbox database connection. Allocated bytes exclude WAL and external files. |
+| `orbit_core_sqlite_table_rows{database,table}` | Exact row counts for application tables in Core and Inbox. Counts include retained history. Read-only snapshots refresh once a minute; the dashboard hides values older than 3 minutes using `orbit_core_sqlite_table_rows_last_success_timestamp_seconds`. |
+
+Core traffic and worker counters are process-local and reset on restart. Rate
+and latency panels require scrapes after traffic; they do not backfill history.
+The scrape stays private and does not export payloads, tokens, raw MQTT topics
+or request paths.
+
+## Orbit ASR
 
 | Metric | Type | Meaning |
 | --- | --- | --- |
@@ -51,6 +71,10 @@ at deployment, without fabricating historical events. The first two scrapes of
 a series are required for a rate; idle workers have no average processing time.
 Gauges for retained records must not be used to calculate consumption rates.
 Core pending and Worker local queues overlap and must not be added together.
+ASR backlog means pending jobs without a result, including dispatched jobs.
+Compare the pending count and oldest age with live Workers and unique results.
+MQTT publish acknowledgements and dispatch attempts do not mean a worker
+consumed a job. Retention may prune pending segments too.
 No transcript, audio, job ID, session ID, credentials or error text becomes a label.
 
 ## TX deployment (2026-10-31, Asia/Shanghai)
@@ -95,3 +119,20 @@ The global message production/consumption panel compares per-minute rates of
 including completed and failed results). It deliberately ignores the Worker
 filter so both sides describe the same global queue. Duplicate deliveries do
 not count. The legend includes latest, mean and maximum values.
+
+## TX Core rollout (2026-11-17)
+
+- Grafana root: [Orbit Core](https://grafana.wleo.cn/d/orbit-core) and
+  [Orbit ASR 消费](https://grafana.wleo.cn/d/orbit-asr). The ASR dashboard kept its
+  UID and panels. The old Orbit folder was empty when removed.
+- Core image: `orbit-core:core-metrics-49bd6ae-20261117`. The existing
+  `orbit-core` Prometheus job still scrapes the private listener at 15 seconds.
+- Release artifacts: `/srv/orbit-deploy/releases/core-metrics-49bd6ae-20261117/`.
+  Verified online SQLite backups and the previous Compose file are in
+  `/srv/orbit-deploy/backups/core-metrics-49bd6ae-20261117/`. Previous Grafana
+  provider and dashboard exports are in
+  `/srv/10-ops/observability/backups/core-metrics-49bd6ae-20261117/`.
+- For a binary rollback, switch only the Core service image back to
+  `orbit-core:antiburn-2d8f6f8` and recreate that service with
+  `docker compose up -d --no-deps --pull never orbit-core`. Keep live SQLite
+  data; rolling back metrics code needs no database restore.

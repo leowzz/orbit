@@ -32,13 +32,13 @@ uncertainty: 识别疑点/归属不明等，明确时空字符串
 type reviewModel struct {
 	client               *http.Client
 	endpoint, key, model string
+	metrics              *CoreMetrics
 }
 
 func (s *RouteStore) newReviewModel() *reviewModel {
-	return &reviewModel{client: &http.Client{Timeout: 120 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect disabled") }}, endpoint: strings.TrimRight(s.analysis.BaseURL, "/") + "/responses", key: s.analysis.APIKey, model: s.analysis.Model}
+	return &reviewModel{client: &http.Client{Timeout: 120 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect disabled") }}, endpoint: strings.TrimRight(s.analysis.BaseURL, "/") + "/responses", key: s.analysis.APIKey, model: s.analysis.Model, metrics: s.metrics}
 }
-func (m *reviewModel) call(ctx context.Context, input any, allowed map[string]reviewInput) (reviewResult, error) {
-	var result reviewResult
+func (m *reviewModel) call(ctx context.Context, input any, allowed map[string]reviewInput) (result reviewResult, outcome error) {
 	encoded, err := json.Marshal(input)
 	if err != nil {
 		return result, err
@@ -50,6 +50,10 @@ func (m *reviewModel) call(ctx context.Context, input any, allowed map[string]re
 	}
 	req.Header.Set("Authorization", "Bearer "+m.key)
 	req.Header.Set("Content-Type", "application/json")
+	if m.metrics != nil {
+		start := time.Now()
+		defer func() { m.metrics.recordReviewRequest(start, result, outcome) }()
+	}
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return result, errors.New("model request failed or timed out")

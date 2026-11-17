@@ -32,6 +32,7 @@ type Runner struct {
 	transport    Transport
 	logger       *zap.Logger
 	now          func() time.Time
+	metrics      *CoreMetrics
 }
 
 func NewRunner(engine *Engine, transport Transport, logger *zap.Logger, now func() time.Time) (*Runner, error) {
@@ -46,6 +47,9 @@ func NewRunner(engine *Engine, transport Transport, logger *zap.Logger, now func
 	}
 	return &Runner{engine: engine, transport: transport, logger: logger, now: now, pendingViews: make(map[string]*orbitv1.DeviceView)}, nil
 }
+
+// TrackMetrics is called before Run starts processing messages.
+func (r *Runner) TrackMetrics(m *CoreMetrics) { r.metrics = m }
 
 func (r *Runner) Run(ctx context.Context) error {
 	for _, item := range []struct {
@@ -242,6 +246,9 @@ func (r *Runner) publishViews(ctx context.Context, views []*orbitv1.DeviceView) 
 	for _, view := range views {
 		r.pendingViews[view.NodeId] = view
 	}
+	if r.metrics != nil {
+		r.metrics.pendingViews.Set(float64(len(r.pendingViews)))
+	}
 	for _, view := range r.pendingViews {
 		payload, err := proto.Marshal(view)
 		if err != nil {
@@ -259,6 +266,9 @@ func (r *Runner) publishViews(ctx context.Context, views []*orbitv1.DeviceView) 
 			return err
 		}
 		delete(r.pendingViews, view.NodeId)
+		if r.metrics != nil {
+			r.metrics.pendingViews.Set(float64(len(r.pendingViews)))
+		}
 		r.logger.Info("device view published",
 			zap.String("node_id", view.NodeId),
 			zap.String("core_epoch", view.CoreEpoch),

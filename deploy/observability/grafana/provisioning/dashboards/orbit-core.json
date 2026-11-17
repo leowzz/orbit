@@ -1,0 +1,2077 @@
+{
+  "uid": "orbit-core",
+  "title": "Orbit Core",
+  "tags": [
+    "orbit",
+    "core"
+  ],
+  "schemaVersion": 41,
+  "version": 3,
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "refresh": "30s",
+  "editable": true,
+  "links": [
+    {
+      "title": "Orbit ASR 消费",
+      "type": "link",
+      "url": "/d/orbit-asr",
+      "keepTime": true,
+      "targetBlank": false
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Core 采集",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "离线",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "正常",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"orbit-core\"}",
+          "legendFormat": "Core",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "MQTT 连接",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "离线",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "正常",
+                  "color": "green"
+                },
+                "2": {
+                  "text": "未配置",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_mqtt_connected{job=\"orbit-core\"} + 2 * (1 - orbit_core_mqtt_enabled{job=\"orbit-core\"})",
+          "legendFormat": "MQTT",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "API 请求 / 分钟",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum(rate(orbit_core_http_requests_total{job=\"orbit-core\"}[$__rate_interval])) or on() (up{job=\"orbit-core\"} == 1) * 0",
+          "legendFormat": "API",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "API 5xx · 近 5 分钟",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase((sum by (job,instance) (orbit_core_http_requests_total{job=\"orbit-core\",code=~\"5..\"}) or on(job,instance) (up{job=\"orbit-core\"} == 1) * 0)[5m:15s]))",
+          "legendFormat": "5xx",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "异常数据源",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(orbit_core_source_state{job=\"orbit-core\"} < 2) or on() orbit_core_projection_routes{job=\"orbit-core\"} * 0",
+          "legendFormat": "未收到或已过期",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "待投递视图",
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_pending_views{job=\"orbit-core\"}",
+          "legendFormat": "设备视图",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "API 与收件箱",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "API 请求 / 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: 次/分",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum by (surface) (rate(orbit_core_http_requests_total{job=\"orbit-core\"}[$__rate_interval]))",
+          "legendFormat": "{{surface}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "API P95 延迟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "事件流连接的持续时间不计入请求延迟。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le,surface) (rate(orbit_core_http_request_duration_seconds_bucket{job=\"orbit-core\"}[$__rate_interval])))",
+          "legendFormat": "{{surface}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "API 错误 / 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "按路由模板分组；未匹配或提前拒绝的请求归为 unmatched。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: 次/分",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum by (surface,code,route) (rate(orbit_core_http_requests_total{job=\"orbit-core\",code=~\"[45]..\"}[$__rate_interval])) > 0",
+          "legendFormat": "{{surface}} · {{code}} · {{route}}",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "((up{job=\"orbit-core\"} == 1) * 0) unless on() (60 * sum by (surface,code,route) (rate(orbit_core_http_requests_total{job=\"orbit-core\",code=~\"[45]..\"}[$__rate_interval])) > 0)",
+          "legendFormat": "无错误",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "实时同步连接",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_http_active_requests{job=\"orbit-core\",kind=\"events\"}",
+          "legendFormat": "{{surface}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "App 设备",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "活跃包含已连接的事件流和近 10 分钟内通过验证的 App 请求。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_app_devices{job=\"orbit-core\",state=\"authorized\"}",
+          "legendFormat": "已授权",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "orbit_core_app_devices{job=\"orbit-core\",state=\"recent\"}",
+          "legendFormat": "近 10 分钟活跃",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "expr": "orbit_core_app_devices{job=\"orbit-core\",state=\"revoked\"}",
+          "legendFormat": "已撤销",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "收件箱读写 / 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: 次/分",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum by (route) (rate(orbit_core_http_requests_total{job=\"orbit-core\",code=~\"2..\",route=~\".* /(api/v1|api/app)/(sync/snapshot|items|changes|operations|attachments.*)\"}[$__rate_interval]))",
+          "legendFormat": "{{route}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "设备路由与 MQTT",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "state-timeline",
+      "title": "数据源新鲜度",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "仅展示已配置到投影路由的数据源。",
+      "options": {
+        "showValue": "auto",
+        "mergeValues": true,
+        "rowHeight": 0.82,
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "未收到",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "已过期",
+                  "color": "orange"
+                },
+                "2": {
+                  "text": "新鲜",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_source_state{job=\"orbit-core\"}",
+          "legendFormat": "{{agent_id}} · {{source}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "MQTT 消息 / 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: 次/分",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum by (operation,kind) (rate(orbit_core_mqtt_operations_total{job=\"orbit-core\",operation=~\"publish|receive\",result=\"ok\"}[$__rate_interval]))",
+          "legendFormat": "{{operation}} · {{kind}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "MQTT 错误 / 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 37
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "包含订阅、发布和处理入站消息的错误。重复或过期状态被拒绝也计入入站错误。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: 次/分",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum by (operation,kind) (rate(orbit_core_mqtt_operations_total{job=\"orbit-core\",result=\"error\"}[$__rate_interval])) > 0",
+          "legendFormat": "{{operation}} · {{kind}}",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "((up{job=\"orbit-core\"} == 1) * 0) unless on() (60 * sum by (operation,kind) (rate(orbit_core_mqtt_operations_total{job=\"orbit-core\",result=\"error\"}[$__rate_interval])) > 0)",
+          "legendFormat": "无错误",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "timeseries",
+      "title": "MQTT 已知设备与 Agent",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "已知表示 Core 启动以来接收过有效状态；不代表设备仍在线。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_mqtt_participants{job=\"orbit-core\",kind=\"node\"}",
+          "legendFormat": "已知设备",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "orbit_core_mqtt_participants{job=\"orbit-core\",kind=\"agent\"}",
+          "legendFormat": "已知 Agent",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "C",
+          "expr": "orbit_core_projection_routes{job=\"orbit-core\"}",
+          "legendFormat": "投影路由",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "timeseries",
+      "title": "视图待投递",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 45
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "受影响的设备视图数。同一设备只保留最新一个待投递视图。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_pending_views{job=\"orbit-core\"}",
+          "legendFormat": "待确认设备视图",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "row",
+      "title": "后台任务与复盘",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "panels": []
+    },
+    {
+      "id": 33,
+      "type": "stat",
+      "title": "复盘分析",
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 54
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "已关闭",
+                  "color": "gray"
+                },
+                "1": {
+                  "text": "已启用",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_reviews_enabled{job=\"orbit-core\"}",
+          "legendFormat": "复盘",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "timeseries",
+      "title": "ASR 派发与复盘最近成功",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 4,
+        "y": 54
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "距离最近一次成功循环的时间；空闲派发也算成功。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time() - (orbit_core_worker_last_success_timestamp_seconds{job=\"orbit-core\",worker=\"audio_dispatch\"} > 0)",
+          "legendFormat": "ASR 派发循环",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "(time() - (orbit_core_worker_last_success_timestamp_seconds{job=\"orbit-core\",worker=\"review_cycle\"} > 0)) and on(job,instance) (orbit_core_reviews_enabled{job=\"orbit-core\"} == 1)",
+          "legendFormat": "复盘调度循环",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "后台失败 · 滚动 5 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 54
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(orbit_core_worker_runs_total{job=\"orbit-core\",worker=\"audio_dispatch\",result=\"error\"}[5m])",
+          "legendFormat": "ASR 派发",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "increase(orbit_core_worker_runs_total{job=\"orbit-core\",worker=~\"review_cycle|review_analysis\",result=\"error\"}[5m]) and on(job,instance) (orbit_core_reviews_enabled{job=\"orbit-core\"} == 1)",
+          "legendFormat": "{{worker}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "复盘积压",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 62
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "当前保留窗口：待处理、处理中、失败待重试。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_review_windows{job=\"orbit-core\",status=~\"queued|running|failed\"}",
+          "legendFormat": "{{kind}} · {{status}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "type": "timeseries",
+      "title": "复盘模型请求 · 滚动 5 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 62
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(orbit_core_review_model_requests_total{job=\"orbit-core\"}[5m]) and on(job,instance) (orbit_core_reviews_enabled{job=\"orbit-core\"} == 1)",
+          "legendFormat": "{{result}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "type": "timeseries",
+      "title": "复盘模型 P95 延迟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 70
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, rate(orbit_core_review_model_request_duration_seconds_bucket{job=\"orbit-core\"}[$__rate_interval])) and on(job,instance) (orbit_core_reviews_enabled{job=\"orbit-core\"} == 1)",
+          "legendFormat": "P95",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "type": "timeseries",
+      "title": "复盘模型 Token · 滚动 5 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 70
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "统计通过响应校验的请求；不作为账单用量。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "increase(orbit_core_review_model_tokens_total{job=\"orbit-core\"}[5m]) and on(job,instance) (orbit_core_reviews_enabled{job=\"orbit-core\"} == 1)",
+          "legendFormat": "{{direction}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "type": "row",
+      "title": "ASR 待处理",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "panels": []
+    },
+    {
+      "id": 35,
+      "type": "stat",
+      "title": "待完成任务",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 79
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_audio_jobs{job=\"orbit-core\",status=\"pending\"}",
+          "legendFormat": "待完成任务",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "包括已派发、但 Core 还没有收到结果的任务。保留的已完成任务不计入。"
+    },
+    {
+      "id": 36,
+      "type": "stat",
+      "title": "最老待完成任务",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 79
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1800
+              },
+              {
+                "color": "red",
+                "value": 3600
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_audio_pending_oldest_age_seconds{job=\"orbit-core\"}",
+          "legendFormat": "最老待完成任务",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "从 Core 接收该段音频起算。没有待完成任务时为 0。"
+    },
+    {
+      "id": 37,
+      "type": "stat",
+      "title": "在线 Worker",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 79
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(orbit_audio_worker_up{job=\"orbit-core\"}) or on() (up{job=\"orbit-core\"} == 1) * 0",
+          "legendFormat": "在线 Worker",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "过去 60 秒内有实时心跳，且未报告离线。"
+    },
+    {
+      "id": 27,
+      "type": "row",
+      "title": "进程与存储",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
+      "panels": []
+    },
+    {
+      "id": 28,
+      "type": "timeseries",
+      "title": "进程 CPU",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 84
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "100% 代表占满一个逻辑核。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "rate(process_cpu_seconds_total{job=\"orbit-core\"}[$__rate_interval])",
+          "legendFormat": "CPU",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "type": "timeseries",
+      "title": "进程内存",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 84
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "process_resident_memory_bytes{job=\"orbit-core\"}",
+          "legendFormat": "RSS",
+          "instant": false,
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "go_memstats_heap_alloc_bytes{job=\"orbit-core\"}",
+          "legendFormat": "Go 堆",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Goroutine",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 84
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "go_goroutines{job=\"orbit-core\"}",
+          "legendFormat": "Goroutine",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "SQLite 已分配空间",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 92
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "包含空闲页；不含 WAL 和独立的音频、附件文件。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_sqlite_allocated_bytes{job=\"orbit-core\"}",
+          "legendFormat": "{{database}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "type": "timeseries",
+      "title": "SQLite 连接等待 / 分钟",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 92
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "每分钟累计等待连接的秒数；多个请求同时等待时会叠加。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: 秒/分",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * rate(orbit_core_sqlite_wait_seconds_total{job=\"orbit-core\"}[$__rate_interval])",
+          "legendFormat": "{{database}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "type": "row",
+      "title": "SQLite 表行数",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
+      "panels": []
+    },
+    {
+      "id": 39,
+      "type": "table",
+      "title": "各表最新行数",
+      "gridPos": {
+        "h": 16,
+        "w": 11,
+        "x": 0,
+        "y": 101
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Core 和 Inbox 的应用表，每分钟读取一次。超过 3 分钟未更新的快照不展示。行数包含保留的历史记录。",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "orbit_core_sqlite_table_rows{job=\"orbit-core\"} and on(job,instance,database) (time() - orbit_core_sqlite_table_rows_last_success_timestamp_seconds{job=\"orbit-core\"} < 180)",
+          "format": "table",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "service": true
+            },
+            "indexByName": {
+              "database": 0,
+              "table": 1,
+              "Value": 2
+            },
+            "renameByName": {
+              "database": "数据库",
+              "table": "表",
+              "Value": "行数"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "行数"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "locale"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "行数",
+            "desc": true
+          }
+        ]
+      }
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "最大 8 张表的行数趋势",
+      "gridPos": {
+        "h": 12,
+        "w": 13,
+        "x": 11,
+        "y": 101
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "出现在当前时间范围内各采样点行数最高的 8 张表。各表当前值见左侧列表。",
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 12,
+            "showPoints": "never",
+            "lineWidth": 2,
+            "spanNulls": false,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(8, orbit_core_sqlite_table_rows{job=\"orbit-core\"} and on(job,instance,database) (time() - orbit_core_sqlite_table_rows_last_success_timestamp_seconds{job=\"orbit-core\"} < 180))",
+          "legendFormat": "{{database}} · {{table}}",
+          "instant": false,
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "行数快照距今",
+      "gridPos": {
+        "h": 4,
+        "w": 13,
+        "x": 11,
+        "y": 113
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "graphMode": "none",
+        "colorMode": "value",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 180
+              }
+            ]
+          },
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - orbit_core_sqlite_table_rows_last_success_timestamp_seconds{job=\"orbit-core\"}) and on(job,instance,database) (orbit_core_sqlite_table_rows_last_success_timestamp_seconds{job=\"orbit-core\"} > 0)",
+          "legendFormat": "{{database}}",
+          "instant": true,
+          "range": false
+        }
+      ],
+      "description": "Core 与 Inbox 的最近一次成功采集。"
+    }
+  ]
+}

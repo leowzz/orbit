@@ -65,11 +65,21 @@ type Page struct {
 
 type Store struct{ db *sql.DB }
 
+// StorageStats reports allocated database pages and pool pressure without
+// reading inbox content or sync records.
+func (s *Store) StorageStats(ctx context.Context) (int64, sql.DBStats, error) {
+	var allocated int64
+	err := s.db.QueryRowContext(ctx, `SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()`).Scan(&allocated)
+	return allocated, s.db.Stats(), err
+}
+
+func DatabasePath(dir string) string { return filepath.Join(dir, "inbox.sqlite") }
+
 func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", filepath.Join(dir, "inbox.sqlite"))
+	db, err := sql.Open("sqlite", DatabasePath(dir))
 	if err != nil {
 		return nil, err
 	}

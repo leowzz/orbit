@@ -15,8 +15,12 @@ import (
 func (s *RouteStore) RunReviews(ctx context.Context, logger *zap.Logger) {
 	model := s.newReviewModel()
 	for ctx.Err() == nil {
-		if err := s.reviewCycle(ctx, model, time.Now()); err != nil && ctx.Err() == nil {
-			logger.Warn("review cycle failed", zap.Error(err))
+		err := s.reviewCycle(ctx, model, time.Now())
+		if ctx.Err() == nil {
+			s.metrics.recordWorker("review_cycle", err)
+			if err != nil {
+				logger.Warn("review cycle failed", zap.Error(err))
+			}
 		}
 		timer := time.NewTimer(5 * time.Minute)
 		select {
@@ -84,6 +88,9 @@ func (s *RouteStore) processReview(ctx context.Context, model *reviewModel, kind
 		callCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		result, err = model.analyze(callCtx, w, inputs, hours)
 		cancel()
+		if ctx.Err() == nil {
+			s.metrics.recordWorker("review_analysis", err)
+		}
 	}
 	if ctx.Err() != nil {
 		return true, ctx.Err()

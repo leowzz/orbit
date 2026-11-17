@@ -28,6 +28,7 @@ import (
 // intentional and must never cause YAML routes to be imported again.
 type RouteStore struct {
 	db               *sql.DB
+	metrics          *CoreMetrics
 	audioMaxSegments int
 	audioFiles       *audioFileStore
 	analysis         config.AnalysisConfig

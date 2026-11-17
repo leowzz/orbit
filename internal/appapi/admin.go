@@ -42,6 +42,27 @@ func (s *Server) recordSync(node, cursor string) {
 	a.Cursor = cursor
 }
 
+// DeviceCounts is an aggregate snapshot; it never returns device identities.
+func (s *Server) DeviceCounts(now time.Time) (authorized, revoked, recent int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cutoff := now.Add(-10 * time.Minute)
+	for id, device := range s.devices {
+		if device.Revoked {
+			revoked++
+			continue
+		}
+		authorized++
+		if a := s.activity[id]; a != nil {
+			seen, _ := time.Parse(time.RFC3339, a.LastSeen)
+			if a.Connections > 0 || seen.After(cutoff) {
+				recent++
+			}
+		}
+	}
+	return
+}
+
 // AdminHandler must be mounted behind the console's session and origin checks.
 // It is deliberately not reachable from the public bearer-token API listener.
 func (s *Server) AdminHandler() http.Handler {

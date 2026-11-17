@@ -117,26 +117,6 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if cfg.Audio.Analysis.Enabled {
-		done := make(chan struct{})
-		go func() { defer close(done); store.RunReviews(ctx, logger) }()
-		defer func() { stop(); <-done }()
-	}
-	if cfg.Metrics.Listen != "" {
-		listener, err := net.Listen("tcp", cfg.Metrics.Listen)
-		if err != nil {
-			return fmt.Errorf("listen metrics: %w", err)
-		}
-		metrics := &http.Server{Handler: store.MetricsHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
-		defer metrics.Close()
-		go func() {
-			if err := metrics.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logger.Error("metrics server stopped", zap.Error(err))
-				stop()
-			}
-		}()
-		logger.Info("metrics listening", zap.String("listen", cfg.Metrics.Listen))
-	}
 	synchronizedClock, err := appclock.New(appclock.Config{
 		Server:       cfg.NTP.Server,
 		SyncInterval: cfg.NTP.SyncInterval.Duration,
@@ -148,42 +128,81 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	if cfg.MQTT.URL != "" {
 		synchronizedClock.Start(ctx)
 	}
-
-	if cfg.App.Listen == "" {
-		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, nil, nil, nil)
-	}
-	inboxStore, err := inbox.Open(cfg.App.DataDir)
-	if err != nil {
-		return err
-	}
-	defer inboxStore.Close()
-	// Freeze legacy navigation and device overrides before any HTTP request can
-	// initialize an empty per-device configuration.
-	if err := inboxStore.MigrateNavigationSettings(ctx, engine.NavigationDisplayDefaults()); err != nil {
-		return fmt.Errorf("migrate device navigation: %w", err)
-	}
-	api, err := appapi.New(inboxStore, cfg.App, func(node string) json.RawMessage {
-		view := engine.AppView(synchronizedClock.Now(), node)
-		if view == nil {
-			return json.RawMessage(`null`)
+	var inboxStore *inbox.Store
+	var api *appapi.Server
+	var deviceCounts func(time.Time) (int, int, int)
+	if cfg.App.Listen != "" {
+		inboxStore, err = inbox.Open(cfg.App.DataDir)
+		if err != nil {
+			return err
 		}
-		raw, _ := protojson.Marshal(view)
-		return raw
-	})
-	if err != nil {
-		return err
+		defer inboxStore.Close()
+		// Freeze legacy navigation and device overrides before any HTTP request
+		// can initialize an empty per-device configuration.
+		if err := inboxStore.MigrateNavigationSettings(ctx, engine.NavigationDisplayDefaults()); err != nil {
+			return fmt.Errorf("migrate device navigation: %w", err)
+		}
+		api, err = appapi.New(inboxStore, cfg.App, func(node string) json.RawMessage {
+			view := engine.AppView(synchronizedClock.Now(), node)
+			if view == nil {
+				return json.RawMessage(`null`)
+			}
+			raw, _ := protojson.Marshal(view)
+			return raw
+		})
+		if err != nil {
+			return err
+		}
+		api.ConfigureMQTT(cfg)
+		deviceCounts = api.DeviceCounts
 	}
-	api.ConfigureMQTT(cfg)
+	var recorder *core.CoreMetrics
+	if cfg.Metrics.Listen != "" {
+		recorder = core.NewCoreMetrics(store)
+		listener, err := net.Listen("tcp", cfg.Metrics.Listen)
+		if err != nil {
+			return fmt.Errorf("listen metrics: %w", err)
+		}
+		metrics := &http.Server{Handler: recorder.Handler(engine, synchronizedClock.Now, inboxStore, deviceCounts, cfg.MQTT.URL != ""), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
+		defer metrics.Close()
+		var inboxPath string
+		if inboxStore != nil {
+			inboxPath = inbox.DatabasePath(cfg.App.DataDir)
+		}
+		tableMetricsDone := make(chan struct{})
+		go func() {
+			defer close(tableMetricsDone)
+			recorder.RunSQLiteTableMetrics(ctx, cfg.Console.Database, inboxPath, logger)
+		}()
+		defer func() { stop(); <-tableMetricsDone }()
+		go func() {
+			if err := metrics.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Error("metrics server stopped", zap.Error(err))
+				stop()
+			}
+		}()
+		logger.Info("metrics listening", zap.String("listen", cfg.Metrics.Listen))
+	}
+	if cfg.Audio.Analysis.Enabled {
+		done := make(chan struct{})
+		go func() { defer close(done); store.RunReviews(ctx, logger) }()
+		defer func() { stop(); <-done }()
+	}
+
+	if api == nil {
+		return runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, nil, nil, nil, recorder)
+	}
 	listener, err := net.Listen("tcp", cfg.App.Listen)
 	if err != nil {
 		return err
 	}
-	server := &http.Server{Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
+	appHandler := api.Handler()
+	server := &http.Server{Handler: recorder.InstrumentHTTP("app", appHandler), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, BaseContext: func(net.Listener) context.Context { return ctx }}
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- server.Serve(listener) }()
 	go api.Sweep(ctx)
 	go func() {
-		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, api.AdminHandler(), api.Handler(), api); err != nil && ctx.Err() == nil {
+		if err := runMQTT(ctx, cfg, engine, store, logger, synchronizedClock.Now, api.AdminHandler(), appHandler, api, recorder); err != nil && ctx.Err() == nil {
 			if cfg.MQTT.URL == "" {
 				serverErr <- err
 				return
@@ -206,15 +225,17 @@ func run(cfg *config.CoreConfig, logger *zap.Logger) error {
 	return err
 }
 
-func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time, admin, personal http.Handler, api *appapi.Server) error {
+func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, logger *zap.Logger, now func() time.Time, admin, personal http.Handler, api *appapi.Server, recorder *core.CoreMetrics) error {
 	if cfg.MQTT.URL == "" {
-		return runInboxConsole(ctx, cfg, engine, store, admin, personal, logger)
+		return runInboxConsole(ctx, cfg, engine, store, admin, personal, logger, recorder)
 	}
+	defer recorder.MQTTConnection(false)
 	client, err := mqtt.Connect(ctx, mqtt.Config{
-		URL:      cfg.MQTT.URL,
-		ClientID: "orbit-core-" + cfg.Core.ID,
-		Username: cfg.MQTT.Credentials.Username,
-		Password: cfg.MQTT.Credentials.Password,
+		URL:             cfg.MQTT.URL,
+		ClientID:        "orbit-core-" + cfg.Core.ID,
+		Username:        cfg.MQTT.Credentials.Username,
+		Password:        cfg.MQTT.Credentials.Password,
+		ConnectionState: recorder.MQTTConnection,
 		TLS: mqtt.TLSConfig{
 			Enabled:  cfg.MQTT.TLS.Enabled,
 			CAFile:   cfg.MQTT.TLS.CAFile,
@@ -226,12 +247,14 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 		return err
 	}
 	defer disconnect(client, logger)
-	runner, err := core.NewRunner(engine, client, logger, now)
+	transport := recorder.InstrumentTransport(client)
+	runner, err := core.NewRunner(engine, transport, logger, now)
 	if err != nil {
 		return err
 	}
+	runner.TrackMetrics(recorder)
 	if api != nil {
-		if err := api.StartNavigation(ctx, client, cfg.Core.ID, engine.NavigationDisplayDefaults()); err != nil {
+		if err := api.StartNavigation(ctx, transport, cfg.Core.ID, engine.NavigationDisplayDefaults()); err != nil {
 			return err
 		}
 		defer api.StopNavigation()
@@ -242,7 +265,7 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 	if err != nil {
 		return fmt.Errorf("listen core console: %w", err)
 	}
-	server := &http.Server{Handler: core.ConsoleHandler(runner, store, cfg, admin, personal), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Handler: recorder.InstrumentHTTP("console", core.ConsoleHandler(runner, store, cfg, admin, personal)), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	defer func() {
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -254,7 +277,7 @@ func runMQTT(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, s
 	logger.Info("orbit core started",
 		zap.String("core_id", cfg.Core.ID),
 	)
-	audioRunner, err := core.NewAudioRunner(store, client, logger, now)
+	audioRunner, err := core.NewAudioRunner(store, transport, logger, now)
 	if err != nil {
 		return err
 	}
@@ -290,12 +313,12 @@ func disconnect(client *mqtt.Client, logger *zap.Logger) {
 	}
 }
 
-func runInboxConsole(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, admin, personal http.Handler, logger *zap.Logger) error {
+func runInboxConsole(ctx context.Context, cfg *config.CoreConfig, engine *core.Engine, store *core.RouteStore, admin, personal http.Handler, logger *zap.Logger, recorder *core.CoreMetrics) error {
 	listener, err := net.Listen("tcp", cfg.Console.Listen)
 	if err != nil {
 		return fmt.Errorf("listen inbox console: %w", err)
 	}
-	server := &http.Server{Handler: core.InboxConsoleHandler(engine, store, cfg, admin, personal), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Handler: recorder.InstrumentHTTP("console", core.InboxConsoleHandler(engine, store, cfg, admin, personal)), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 15 * time.Second, IdleTimeout: 60 * time.Second}
 	defer func() {
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
